@@ -2,20 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Building2, TrendingUp, Wallet, Trash2 } from 'lucide-react'
+import { Plus, Building2, TrendingUp, Wallet, Globe, Coins, Home, PiggyBank, Shield, Briefcase, Trash2 } from 'lucide-react'
 import { useLocale } from '@/components/shared/LocaleContext'
 import CurrencyDisplay from '@/components/shared/CurrencyDisplay'
 import PercentBadge from '@/components/shared/PercentBadge'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { ACCOUNT_CONFIGS, type AccountType } from '@/lib/constants'
-import { getAccounts, getHoldings, deleteAccount as deleteAcc, initSeedData } from '@/lib/storage'
+import { ACCOUNT_CONFIGS, COLOR_MAP } from '@/lib/constants'
+import { getAccounts, getHoldings, deleteAccount as deleteAcc } from '@/lib/storage'
 import type { Account } from '@/types'
 
-const iconMap: Record<string, React.ElementType> = { Building2, TrendingUp, Wallet }
-const colorMap: Record<string, string> = {
-  blue: 'bg-blue-100 text-blue-600',
-  green: 'bg-green-100 text-green-600',
-  purple: 'bg-purple-100 text-purple-600',
+const iconMap: Record<string, React.ElementType> = {
+  Building2, TrendingUp, Wallet, Globe, Coins, Home, PiggyBank, Shield, Briefcase,
 }
 
 export default function AccountsPage() {
@@ -24,7 +21,6 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
 
   function load() {
-    initSeedData()
     const accs = getAccounts().map((a) => ({ ...a, holdings: getHoldings(a.id) }))
     setAccounts(accs)
     setLoading(false)
@@ -54,9 +50,9 @@ export default function AccountsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map((account) => {
-            const config = ACCOUNT_CONFIGS[account.type as AccountType]
-            const Icon = config ? iconMap[config.icon] : Wallet
-            const color = config ? colorMap[config.color] : colorMap.blue
+            const config = ACCOUNT_CONFIGS[account.type]
+            const Icon = config ? (iconMap[config.icon] ?? Briefcase) : Briefcase
+            const color = config ? (COLOR_MAP[config.color] ?? COLOR_MAP.gray) : COLOR_MAP.gray
             const holdings = account.holdings ?? []
             const totalCost = holdings.reduce((sum, h) => sum + h.shares * h.averageCost, 0)
             const totalValue = holdings.reduce((sum, h) => sum + (h.currentValue ?? h.shares * h.averageCost), 0)
@@ -84,7 +80,7 @@ export default function AccountsPage() {
                   <p className="text-xs text-gray-400 mt-3">{holdings.length} {t.accounts.holdings}</p>
                 </Link>
                 <button onClick={(e) => { e.preventDefault(); handleDelete(account.id) }}
-                  className="absolute top-4 end-4 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
+                  className="absolute top-4 end-4 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all touch-manipulation">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

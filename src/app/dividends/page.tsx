@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { useLocale } from '@/components/shared/LocaleContext'
 import CurrencyDisplay from '@/components/shared/CurrencyDisplay'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { getAllDividends, getAllHoldings, createDividend, initSeedData } from '@/lib/storage'
+import { getAllDividends, getAllHoldings, createDividend, updateDividend, deleteDividend } from '@/lib/storage'
 import type { Dividend, Holding } from '@/types'
 
 export default function DividendsPage() {
@@ -14,12 +14,14 @@ export default function DividendsPage() {
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   function load() {
-    initSeedData()
     const holds = getAllHoldings()
     setHoldings(holds)
-    const divs = getAllDividends().map((d) => ({ ...d, holding: holds.find((h) => h.id === d.holdingId) }))
+    const divs = getAllDividends()
+      .map((d) => ({ ...d, holding: holds.find((h) => h.id === d.holdingId) }))
+      .sort((a, b) => new Date(b.payDate).getTime() - new Date(a.payDate).getTime())
     setDividends(divs)
     setLoading(false)
   }
@@ -27,6 +29,8 @@ export default function DividendsPage() {
   useEffect(() => { load() }, [])
 
   function addDiv(data: any) { createDividend(data); setShowAdd(false); load() }
+  function editDiv(id: string, data: any) { updateDividend(id, data); setEditingId(null); load() }
+  function removeDiv(id: string) { if (confirm(t.common.confirm)) { deleteDividend(id); load() } }
 
   if (loading) return <LoadingSpinner />
 
@@ -43,14 +47,14 @@ export default function DividendsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t.dividends.title}</h1>
-        <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium touch-manipulation">
+        <button onClick={() => { setShowAdd(!showAdd); setEditingId(null) }} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium touch-manipulation">
           <Plus className="w-4 h-4" />{t.common.add}</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card"><p className="text-sm text-gray-500">{t.dividends.annualIncome}</p>
           <CurrencyDisplay amount={annualIncome} className="text-xl sm:text-2xl font-bold text-gray-900 mt-1" /></div>
-        <div className="card"><p className="text-sm text-gray-500">{locale === 'ar' ? 'الدخل الشهري' : 'Monthly Income'}</p>
+        <div className="card"><p className="text-sm text-gray-500">{t.dividends.monthlyIncome}</p>
           <CurrencyDisplay amount={annualIncome / 12} className="text-xl sm:text-2xl font-bold text-gray-900 mt-1" /></div>
         <div className="card"><p className="text-sm text-gray-500">{t.dividends.history}</p>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{dividends.length}</p>
@@ -59,7 +63,10 @@ export default function DividendsPage() {
 
       {showAdd && (
         <div className="card space-y-3">
-          <h3 className="font-semibold">{t.common.add} {t.dividends.title}</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">{t.common.add} {t.dividends.title}</h3>
+            <button onClick={() => setShowAdd(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+          </div>
           <DivForm holdings={holdings} onSubmit={addDiv} onCancel={() => setShowAdd(false)} t={t} locale={locale} />
         </div>
       )}
@@ -70,7 +77,7 @@ export default function DividendsPage() {
           <div className="space-y-3">{Object.values(byHolding).map((g, i) => (
             <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div><p className="font-medium text-gray-900">{locale === 'ar' ? g.nameAr : g.name}</p>
-                <p className="text-xs text-gray-500">{g.symbol} · {g.count} {locale === 'ar' ? 'توزيعات' : 'payments'}</p></div>
+                <p className="text-xs text-gray-500">{g.symbol} · {g.count} {t.dividends.payments}</p></div>
               <CurrencyDisplay amount={g.total} className="font-semibold text-green-600" />
             </div>
           ))}</div>
@@ -81,14 +88,29 @@ export default function DividendsPage() {
         <h2 className="font-semibold text-gray-900 mb-4">{t.dividends.history}</h2>
         {dividends.length === 0 ? <p className="text-gray-500 text-sm text-center py-4">{t.dividends.noDividends}</p> : (
           <div className="space-y-2">
-            {dividends.map((d) => (
-              <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div><p className="font-medium text-sm text-gray-900">{locale === 'ar' ? (d.holding?.nameAr ?? d.holding?.name) : d.holding?.name}</p>
-                  <p className="text-xs text-gray-400">{d.holding?.symbol} · {new Date(d.payDate).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-US')}</p></div>
-                <div className="text-end"><CurrencyDisplay amount={d.amount} className="font-semibold text-green-600 text-sm" />
-                  <p className="text-xs text-gray-400">{d.perShare} / {t.dividends.perShare}</p></div>
-              </div>
-            ))}
+            {dividends.map((d) => {
+              if (editingId === d.id) {
+                return (
+                  <div key={d.id} className="p-3 bg-yellow-50 rounded-lg">
+                    <DivForm holdings={holdings} initial={d} onSubmit={(data) => editDiv(d.id, data)} onCancel={() => setEditingId(null)} t={t} locale={locale} />
+                  </div>
+                )
+              }
+              return (
+                <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div><p className="font-medium text-sm text-gray-900">{locale === 'ar' ? (d.holding?.nameAr ?? d.holding?.name) : d.holding?.name}</p>
+                    <p className="text-xs text-gray-400">{d.holding?.symbol} · {new Date(d.payDate).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-US')}</p></div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-end">
+                      <CurrencyDisplay amount={d.amount} className="font-semibold text-green-600 text-sm" />
+                      <p className="text-xs text-gray-400">{d.perShare} / {t.dividends.perShare}</p>
+                    </div>
+                    <button onClick={() => { setEditingId(d.id); setShowAdd(false) }} className="p-1 text-gray-400 hover:text-primary-600 touch-manipulation"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => removeDiv(d.id)} className="p-1 text-gray-400 hover:text-red-600 touch-manipulation"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -96,8 +118,15 @@ export default function DividendsPage() {
   )
 }
 
-function DivForm({ holdings, onSubmit, onCancel, t, locale }: { holdings: Holding[]; onSubmit: (d: any) => void; onCancel: () => void; t: any; locale: string }) {
-  const [f, setF] = useState({ holdingId: '', amount: '', perShare: '', exDate: new Date().toISOString().split('T')[0], payDate: new Date().toISOString().split('T')[0], currency: 'SAR' })
+function DivForm({ holdings, initial, onSubmit, onCancel, t, locale }: { holdings: Holding[]; initial?: any; onSubmit: (d: any) => void; onCancel: () => void; t: any; locale: string }) {
+  const [f, setF] = useState({
+    holdingId: initial?.holdingId ?? '',
+    amount: initial?.amount?.toString() ?? '',
+    perShare: initial?.perShare?.toString() ?? '',
+    exDate: initial?.exDate ?? new Date().toISOString().split('T')[0],
+    payDate: initial?.payDate ?? new Date().toISOString().split('T')[0],
+    currency: initial?.currency ?? 'SAR',
+  })
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

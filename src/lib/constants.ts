@@ -2,6 +2,12 @@ export const ACCOUNT_TYPES = {
   EMPLOYER_SAVINGS: 'EMPLOYER_SAVINGS',
   SAUDI_STOCKS: 'SAUDI_STOCKS',
   MANAGED_PORTFOLIO: 'MANAGED_PORTFOLIO',
+  US_STOCKS: 'US_STOCKS',
+  CRYPTO: 'CRYPTO',
+  REAL_ESTATE: 'REAL_ESTATE',
+  SAVINGS: 'SAVINGS',
+  RETIREMENT: 'RETIREMENT',
+  CUSTOM: 'CUSTOM',
 } as const
 
 export type AccountType = (typeof ACCOUNT_TYPES)[keyof typeof ACCOUNT_TYPES]
@@ -16,23 +22,22 @@ export const TRANSACTION_TYPES = {
 
 export type TransactionType = (typeof TRANSACTION_TYPES)[keyof typeof TRANSACTION_TYPES]
 
-export const ACCOUNT_CONFIGS: Record<
-  AccountType,
-  {
-    label: { en: string; ar: string }
-    description: { en: string; ar: string }
-    icon: string
-    color: string
-  }
-> = {
+export interface AccountConfig {
+  label: { en: string; ar: string }
+  description: { en: string; ar: string }
+  icon: string
+  color: string
+}
+
+export const ACCOUNT_CONFIGS: Record<string, AccountConfig> = {
   EMPLOYER_SAVINGS: {
     label: {
       en: 'Employer Savings Program',
       ar: 'برنامج ادخار الموظفين',
     },
     description: {
-      en: 'Central Bank supervised, 10% salary auto-deduction',
-      ar: 'بإشراف البنك المركزي، خصم تلقائي 10% من الراتب',
+      en: 'Central Bank supervised, salary auto-deduction',
+      ar: 'بإشراف البنك المركزي، خصم تلقائي من الراتب',
     },
     icon: 'Building2',
     color: 'blue',
@@ -43,24 +48,122 @@ export const ACCOUNT_CONFIGS: Record<
       ar: 'السوق السعودي (تداول)',
     },
     description: {
-      en: 'Direct stock investments with dividend growth strategy',
-      ar: 'استثمارات مباشرة في الأسهم بهدف نمو التوزيعات',
+      en: 'Direct stock investments in Saudi market',
+      ar: 'استثمارات مباشرة في السوق السعودي',
     },
     icon: 'TrendingUp',
     color: 'green',
   },
   MANAGED_PORTFOLIO: {
     label: {
-      en: 'Managed Portfolio (Darahem)',
-      ar: 'محفظة مُدارة (دراهم)',
+      en: 'Managed Portfolio',
+      ar: 'محفظة مُدارة',
     },
     description: {
-      en: 'Mix of gold ETFs, US index funds, and global indices',
-      ar: 'مزيج من صناديق الذهب وصناديق المؤشرات الأمريكية والعالمية',
+      en: 'Managed funds, ETFs, and index funds',
+      ar: 'صناديق مُدارة وصناديق مؤشرات',
     },
     icon: 'Wallet',
     color: 'purple',
   },
+  US_STOCKS: {
+    label: {
+      en: 'US Stock Market',
+      ar: 'السوق الأمريكي',
+    },
+    description: {
+      en: 'US stocks, ETFs, and index funds',
+      ar: 'أسهم وصناديق أمريكية',
+    },
+    icon: 'Globe',
+    color: 'indigo',
+  },
+  CRYPTO: {
+    label: {
+      en: 'Cryptocurrency',
+      ar: 'العملات الرقمية',
+    },
+    description: {
+      en: 'Bitcoin, Ethereum, and other crypto',
+      ar: 'بتكوين، إيثيريوم، وعملات رقمية أخرى',
+    },
+    icon: 'Coins',
+    color: 'orange',
+  },
+  REAL_ESTATE: {
+    label: {
+      en: 'Real Estate Funds',
+      ar: 'صناديق عقارية',
+    },
+    description: {
+      en: 'REITs and real estate investments',
+      ar: 'صناديق ريت واستثمارات عقارية',
+    },
+    icon: 'Home',
+    color: 'teal',
+  },
+  SAVINGS: {
+    label: {
+      en: 'Savings Account',
+      ar: 'حساب ادخار',
+    },
+    description: {
+      en: 'Bank savings and deposits',
+      ar: 'ادخار بنكي وودائع',
+    },
+    icon: 'PiggyBank',
+    color: 'pink',
+  },
+  RETIREMENT: {
+    label: {
+      en: 'Retirement Fund',
+      ar: 'صندوق تقاعد',
+    },
+    description: {
+      en: 'Retirement and pension funds',
+      ar: 'صناديق تقاعد ومعاشات',
+    },
+    icon: 'Shield',
+    color: 'amber',
+  },
+  CUSTOM: {
+    label: {
+      en: 'Custom Account',
+      ar: 'حساب مخصص',
+    },
+    description: {
+      en: 'Define your own account type',
+      ar: 'حدد نوع حسابك',
+    },
+    icon: 'Briefcase',
+    color: 'gray',
+  },
+}
+
+export const COLOR_MAP: Record<string, string> = {
+  blue: 'bg-blue-100 text-blue-600',
+  green: 'bg-green-100 text-green-600',
+  purple: 'bg-purple-100 text-purple-600',
+  indigo: 'bg-indigo-100 text-indigo-600',
+  orange: 'bg-orange-100 text-orange-600',
+  teal: 'bg-teal-100 text-teal-600',
+  pink: 'bg-pink-100 text-pink-600',
+  amber: 'bg-amber-100 text-amber-600',
+  gray: 'bg-gray-100 text-gray-600',
+  red: 'bg-red-100 text-red-600',
+}
+
+export const CHART_COLORS: Record<string, string> = {
+  blue: '#2563eb',
+  green: '#16a34a',
+  purple: '#9333ea',
+  indigo: '#4f46e5',
+  orange: '#ea580c',
+  teal: '#0d9488',
+  pink: '#db2777',
+  amber: '#d97706',
+  gray: '#6b7280',
+  red: '#dc2626',
 }
 
 export const COMMON_SYMBOLS = {

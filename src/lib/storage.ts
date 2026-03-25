@@ -8,7 +8,8 @@ const KEYS = {
   holdings: 'investtrack_holdings',
   transactions: 'investtrack_transactions',
   dividends: 'investtrack_dividends',
-  initialized: 'investtrack_initialized',
+  customAccountTypes: 'investtrack_custom_types',
+  marketCache: 'investtrack_market_cache',
 }
 
 function genId(): string {
@@ -57,10 +58,22 @@ export function createAccount(data: Omit<Account, 'id' | 'createdAt' | 'updatedA
   return account
 }
 
+export function updateAccount(id: string, data: Partial<Omit<Account, 'id' | 'createdAt'>>): Account | null {
+  const accounts = getAccounts()
+  const idx = accounts.findIndex((a) => a.id === id)
+  if (idx === -1) return null
+  accounts[idx] = { ...accounts[idx], ...data, updatedAt: new Date().toISOString() }
+  setStore(KEYS.accounts, accounts)
+  return accounts[idx]
+}
+
 export function deleteAccount(id: string): void {
   setStore(KEYS.accounts, getAccounts().filter((a) => a.id !== id))
   setStore(KEYS.holdings, getAllHoldings().filter((h) => h.accountId !== id))
   setStore(KEYS.transactions, getAllTransactions().filter((t) => t.accountId !== id))
+  // Also delete dividends for holdings in this account
+  const holdingIds = new Set(getAllHoldings().filter((h) => h.accountId === id).map((h) => h.id))
+  setStore(KEYS.dividends, getAllDividends().filter((d) => !holdingIds.has(d.holdingId)))
 }
 
 // ---- Holdings ----
@@ -87,9 +100,19 @@ export function createHolding(data: Omit<Holding, 'id' | 'createdAt' | 'updatedA
   return holding
 }
 
+export function updateHolding(id: string, data: Partial<Omit<Holding, 'id' | 'createdAt'>>): Holding | null {
+  const holdings = getAllHoldings()
+  const idx = holdings.findIndex((h) => h.id === id)
+  if (idx === -1) return null
+  holdings[idx] = { ...holdings[idx], ...data, updatedAt: new Date().toISOString() }
+  setStore(KEYS.holdings, holdings)
+  return holdings[idx]
+}
+
 export function deleteHolding(id: string): void {
   setStore(KEYS.holdings, getAllHoldings().filter((h) => h.id !== id))
   setStore(KEYS.dividends, getAllDividends().filter((d) => d.holdingId !== id))
+  setStore(KEYS.transactions, getAllTransactions().filter((t) => t.holdingId !== id))
 }
 
 // ---- Transactions ----
@@ -116,22 +139,69 @@ export function createTransaction(data: Omit<Transaction, 'id' | 'createdAt'>): 
 
   // Update holding on BUY/SELL
   if (data.holdingId && data.shares && data.pricePerShare) {
-    const holdings = getAllHoldings()
-    const idx = holdings.findIndex((h) => h.id === data.holdingId)
-    if (idx !== -1) {
-      const h = holdings[idx]
-      if (data.type === 'BUY') {
-        const totalShares = h.shares + data.shares
-        const totalCost = h.shares * h.averageCost + data.shares * data.pricePerShare
-        holdings[idx] = { ...h, shares: totalShares, averageCost: totalShares > 0 ? totalCost / totalShares : 0 }
-      } else if (data.type === 'SELL') {
-        holdings[idx] = { ...h, shares: Math.max(0, h.shares - data.shares) }
-      }
-      setStore(KEYS.holdings, holdings)
-    }
+    recalcHolding(data.holdingId)
   }
 
   return transaction
+}
+
+export function updateTransaction(id: string, data: Partial<Omit<Transaction, 'id' | 'createdAt'>>): Transaction | null {
+  const transactions = getAllTransactions()
+  const idx = transactions.findIndex((t) => t.id === id)
+  if (idx === -1) return null
+  const oldHoldingId = transactions[idx].holdingId
+  transactions[idx] = { ...transactions[idx], ...data }
+  setStore(KEYS.transactions, transactions)
+
+  // Recalculate affected holdings
+  if (oldHoldingId) recalcHolding(oldHoldingId)
+  if (data.holdingId && data.holdingId !== oldHoldingId) recalcHolding(data.holdingId)
+
+  return transactions[idx]
+}
+
+export function deleteTransaction(id: string): void {
+  const transactions = getAllTransactions()
+  const tx = transactions.find((t) => t.id === id)
+  setStore(KEYS.transactions, transactions.filter((t) => t.id !== id))
+  if (tx?.holdingId) recalcHolding(tx.holdingId)
+}
+
+// Recalculate holding shares/averageCost by replaying all BUY/SELL transactions
+function recalcHolding(holdingId: string): void {
+  const holdings = getAllHoldings()
+  const idx = holdings.findIndex((h) => h.id === holdingId)
+  if (idx === -1) return
+
+  const txs = getAllTransactions()
+    .filter((t) => t.holdingId === holdingId && (t.type === 'BUY' || t.type === 'SELL'))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  let shares = 0
+  let totalCost = 0
+
+  txs.forEach((tx) => {
+    if (tx.type === 'BUY' && tx.shares && tx.pricePerShare) {
+      totalCost += tx.shares * tx.pricePerShare
+      shares += tx.shares
+    } else if (tx.type === 'SELL' && tx.shares) {
+      shares = Math.max(0, shares - tx.shares)
+      // Proportionally reduce cost basis
+      if (shares > 0 && (shares + tx.shares) > 0) {
+        totalCost = totalCost * (shares / (shares + tx.shares))
+      } else {
+        totalCost = 0
+      }
+    }
+  })
+
+  holdings[idx] = {
+    ...holdings[idx],
+    shares,
+    averageCost: shares > 0 ? totalCost / shares : 0,
+    updatedAt: new Date().toISOString(),
+  }
+  setStore(KEYS.holdings, holdings)
 }
 
 // ---- Dividends ----
@@ -158,107 +228,78 @@ export function createDividend(data: Omit<Dividend, 'id' | 'createdAt'>): Divide
   return dividend
 }
 
-// ---- Seed Data ----
+export function updateDividend(id: string, data: Partial<Omit<Dividend, 'id' | 'createdAt'>>): Dividend | null {
+  const dividends = getAllDividends()
+  const idx = dividends.findIndex((d) => d.id === id)
+  if (idx === -1) return null
+  dividends[idx] = { ...dividends[idx], ...data }
+  setStore(KEYS.dividends, dividends)
+  return dividends[idx]
+}
 
-export function initSeedData(): void {
+export function deleteDividend(id: string): void {
+  setStore(KEYS.dividends, getAllDividends().filter((d) => d.id !== id))
+}
+
+// ---- Data Export/Import ----
+
+export function exportAllData(): string {
+  return JSON.stringify({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    accounts: getAccounts(),
+    holdings: getAllHoldings(),
+    transactions: getAllTransactions(),
+    dividends: getAllDividends(),
+  }, null, 2)
+}
+
+export function importAllData(json: string, merge: boolean = false): { success: boolean; error?: string } {
+  try {
+    const data = JSON.parse(json)
+    if (!data.accounts || !data.holdings || !data.transactions || !data.dividends) {
+      return { success: false, error: 'Invalid data format' }
+    }
+
+    if (!merge) {
+      // Replace all data
+      setStore(KEYS.accounts, data.accounts)
+      setStore(KEYS.holdings, data.holdings)
+      setStore(KEYS.transactions, data.transactions)
+      setStore(KEYS.dividends, data.dividends)
+    } else {
+      // Merge: add records that don't exist yet
+      const existingIds = new Set([
+        ...getAccounts().map((a) => a.id),
+        ...getAllHoldings().map((h) => h.id),
+        ...getAllTransactions().map((t) => t.id),
+        ...getAllDividends().map((d) => d.id),
+      ])
+
+      const accounts = getAccounts()
+      data.accounts.forEach((a: Account) => { if (!existingIds.has(a.id)) accounts.push(a) })
+      setStore(KEYS.accounts, accounts)
+
+      const holdings = getAllHoldings()
+      data.holdings.forEach((h: Holding) => { if (!existingIds.has(h.id)) holdings.push(h) })
+      setStore(KEYS.holdings, holdings)
+
+      const transactions = getAllTransactions()
+      data.transactions.forEach((t: Transaction) => { if (!existingIds.has(t.id)) transactions.push(t) })
+      setStore(KEYS.transactions, transactions)
+
+      const dividends = getAllDividends()
+      data.dividends.forEach((d: Dividend) => { if (!existingIds.has(d.id)) dividends.push(d) })
+      setStore(KEYS.dividends, dividends)
+    }
+
+    return { success: true }
+  } catch {
+    return { success: false, error: 'Invalid JSON' }
+  }
+}
+
+export function resetAllData(): void {
   if (typeof window === 'undefined') return
-  if (localStorage.getItem(KEYS.initialized)) return
-
-  // Employer Savings
-  const emp = createAccount({
-    name: 'Employer Savings Program',
-    nameAr: 'برنامج ادخار الموظفين',
-    type: 'EMPLOYER_SAVINGS',
-    currency: 'SAR',
-    description: 'Central Bank supervised, 10% salary auto-deduction',
-  } as any)
-
-  createHolding({
-    accountId: emp.id, symbol: 'ACWI', name: 'Al Ahli Bank Portfolio (Global Stocks)', nameAr: 'محفظة البنك الأهلي (أسهم عالمية)',
-    shares: 150, averageCost: 95.5, currentValue: null, targetAllocation: 0.7, sector: null, indexTracked: 'MSCI ACWI',
-  } as any)
-
-  createHolding({
-    accountId: emp.id, symbol: null, name: 'Central Bank Money Market Fund', nameAr: 'صندوق النقد - البنك المركزي',
-    shares: 1, averageCost: 0, currentValue: 18500, targetAllocation: 0.3, sector: null, indexTracked: 'Money Market',
-  } as any)
-
-  // Saudi Stocks
-  const saudi = createAccount({
-    name: 'Saudi Stock Market (Tadawul)',
-    nameAr: 'السوق السعودي (تداول)',
-    type: 'SAUDI_STOCKS',
-    currency: 'SAR',
-    description: 'Direct stock investments focused on dividend growth',
-  } as any)
-
-  const aramco = createHolding({
-    accountId: saudi.id, symbol: '2222.SR', name: 'Saudi Aramco', nameAr: 'أرامكو السعودية',
-    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Energy', indexTracked: null,
-  } as any)
-
-  const rajhi = createHolding({
-    accountId: saudi.id, symbol: '1120.SR', name: 'Al Rajhi Bank', nameAr: 'مصرف الراجحي',
-    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Banking', indexTracked: null,
-  } as any)
-
-  const stc = createHolding({
-    accountId: saudi.id, symbol: '7010.SR', name: 'STC', nameAr: 'الاتصالات السعودية',
-    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Telecom', indexTracked: null,
-  } as any)
-
-  createHolding({
-    accountId: saudi.id, symbol: '2010.SR', name: 'SABIC', nameAr: 'سابك',
-    shares: 80, averageCost: 92, currentValue: null, targetAllocation: null, sector: 'Materials', indexTracked: null,
-  } as any)
-
-  // Darahem
-  const darahem = createAccount({
-    name: 'Darahem Portfolio',
-    nameAr: 'محفظة دراهم',
-    type: 'MANAGED_PORTFOLIO',
-    currency: 'SAR',
-    description: 'Managed portfolio - gold ETFs and US index funds',
-  } as any)
-
-  createHolding({
-    accountId: darahem.id, symbol: 'GLD', name: 'SPDR Gold Shares', nameAr: 'صندوق الذهب SPDR',
-    shares: 10, averageCost: 180, currentValue: null, targetAllocation: 0.1, sector: 'Commodities', indexTracked: null,
-  } as any)
-
-  createHolding({
-    accountId: darahem.id, symbol: 'VOO', name: 'Vanguard S&P 500 ETF', nameAr: 'صندوق S&P 500',
-    shares: 8, averageCost: 420, currentValue: null, targetAllocation: 0.5, sector: null, indexTracked: 'S&P 500',
-  } as any)
-
-  createHolding({
-    accountId: darahem.id, symbol: 'DIA', name: 'SPDR Dow Jones ETF', nameAr: 'صندوق داو جونز',
-    shares: 5, averageCost: 350, currentValue: null, targetAllocation: 0.4, sector: null, indexTracked: 'Dow Jones',
-  } as any)
-
-  // Dividends
-  const divData = [
-    { holdingId: aramco.id, amount: 380, perShare: 1.9, exDate: '2025-03-10', payDate: '2025-04-01', currency: 'SAR' },
-    { holdingId: aramco.id, amount: 370, perShare: 1.85, exDate: '2024-09-10', payDate: '2024-10-01', currency: 'SAR' },
-    { holdingId: aramco.id, amount: 360, perShare: 1.8, exDate: '2024-03-10', payDate: '2024-04-01', currency: 'SAR' },
-    { holdingId: rajhi.id, amount: 187.5, perShare: 3.75, exDate: '2025-04-15', payDate: '2025-05-01', currency: 'SAR' },
-    { holdingId: rajhi.id, amount: 175, perShare: 3.5, exDate: '2024-10-15', payDate: '2024-11-01', currency: 'SAR' },
-    { holdingId: stc.id, amount: 400, perShare: 4, exDate: '2025-05-01', payDate: '2025-05-20', currency: 'SAR' },
-    { holdingId: stc.id, amount: 380, perShare: 3.8, exDate: '2024-05-01', payDate: '2024-05-20', currency: 'SAR' },
-  ]
-
-  divData.forEach((d) => createDividend(d as any))
-
-  // Transactions
-  const txData = [
-    { accountId: saudi.id, holdingId: aramco.id, type: 'BUY', symbol: '2222.SR', shares: 200, pricePerShare: 30.5, totalAmount: 6100, date: '2023-06-15', currency: 'SAR', notes: 'Initial purchase' },
-    { accountId: saudi.id, holdingId: rajhi.id, type: 'BUY', symbol: '1120.SR', shares: 50, pricePerShare: 78, totalAmount: 3900, date: '2023-08-20', currency: 'SAR', notes: 'Dividend growth play' },
-    { accountId: saudi.id, holdingId: stc.id, type: 'BUY', symbol: '7010.SR', shares: 100, pricePerShare: 45, totalAmount: 4500, date: '2023-10-05', currency: 'SAR', notes: 'Telecom sector' },
-    { accountId: emp.id, holdingId: null, type: 'DEPOSIT', symbol: null, shares: null, pricePerShare: null, totalAmount: 2500, date: '2025-03-01', currency: 'SAR', notes: 'Monthly salary deduction 10%' },
-    { accountId: darahem.id, holdingId: null, type: 'DEPOSIT', symbol: null, shares: null, pricePerShare: null, totalAmount: 5000, date: '2024-06-01', currency: 'SAR', notes: 'Initial deposit' },
-  ]
-
-  txData.forEach((tx) => createTransaction(tx as any))
-
-  localStorage.setItem(KEYS.initialized, 'true')
+  Object.values(KEYS).forEach((key) => localStorage.removeItem(key))
 }
