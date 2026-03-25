@@ -1,0 +1,105 @@
+{
+  "app": {
+    "title": "Investment Tracker",
+    "description": "Track all your investments in one place"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "accounts": "Accounts",
+    "dividends": "Dividends",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "totalValue": "Total Portfolio Value",
+    "dailyChange": "Daily Change",
+    "totalGain": "Total Gain/Loss",
+    "allocation": "Portfolio Allocation",
+    "performance": "Performance",
+    "accounts": "Account Summary",
+    "recentTransactions": "Recent Transactions",
+    "dividendIncome": "Annual Dividend Income",
+    "noData": "No investments yet. Add an account to get started."
+  },
+  "accounts": {
+    "title": "Investment Accounts",
+    "addAccount": "Add Account",
+    "editAccount": "Edit Account",
+    "deleteAccount": "Delete Account",
+    "name": "Account Name",
+    "nameAr": "Arabic Name",
+    "type": "Account Type",
+    "currency": "Currency",
+    "description": "Description",
+    "holdings": "Holdings",
+    "addHolding": "Add Holding",
+    "transactions": "Transactions",
+    "addTransaction": "Add Transaction",
+    "value": "Current Value",
+    "cost": "Total Cost",
+    "gainLoss": "Gain/Loss",
+    "return": "Return",
+    "noAccounts": "No accounts yet. Create one to start tracking."
+  },
+  "holdings": {
+    "symbol": "Symbol",
+    "name": "Name",
+    "shares": "Shares",
+    "avgCost": "Avg. Cost",
+    "currentPrice": "Current Price",
+    "marketValue": "Market Value",
+    "gainLoss": "Gain/Loss",
+    "allocation": "Allocation",
+    "sector": "Sector",
+    "index": "Index Tracked"
+  },
+  "transactions": {
+    "title": "Transactions",
+    "type": "Type",
+    "date": "Date",
+    "amount": "Amount",
+    "shares": "Shares",
+    "price": "Price/Share",
+    "notes": "Notes",
+    "buy": "Buy",
+    "sell": "Sell",
+    "dividend": "Dividend",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal"
+  },
+  "dividends": {
+    "title": "Dividends",
+    "calendar": "Dividend Calendar",
+    "history": "Dividend History",
+    "yield": "Yield Analysis",
+    "annualIncome": "Annual Income",
+    "yieldOnCost": "Yield on Cost",
+    "currentYield": "Current Yield",
+    "growthRate": "Dividend Growth Rate",
+    "exDate": "Ex-Date",
+    "payDate": "Pay Date",
+    "amount": "Amount",
+    "perShare": "Per Share",
+    "noDividends": "No dividend records yet."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "arabic": "العربية",
+    "english": "English",
+    "currency": "Default Currency",
+    "theme": "Theme"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "confirm": "Are you sure?",
+    "noData": "No data available",
+    "sar": "SAR",
+    "usd": "USD"
+  }
+}

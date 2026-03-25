@@ -1,0 +1,105 @@
+{
+  "app": {
+    "title": "متتبع الاستثمارات",
+    "description": "تتبع جميع استثماراتك في مكان واحد"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "accounts": "الحسابات",
+    "dividends": "التوزيعات",
+    "settings": "الإعدادات"
+  },
+  "dashboard": {
+    "totalValue": "إجمالي قيمة المحفظة",
+    "dailyChange": "التغير اليومي",
+    "totalGain": "إجمالي الربح/الخسارة",
+    "allocation": "توزيع المحفظة",
+    "performance": "الأداء",
+    "accounts": "ملخص الحسابات",
+    "recentTransactions": "آخر العمليات",
+    "dividendIncome": "دخل التوزيعات السنوي",
+    "noData": "لا توجد استثمارات بعد. أضف حساباً للبدء."
+  },
+  "accounts": {
+    "title": "حسابات الاستثمار",
+    "addAccount": "إضافة حساب",
+    "editAccount": "تعديل الحساب",
+    "deleteAccount": "حذف الحساب",
+    "name": "اسم الحساب",
+    "nameAr": "الاسم بالعربي",
+    "type": "نوع الحساب",
+    "currency": "العملة",
+    "description": "الوصف",
+    "holdings": "المقتنيات",
+    "addHolding": "إضافة استثمار",
+    "transactions": "العمليات",
+    "addTransaction": "إضافة عملية",
+    "value": "القيمة الحالية",
+    "cost": "التكلفة الإجمالية",
+    "gainLoss": "الربح/الخسارة",
+    "return": "العائد",
+    "noAccounts": "لا توجد حسابات بعد. أنشئ حساباً لبدء التتبع."
+  },
+  "holdings": {
+    "symbol": "الرمز",
+    "name": "الاسم",
+    "shares": "الأسهم",
+    "avgCost": "متوسط التكلفة",
+    "currentPrice": "السعر الحالي",
+    "marketValue": "القيمة السوقية",
+    "gainLoss": "الربح/الخسارة",
+    "allocation": "التخصيص",
+    "sector": "القطاع",
+    "index": "المؤشر المتبع"
+  },
+  "transactions": {
+    "title": "العمليات",
+    "type": "النوع",
+    "date": "التاريخ",
+    "amount": "المبلغ",
+    "shares": "الأسهم",
+    "price": "سعر السهم",
+    "notes": "ملاحظات",
+    "buy": "شراء",
+    "sell": "بيع",
+    "dividend": "توزيعات",
+    "deposit": "إيداع",
+    "withdrawal": "سحب"
+  },
+  "dividends": {
+    "title": "التوزيعات",
+    "calendar": "تقويم التوزيعات",
+    "history": "تاريخ التوزيعات",
+    "yield": "تحليل العائد",
+    "annualIncome": "الدخل السنوي",
+    "yieldOnCost": "العائد على التكلفة",
+    "currentYield": "العائد الحالي",
+    "growthRate": "معدل نمو التوزيعات",
+    "exDate": "تاريخ الاستحقاق",
+    "payDate": "تاريخ الدفع",
+    "amount": "المبلغ",
+    "perShare": "لكل سهم",
+    "noDividends": "لا توجد سجلات توزيعات بعد."
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "language": "اللغة",
+    "arabic": "العربية",
+    "english": "English",
+    "currency": "العملة الافتراضية",
+    "theme": "المظهر"
+  },
+  "common": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "loading": "جاري التحميل...",
+    "error": "حدث خطأ",
+    "confirm": "هل أنت متأكد؟",
+    "noData": "لا توجد بيانات",
+    "sar": "ريال",
+    "usd": "دولار"
+  }
+}

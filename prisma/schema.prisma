@@ -1,0 +1,105 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  name        String
+  nameAr      String   @map("name_ar")
+  type        String   // EMPLOYER_SAVINGS, SAUDI_STOCKS, MANAGED_PORTFOLIO
+  currency    String   @default("SAR")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  holdings     Holding[]
+  transactions Transaction[]
+
+  @@map("accounts")
+}
+
+model Holding {
+  id               String   @id @default(cuid())
+  accountId        String   @map("account_id")
+  account          Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol           String?
+  name             String
+  nameAr           String?  @map("name_ar")
+  shares           Float    @default(0)
+  averageCost      Float    @default(0) @map("average_cost")
+  currentValue     Float?   @map("current_value")
+  targetAllocation Float?   @map("target_allocation")
+  sector           String?
+  indexTracked      String?  @map("index_tracked")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  dividends    Dividend[]
+  transactions Transaction[]
+
+  @@unique([accountId, symbol])
+  @@map("holdings")
+}
+
+model Transaction {
+  id            String   @id @default(cuid())
+  accountId     String   @map("account_id")
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  holdingId     String?  @map("holding_id")
+  holding       Holding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  type          String   // BUY, SELL, DIVIDEND, DEPOSIT, WITHDRAWAL
+  symbol        String?
+  shares        Float?
+  pricePerShare Float?   @map("price_per_share")
+  totalAmount   Float    @map("total_amount")
+  currency      String   @default("SAR")
+  date          DateTime
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([accountId, date])
+  @@map("transactions")
+}
+
+model Dividend {
+  id        String   @id @default(cuid())
+  holdingId String   @map("holding_id")
+  holding   Holding  @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  amount    Float
+  perShare  Float    @map("per_share")
+  exDate    DateTime @map("ex_date")
+  payDate   DateTime @map("pay_date")
+  currency  String   @default("SAR")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([holdingId, payDate])
+  @@map("dividends")
+}
+
+model MarketCache {
+  symbol        String   @id
+  price         Float
+  change        Float    @default(0)
+  changePercent Float    @default(0) @map("change_percent")
+  currency      String   @default("USD")
+  name          String?
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("market_cache")
+}
+
+model PortfolioSnapshot {
+  id         String   @id @default(cuid())
+  date       DateTime
+  totalValue Float    @map("total_value")
+  breakdown  String   // JSON
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([date])
+  @@map("portfolio_snapshots")
+}

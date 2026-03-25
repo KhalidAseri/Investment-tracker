@@ -1,0 +1,49 @@
+{
+  "name": "investment-tracker",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:migrate": "npx prisma migrate dev",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:studio": "npx prisma studio"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:38711/git/KhalidAseri/Investment-tracker"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.27",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.7.0",
+    "next": "^14.2.35",
+    "postcss": "^8.5.8",
+    "prisma": "^5.22.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3",
+    "yahoo-finance2": "^3.13.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.11",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.1",
+    "tsx": "^4.21.0"
+  }
+}
