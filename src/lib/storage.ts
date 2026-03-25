@@ -1,5 +1,3 @@
-'use client'
-
 import type { Account, Holding, Transaction, Dividend } from '@/types'
 
 // LocalStorage-based data layer for static deployment
@@ -196,17 +194,17 @@ export function initSeedData(): void {
 
   const aramco = createHolding({
     accountId: saudi.id, symbol: '2222.SR', name: 'Saudi Aramco', nameAr: 'أرامكو السعودية',
-    shares: 200, averageCost: 30.5, currentValue: null, targetAllocation: null, sector: 'Energy', indexTracked: null,
+    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Energy', indexTracked: null,
   } as any)
 
   const rajhi = createHolding({
     accountId: saudi.id, symbol: '1120.SR', name: 'Al Rajhi Bank', nameAr: 'مصرف الراجحي',
-    shares: 50, averageCost: 78, currentValue: null, targetAllocation: null, sector: 'Banking', indexTracked: null,
+    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Banking', indexTracked: null,
   } as any)
 
   const stc = createHolding({
     accountId: saudi.id, symbol: '7010.SR', name: 'STC', nameAr: 'الاتصالات السعودية',
-    shares: 100, averageCost: 45, currentValue: null, targetAllocation: null, sector: 'Telecom', indexTracked: null,
+    shares: 0, averageCost: 0, currentValue: null, targetAllocation: null, sector: 'Telecom', indexTracked: null,
   } as any)
 
   createHolding({

@@ -18,13 +18,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    initSeedData()
-    const accs = getAccounts().map((a) => ({
-      ...a,
-      holdings: getHoldings(a.id),
-    }))
-    setAccounts(accs)
-    setLoading(false)
+    try {
+      initSeedData()
+      const accs = getAccounts().map((a) => ({
+        ...a,
+        holdings: getHoldings(a.id),
+      }))
+      setAccounts(accs)
+    } catch (e) {
+      console.error('Dashboard load error:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   if (loading) return <LoadingSpinner />
