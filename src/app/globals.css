@@ -10,8 +10,17 @@
 }
 
 @layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
+    overscroll-behavior-y: contain;
   }
 
   [dir="rtl"] body {
@@ -21,19 +30,24 @@
   [dir="ltr"] body {
     font-family: var(--font-inter), sans-serif;
   }
+
+  /* Safe area for notched phones */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6;
   }
 
   .card-hover {
-    @apply card transition-shadow hover:shadow-md;
+    @apply card transition-shadow hover:shadow-md active:shadow-md;
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-gray-900;
+    @apply text-xl sm:text-2xl font-bold text-gray-900;
   }
 
   .stat-label {
@@ -55,21 +69,43 @@
   .badge-purple {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800;
   }
+
+  /* Touch-friendly button base */
+  .btn-touch {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* Custom scrollbar - desktop only */
+@media (hover: hover) {
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* Standalone PWA mode adjustments */
+@media (display-mode: standalone) {
+  body {
+    /* Prevent overscroll bouncing */
+    overscroll-behavior: none;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+/* Pull-to-refresh prevention in PWA */
+@media (display-mode: standalone) {
+  html {
+    overscroll-behavior-y: contain;
+  }
 }
