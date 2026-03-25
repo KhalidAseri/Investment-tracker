@@ -28,7 +28,7 @@ export default function AccountSummaryCard({ account }: { account: AccountSummar
   const Chevron = locale === 'ar' ? ChevronLeft : ChevronRight
 
   return (
-    <Link href={`/accounts/${account.id}`} className="card-hover block">
+    <Link href={`/accounts/detail?id=${account.id}`} className="card-hover block">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${color}`}>
