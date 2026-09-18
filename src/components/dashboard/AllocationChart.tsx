@@ -2,29 +2,25 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import { useLocale } from '@/components/shared/LocaleContext'
-import { ACCOUNT_CONFIGS, type AccountType } from '@/lib/constants'
+import { ACCOUNT_CONFIGS, CHART_COLORS } from '@/lib/constants'
 
 interface AllocationChartProps {
   data: { name: string; nameAr: string; value: number; type: string }[]
 }
 
-const COLORS: Record<string, string> = {
-  blue: '#2563eb',
-  green: '#16a34a',
-  purple: '#9333ea',
-  default: '#6b7280',
-}
+const FALLBACK_COLORS = ['#2563eb', '#16a34a', '#9333ea', '#4f46e5', '#ea580c', '#0d9488', '#db2777', '#d97706', '#6b7280']
 
 export default function AllocationChart({ data }: AllocationChartProps) {
   const { t, locale } = useLocale()
   const total = data.reduce((sum, d) => sum + d.value, 0)
 
-  const chartData = data.map((d) => {
-    const config = ACCOUNT_CONFIGS[d.type as AccountType]
+  const chartData = data.map((d, i) => {
+    const config = ACCOUNT_CONFIGS[d.type]
+    const color = config ? (CHART_COLORS[config.color] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]) : FALLBACK_COLORS[i % FALLBACK_COLORS.length]
     return {
       name: locale === 'ar' ? d.nameAr : d.name,
       value: d.value,
-      color: config ? COLORS[config.color] : COLORS.default,
+      color,
       percentage: total > 0 ? ((d.value / total) * 100).toFixed(1) : '0',
     }
   })

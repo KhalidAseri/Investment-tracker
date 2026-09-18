@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const accountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   nameAr: z.string().min(1, 'Arabic name is required'),
-  type: z.enum(['EMPLOYER_SAVINGS', 'SAUDI_STOCKS', 'MANAGED_PORTFOLIO']),
+  type: z.string().min(1, 'Account type is required'),
   currency: z.string().default('SAR'),
   description: z.string().optional(),
 })

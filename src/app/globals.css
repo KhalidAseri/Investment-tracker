@@ -74,6 +74,16 @@
   .btn-touch {
     @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
   }
+
+  /* Horizontal pill pickers scroll but shouldn't show a bar on desktop */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Custom scrollbar - desktop only */
