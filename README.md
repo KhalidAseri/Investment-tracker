@@ -51,6 +51,9 @@ A static Next.js PWA combining a portfolio tracker with a live Saudi/Gulf gold p
 
 ## تطبيق أندرويد (APK)
 
+**⬇️ [نزّل آخر إصدار](https://github.com/KhalidAseri/Investment-tracker/releases/latest)** — أو من [صفحة الإصدارات](https://github.com/KhalidAseri/Investment-tracker/releases).
+
+
 التطبيق مغلّف بـ [Capacitor](https://capacitorjs.com/) كتطبيق أندرويد أصلي: كل الواجهة
 مضمّنة داخل الـ APK وتشتغل بدون إنترنت، والشبكة تُستخدم فقط لجلب سعر الذهب اللحظي.
 التطبيق يفتح مباشرة على حاسبة الذهب.
@@ -78,8 +81,13 @@ npm run android:icons     # إعادة توليد الأيقونات من assets
 
 ### البناء عبر GitHub Actions
 
-شغّل workflow **Build Android APK** من تبويب Actions، ونزّل الـ APK من قسم
-Artifacts. دفع وسم يبدأ بـ `v` (مثل `v1.0.0`) يرفع الـ APK كملف في الإصدار.
+شغّل workflow **Build Android APK** من تبويب Actions:
+
+- **بدون إدخال شيء** → يبني APK وتنزّله من قسم Artifacts.
+- **مع كتابة وسم في خانة `release_tag`** (مثل `v1.0.1`) → ينشئ الوسم على نفس
+  الكوميت، ويفتح إصداراً على GitHub، ويرفق الـ APK فيه.
+
+ودفع وسم يبدأ بـ `v` يدوياً يعطي نفس النتيجة.
 
 ### التوقيع للتوزيع
 
