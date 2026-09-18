@@ -1,0 +1,842 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>خريطة قدرات البنك المركزي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;800&display=swap">
+<style>
+:root{
+  --bg:#F3F4F0; --surface:#FFFFFF; --surface-2:#EDF0EB;
+  --ink:#14231F; --ink-2:#46564F; --muted:#7B8A84; --line:#D8DED8; --line-2:#C4CCC6;
+  --accent:#0E6B55; --accent-ink:#0B5643; --accent-soft:#DFEDE6;
+  --gold:#B58B2E; --gold-ink:#8A6716; --gold-soft:#F5ECD8;
+  --teal:#2B7F8C; --teal-soft:#DCEEF0;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --seq1:#D9ECE4; --seq2:#B4DACB; --seq3:#8CC6B0; --seq4:#63B095; --seq5:#3E9A7A; --seq6:#227F60; --seq7:#0E6249;
+  --shadow:0 1px 2px rgba(20,35,31,.06),0 8px 24px rgba(20,35,31,.06);
+  --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A17; --surface:#16241F; --surface-2:#1C2D27;
+    --ink:#E8ECE9; --ink-2:#B7C2BC; --muted:#7F8E88; --line:#27382F; --line-2:#334840;
+    --accent:#4FB596; --accent-ink:#7DD1B8; --accent-soft:#1B3A31;
+    --gold:#D4A94A; --gold-ink:#E7C87C; --gold-soft:#3A3120;
+    --teal:#5FB7C4; --teal-soft:#193A40;
+    --seq1:#1B3A31; --seq2:#22503F; --seq3:#2B6A52; --seq4:#358566; --seq5:#45A07B; --seq6:#63BC95; --seq7:#8FD8B7;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A17; --surface:#16241F; --surface-2:#1C2D27;
+  --ink:#E8ECE9; --ink-2:#B7C2BC; --muted:#7F8E88; --line:#27382F; --line-2:#334840;
+  --accent:#4FB596; --accent-ink:#7DD1B8; --accent-soft:#1B3A31;
+  --gold:#D4A94A; --gold-ink:#E7C87C; --gold-soft:#3A3120;
+  --teal:#5FB7C4; --teal-soft:#193A40;
+  --seq1:#1B3A31; --seq2:#22503F; --seq3:#2B6A52; --seq4:#358566; --seq5:#45A07B; --seq6:#63BC95; --seq7:#8FD8B7;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,'Segoe UI',Tahoma,sans-serif;font-size:15px;line-height:1.7;direction:rtl}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto} *{animation:none!important;transition:none!important}}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px}
+h1,h2,h3{font-family:'Noto Kufi Arabic','IBM Plex Sans Arabic',sans-serif;line-height:1.4;margin:0;text-wrap:balance}
+h1{font-size:clamp(26px,3.6vw,42px);font-weight:800}
+h2{font-size:clamp(21px,2.6vw,29px);font-weight:800}
+h3{font-size:17px;font-weight:600}
+p{margin:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* top nav */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:18px;min-height:58px;flex-wrap:wrap;padding-block:8px}
+.brand{display:flex;align-items:center;gap:10px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:800;font-size:15px;white-space:nowrap}
+.brand .mark{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center}
+.brand .mark svg{width:16px;height:16px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;margin-inline-start:auto}
+.nav a{text-decoration:none;color:var(--ink-2);padding:6px 11px;border-radius:999px;font-size:13px;white-space:nowrap}
+.nav a:hover{background:var(--surface-2)}
+.nav a.active{background:var(--ink);color:var(--bg)}
+.nav a b{font-weight:500;color:var(--muted);margin-inline-end:4px;font-variant-numeric:tabular-nums}
+.nav a.active b{color:inherit;opacity:.7}
+
+/* sections */
+section{padding-block:64px;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0}
+.sec-head{display:grid;gap:10px;max-width:760px;margin-bottom:34px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--gold-ink)}
+.eyebrow::before{content:"";width:22px;height:2px;background:var(--gold)}
+.lead{color:var(--ink-2);font-size:16px;max-width:66ch}
+
+/* hero */
+.hero{padding-block:56px 48px}
+.hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:start}
+.hero .lead{font-size:17px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:28px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.kpi .v{font-size:32px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi .l{font-size:12.5px;color:var(--muted);margin-top:6px}
+.concepts{display:grid;gap:12px}
+.concept{display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.concept svg{width:64px;height:64px}
+.concept h3{margin-bottom:4px}
+.concept p{font-size:13.5px;color:var(--ink-2)}
+.concept .tag{font-size:11.5px;color:var(--accent-ink);font-weight:600;margin-bottom:2px}
+
+/* map */
+.group-title{display:flex;align-items:center;gap:12px;margin:26px 0 12px;font-size:13.5px;color:var(--ink-2);font-weight:600}
+.group-title::after{content:"";flex:1;height:1px;background:var(--line)}
+.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.cap{display:grid;gap:8px;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;position:relative}
+.cap:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--line-2)}
+.cap.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.cap .id{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;align-items:center}
+.cap .n{font-weight:600;font-size:14.5px;line-height:1.45}
+.cap .task{font-size:12px;color:var(--ink-2);line-height:1.5}
+.cap .meta{display:flex;gap:6px;font-size:11.5px;color:var(--muted);margin-top:2px;flex-wrap:wrap}
+.cap .meta span{background:var(--surface-2);padding:1px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
+.src{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
+.src.sup{background:var(--gold)}
+.legend-inline{display:flex;gap:18px;font-size:12.5px;color:var(--ink-2);flex-wrap:wrap}
+.legend-inline span{display:inline-flex;align-items:center;gap:6px}
+
+/* hierarchy */
+.hier{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.miller{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.col{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);max-height:460px;overflow:auto;display:flex;flex-direction:column}
+.col>header{padding:9px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1;display:flex;justify-content:space-between}
+.col>header b{color:var(--ink);font-weight:600}
+.item{display:flex;width:100%;text-align:start;padding:9px 12px;border:0;background:none;cursor:pointer;justify-content:space-between;gap:8px;align-items:center;border-inline-start:3px solid transparent;font-size:13.5px;line-height:1.45}
+.item:hover{background:var(--surface-2)}
+.item.active{background:var(--accent-soft);border-inline-start-color:var(--accent);font-weight:600}
+.item .c{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0}
+.crumb{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin-bottom:10px;align-items:center}
+.crumb .lvl{font-size:11px;background:var(--surface-2);padding:1px 8px;border-radius:999px;color:var(--muted);font-variant-numeric:tabular-nums}
+.crumb .sep{color:var(--muted)}
+.radial{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;overflow:hidden}
+.radial svg{width:100%;height:auto;display:block;max-width:100%}
+.radial text{font-family:'IBM Plex Sans Arabic',sans-serif;fill:var(--ink)}
+.radial .l2t{font-size:10.5px;fill:var(--ink-2)}
+.radial .l1t{font-size:12px;font-weight:600}
+.radial .l0t{font-size:13px;font-weight:700;fill:#fff}
+.radial line{stroke:var(--line-2);stroke-width:1}
+.radial .l1n{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.radial .l2n{fill:var(--surface);stroke:var(--line-2);stroke-width:1.2}
+.radial .l2n.on{stroke:var(--accent);fill:var(--accent-soft)}
+.radial .l1n.on{fill:var(--accent);}
+.radial .l1t.on{fill:#fff}
+.note{font-size:12.5px;color:var(--muted);margin-top:8px}
+
+/* constellation */
+.const-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;position:relative}
+.const{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.const svg.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.const svg.lines line{stroke:var(--line-2);stroke-width:1.5;stroke-dasharray:4 4}
+.el{position:relative;z-index:1;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:6px;min-height:118px;align-content:start}
+.el .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.el .t .lv{font-size:10.5px;padding:1px 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.el .n{font-weight:600;font-size:13.5px;line-height:1.45}
+.el .sub{font-size:12px;color:var(--ink-2)}
+.el.none{border-style:dashed;background:transparent}
+.el.none .n{color:var(--muted);font-weight:500}
+.el.center{background:var(--ink);color:var(--bg);border-color:var(--ink);grid-column:2;grid-row:2;display:grid;place-content:center;text-align:center;gap:6px}
+.el.center .lv{background:rgba(255,255,255,.14);color:inherit}
+.el.center .n{font-size:16px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:800}
+.el.center .sub{color:inherit;opacity:.75}
+.ico{width:16px;height:16px;flex-shrink:0;vertical-align:-3px}
+.raci{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.raci span{font-size:11px;background:var(--surface-2);padding:1px 7px;border-radius:6px;color:var(--ink-2)}
+.raci span b{font-weight:600;color:var(--ink)}
+.kpi-mini{display:flex;gap:10px;font-size:11.5px;color:var(--ink-2)}
+.kpi-mini b{color:var(--ink);font-variant-numeric:tabular-nums}
+.rule-box{margin-top:16px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;background:var(--gold-soft);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--ink)}
+.rule-box b{color:var(--gold-ink)}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:12px;background:var(--accent-soft);color:var(--accent-ink);font-weight:500;line-height:1.6}
+.chip.gold{background:var(--gold-soft);color:var(--gold-ink)}
+.chip.teal{background:var(--teal-soft);color:var(--teal)}
+.chip.grey{background:var(--surface-2);color:var(--ink-2)}
+.chip.crit{background:transparent;border:1px solid var(--crit);color:var(--crit)}
+.chip.good{background:transparent;border:1px solid var(--good);color:var(--good)}
+.chip.warn{background:transparent;border:1px solid var(--warn);color:var(--gold-ink)}
+
+/* tabs */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.tab{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:13.5px;display:inline-flex;gap:6px;align-items:center}
+.tab:hover{border-color:var(--line-2)}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.panel-head{display:grid;gap:6px;margin-bottom:18px;max-width:70ch}
+.panel-head p{font-size:14px;color:var(--ink-2)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+select,input[type=range]{font:inherit}
+select{background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:8px;padding:7px 12px;min-width:220px;max-width:100%}
+label.ck{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer}
+label.ck:has(input:checked){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--surface-2);border-radius:10px;padding:12px 14px}
+.stat .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{font-size:12px;color:var(--muted);margin-top:4px}
+.list{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.row .n{font-size:13.5px;font-weight:500}
+.row .s{font-size:12px;color:var(--ink-2)}
+.tree{display:grid;gap:10px}
+.tree .l0b{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tree .l0b>header{padding:9px 12px;background:var(--surface-2);font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.tree .l1r{padding:8px 12px;border-top:1px solid var(--line);display:grid;gap:5px}
+.tree .l1r .h{font-size:13px;font-weight:500;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.tree .l2s{display:flex;flex-wrap:wrap;gap:5px}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.bar i.gold{background:var(--gold)}
+
+/* heatmap */
+.hm{display:grid;gap:6px}
+.hm-row{display:grid;grid-template-columns:210px 1fr;gap:10px;align-items:center}
+.hm-row .lbl{font-size:12.5px;color:var(--ink-2);text-align:start;line-height:1.35}
+.hm-cells{display:flex;flex-wrap:wrap;gap:3px}
+.hm-cell{width:38px;height:30px;border-radius:4px;border:0;padding:0;cursor:pointer;background:var(--seq1)}
+.hm-cell.none{background:repeating-linear-gradient(135deg,var(--surface-2) 0 4px,var(--line) 4px 6px)}
+.hm-cell:hover{outline:2px solid var(--ink);outline-offset:1px}
+.hm-legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2);margin-top:14px;flex-wrap:wrap}
+.hm-legend .ramp{display:flex;gap:2px}
+.hm-legend .ramp i{width:22px;height:12px;border-radius:2px;display:block}
+.hm-legend .none{width:22px;height:12px;border-radius:2px;display:inline-block;vertical-align:middle;background:repeating-linear-gradient(135deg,var(--surface-2) 0 4px,var(--line) 4px 6px)}
+
+/* priority */
+.sliders{display:grid;gap:12px}
+.sl{display:grid;grid-template-columns:1fr 60px;gap:10px;align-items:center;font-size:13px}
+.sl label{display:flex;justify-content:space-between}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl .v{font-variant-numeric:tabular-nums;color:var(--ink-2);text-align:center}
+.prio{display:grid;gap:6px}
+.prio .r{display:grid;grid-template-columns:24px 1fr 130px 90px;gap:10px;align-items:center;font-size:13px;padding:6px 8px;border-radius:8px}
+.prio .r:nth-child(odd){background:var(--surface-2)}
+.prio .rk{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.prio .sc{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:12px}
+
+/* targets */
+.tgt{display:grid;gap:14px}
+.tgt .r{display:grid;gap:6px}
+.tgt .h{display:flex;justify-content:space-between;font-size:13.5px}
+.tgt .h b{font-variant-numeric:tabular-nums;font-weight:600}
+.tgt .why{font-size:12px;color:var(--muted)}
+
+/* committee */
+.members{display:flex;flex-wrap:wrap;gap:6px}
+.members .m{background:var(--surface-2);border-radius:10px;padding:8px 12px;font-size:13px;display:grid;gap:2px}
+.members .m small{color:var(--muted);font-size:11px}
+.members .m.chair{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* reports */
+.rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.hbar{display:grid;gap:8px}
+.hbar .r{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:13px}
+.hbar .r .lbl{color:var(--ink-2);text-align:start}
+.hbar .r .v{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:12px}
+.hbar .track{height:14px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.hbar .track i{display:block;height:100%;background:var(--accent);border-radius:0 3px 3px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:start;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--ink-2);font-size:12px}
+.tbl{overflow-x:auto}
+
+/* closing */
+.close-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.close-grid .c{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.close-grid .c h3{margin-bottom:6px}
+.close-grid .c p{font-size:13.5px;color:var(--ink-2)}
+footer{padding-block:30px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+
+/* tooltip */
+.tip{position:fixed;z-index:50;background:var(--ink);color:var(--bg);font-size:12px;padding:8px 10px;border-radius:8px;pointer-events:none;max-width:260px;line-height:1.5;box-shadow:var(--shadow)}
+.tip b{font-weight:600}
+
+@media (max-width:900px){
+  .hero-grid,.hier,.two,.rep-grid{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .close-grid{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .const{grid-template-columns:1fr}
+  .const svg.lines{display:none}
+  .el.center{grid-column:1;grid-row:1}
+  .miller{grid-template-columns:1fr}
+  .col{max-height:260px}
+  .hm-row{grid-template-columns:1fr}
+  .hbar .r{grid-template-columns:110px 1fr 40px}
+  .prio .r{grid-template-columns:20px 1fr 90px 80px}
+  section{padding-block:44px}
+}
+</style>
+<div dir="rtl" lang="ar">
+<nav class="top" aria-label="فصول العرض">
+  <div class="wrap">
+    <div class="brand"><span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></span>خريطة القدرات المؤسسية</div>
+    <div class="nav" id="nav">
+      <a href="#s-concept"><b>1</b>المفهوم</a>
+      <a href="#s-map"><b>2</b>الخريطة الشاملة</a>
+      <a href="#s-hier"><b>3</b>الهرمية</a>
+      <a href="#s-links"><b>4</b>الارتباطات</a>
+      <a href="#s-benefits"><b>5</b>الفوائد</a>
+      <a href="#s-reports"><b>6</b>التقارير</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero" id="s-concept">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow">عرض لمعالي نائب المحافظ · هيكلية الأعمال</span>
+        <h1 style="margin-top:12px">خريطة واحدة تربط مهام البنك المركزي بكل ما يجري في طبقة التشغيل</h1>
+        <p class="lead" style="margin-top:16px">نبدأ من المهام المنصوص عليها في نظام البنك المركزي السعودي، نترجمها إلى قدرات مؤسسية، نفرّعها إلى ثلاثة مستويات، ثم نربط كل قدرة بأنظمتها وصلاحياتها وإجراءاتها وسياساتها ووحداتها المالكة. النتيجة: أي سؤال عن البنك يُجاب عليه من خريطة واحدة.</p>
+        <div class="kpis" id="heroKpis"></div>
+      </div>
+      <div class="concepts">
+        <div class="concept">
+          <svg viewBox="0 0 64 64" fill="none"><rect x="6" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="24.5" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="43" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="6" y="24.5" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="24.5" y="24.5" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="43" y="24.5" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="6" y="43" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="24.5" y="43" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="43" y="43" width="15" height="15" rx="3" fill="var(--gold)"/></svg>
+          <div><div class="tag">المفهوم الأول</div><h3>الشمولية</h3><p>خريطة تغطي البنك كاملًا: قدرات مستمدة من مهام النظام، وقدرات مؤسسية مساندة لا ينص عليها النظام مثل الحوكمة والمالية والمشتريات.</p></div>
+        </div>
+        <div class="concept">
+          <svg viewBox="0 0 64 64" fill="none" stroke="var(--line-2)" stroke-width="1.5"><path d="M32 14v10M32 24H16v10M32 24h16v10M16 34H8v10M16 34h8v10M48 34h-8v10M48 34h8v10"/><circle cx="32" cy="10" r="6" fill="var(--accent)" stroke="none"/><circle cx="16" cy="30" r="4.5" fill="var(--accent-soft)" stroke="var(--accent)"/><circle cx="48" cy="30" r="4.5" fill="var(--accent-soft)" stroke="var(--accent)"/><circle cx="8" cy="48" r="3.5" fill="var(--surface)"/><circle cx="24" cy="48" r="3.5" fill="var(--surface)"/><circle cx="40" cy="48" r="3.5" fill="var(--surface)"/><circle cx="56" cy="48" r="3.5" fill="var(--surface)"/></svg>
+          <div><div class="tag">المفهوم الثاني</div><h3>الهرمية</h3><p>كل قدرة تتفرّع لمستويين تحتها: المستوى 0 ثم المستوى 1 ثم المستوى 2، بحيث يمكن النزول من نطاق عريض إلى أدق مهمة تشغيلية.</p></div>
+        </div>
+        <div class="concept">
+          <svg viewBox="0 0 64 64" fill="none" stroke="var(--line-2)" stroke-width="1.5"><path d="M32 32L12 14M32 32l20-18M32 32L10 36M32 32l22 4M32 32L18 54M32 32l14 22"/><circle cx="32" cy="32" r="8" fill="var(--accent)" stroke="none"/><rect x="6" y="8" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="46" y="8" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="4" y="30" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/><rect x="48" y="30" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/><rect x="12" y="48" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="40" y="48" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/></svg>
+          <div><div class="tag">المفهوم الثالث</div><h3>الارتباطات</h3><p>القدرة تتصل بعناصر الطبقة التشغيلية: نظام تقني، صلاحية، إجراء عمل ومؤشراته، سياسة، وحدة مالكة ودليل مهامها، خدمة، أداة تنظيمية، ولجنة. وكل عنصر يُربط بأدق قدرة تغطيه.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="s-map">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">الفصل 2 · الشمولية</span>
+      <h2>الخريطة الشاملة: المستوى 0 لقدرات البنك المركزي</h2>
+      <p class="lead">كل بطاقة قدرة رئيسية. الخضراء مستمدة مباشرة من مهمة نصّ عليها نظام البنك المركزي، والذهبية قدرة مؤسسية مساندة يحتاجها البنك ليعمل. اختر أي قدرة للنزول في هرميتها.</p>
+      <div class="legend-inline"><span><i class="src"></i> مستمدة من نظام البنك المركزي</span><span><i class="src sup"></i> قدرة مؤسسية مساندة</span></div>
+    </div>
+    <div id="mapLaw"></div>
+    <div id="mapSup"></div>
+  </div>
+</section>
+
+<section id="s-hier">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">الفصل 3 · الهرمية</span>
+      <h2>ثلاثة مستويات: من النطاق العريض إلى المهمة الدقيقة</h2>
+      <p class="lead">المستوى 0 يتفرّع إلى واحدة أو أكثر من قدرات المستوى 1، وكل منها تتفرّع إلى واحدة أو أكثر من قدرات المستوى 2. الشجرة الدائرية تعرض القدرة المختارة كاملة.</p>
+    </div>
+    <div class="crumb" id="crumb"></div>
+    <div class="hier">
+      <div class="miller">
+        <div class="col"><header><span>المستوى 0</span><b id="c0n"></b></header><div id="col0"></div></div>
+        <div class="col"><header><span>المستوى 1</span><b id="c1n"></b></header><div id="col1"></div></div>
+        <div class="col"><header><span>المستوى 2</span><b id="c2n"></b></header><div id="col2"></div></div>
+      </div>
+      <div>
+        <div class="radial" id="radial"></div>
+        <p class="note">المركز: القدرة الرئيسية المختارة. الحلقة الوسطى: المستوى 1. الحلقة الخارجية: المستوى 2. اضغط أي عقدة لاختيارها.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="s-links">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">الفصل 4 · الارتباطات</span>
+      <h2>بطاقة القدرة: كل ما يرتبط بها في طبقة التشغيل</h2>
+      <p class="lead">القدرة في المنتصف، وحولها عناصر الطبقة التشغيلية المرتبطة بها. الشارة على كل عنصر تبيّن عند أي مستوى تم الربط، تطبيقًا لقاعدة الربط بأدق قدرة يغطيها العنصر.</p>
+    </div>
+    <div class="controls">
+      <label for="selL2" style="font-size:13px;color:var(--ink-2)">القدرة المعروضة</label>
+      <select id="selL2"></select>
+    </div>
+    <div class="const-wrap">
+      <div class="const" id="const"></div>
+      <div class="rule-box">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--gold-ink)" stroke-width="1.6"><circle cx="11" cy="11" r="9"/><path d="M11 7v5M11 15h.01"/></svg>
+        <div><b>قاعدة الربط بأدق مستوى:</b> إذا كان نطاق العنصر أوسع من قدرة المستوى 2 نربطه بالمستوى 1، وإذا كان أوسع من المستوى 1 نربطه بالمستوى 0. لذلك ترى الإجراء والوحدة المالكة مرتبطين بالمستوى 1 بينما النظام والصلاحية مرتبطان بالمستوى 2، ومن الطبيعي أن يرتبط العنصر الواحد بأكثر من قدرة.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="s-benefits">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">الفصل 5 · الفوائد</span>
+      <h2>ماذا يعطينا الترابط؟ ست حالات استخدام حيّة</h2>
+      <p class="lead">كل تبويب أدناه يعمل على البيانات نفسها. غيّر المدخلات وشاهد كيف تنتقل النتيجة من القدرة إلى كل العناصر المرتبطة بها.</p>
+    </div>
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" aria-selected="true" data-t="impact">دراسة الأثر</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="gaps">تحليل الفجوات</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="heat">الخريطة الحرارية</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="prio">التخطيط والأولويات</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="targets">المستهدفات</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="comm">تشكيل اللجان</button>
+    </div>
+
+    <div class="panel" id="p-impact" role="tabpanel">
+      <div class="panel-head"><h3>دراسة الأثر: مبادرة جديدة، فأي القدرات تتأثر وأي العناصر تتبعها؟</h3><p>اختر مبادرة. تحدَّد القدرات المتأثرة على الخريطة، ولأن القدرات مرتبطة بطبقة التشغيل نحصل فورًا على كل نظام وصلاحية وإجراء وسياسة ووحدة ستتأثر بالإضافة أو التعديل أو الحذف أو التحسين.</p></div>
+      <div class="controls"><label for="selInit" style="font-size:13px;color:var(--ink-2)">المبادرة</label><select id="selInit"></select></div>
+      <div class="stat-row" id="impStats"></div>
+      <div class="two"><div><h3 style="margin-bottom:10px;font-size:14px">القدرات المتأثرة</h3><div class="tree" id="impTree"></div></div><div><h3 style="margin-bottom:10px;font-size:14px">عناصر الطبقة التشغيلية المتأثرة</h3><div class="list" id="impEls"></div></div></div>
+    </div>
+
+    <div class="panel" id="p-gaps" role="tabpanel" hidden>
+      <div class="panel-head"><h3>تحليل الفجوات: أي القدرات بلا غطاء؟</h3><p>فعّل نوع الفجوة لتظهر قدرات المستوى 1 التي لا يغطيها هذا العنصر. الفجوة الواحدة تعني عملًا يجري في البنك بلا إجراء موثق أو بلا سياسة أو بلا أداة تنظيمية.</p></div>
+      <div class="controls" id="gapCtl">
+        <label class="ck"><input type="checkbox" id="g-proc" checked> بلا إجراء عمل</label>
+        <label class="ck"><input type="checkbox" id="g-pol"> بلا سياسة</label>
+        <label class="ck"><input type="checkbox" id="g-reg"> بلا أداة تنظيمية</label>
+        <label class="ck"><input type="checkbox" id="g-sys"> بلا نظام تقني</label>
+        <label class="ck"><input type="checkbox" id="g-own"> بلا وحدة مالكة</label>
+      </div>
+      <div class="stat-row" id="gapStats"></div>
+      <div class="tree" id="gapTree"></div>
+    </div>
+
+    <div class="panel" id="p-heat" role="tabpanel" hidden>
+      <div class="panel-head"><h3>الخريطة الحرارية: مقياس واحد على كل القدرات دفعة واحدة</h3><p>كل خلية قدرة من المستوى 1 مجمّعة تحت قدرتها الرئيسية. اللون يمثّل قيمة المقياس المختار، والخلية المخططة تعني أن لا إجراء عمل يغطي القدرة أصلًا.</p></div>
+      <div class="controls"><label for="selMetric" style="font-size:13px;color:var(--ink-2)">المقياس</label><select id="selMetric"><option value="auto">نسبة أتمتة إجراء العمل</option><option value="perm">عدد الصلاحيات المرتبطة</option><option value="kq">مؤشر الجودة للإجراء</option></select></div>
+      <div class="hm" id="heat"></div>
+      <div class="hm-legend" id="heatLegend"></div>
+    </div>
+
+    <div class="panel" id="p-prio" role="tabpanel" hidden>
+      <div class="panel-head"><h3>التخطيط والأولويات: معايير على القدرة، فترثها كل عناصرها</h3><p>حرّك أوزان المعايير. تُحتسب أولوية كل قدرة رئيسية، وتنتقل الأولوية نفسها تلقائيًا إلى الأنظمة والإجراءات والصلاحيات المرتبطة بها، فتصبح خطة العمل مرتبة دون جهد يدوي.</p></div>
+      <div class="two">
+        <div class="sliders">
+          <div class="sl"><label for="w-reg"><span>الارتباط بمهمة نظامية</span></label><input type="range" id="w-reg" min="0" max="5" value="4"><span class="v" id="w-reg-v">4</span></div>
+          <div class="sl"><label for="w-risk"><span>مستوى المخاطر</span></label><input type="range" id="w-risk" min="0" max="5" value="3"><span class="v" id="w-risk-v">3</span></div>
+          <div class="sl"><label for="w-vis"><span>الارتباط بالاستراتيجية ورؤية 2030</span></label><input type="range" id="w-vis" min="0" max="5" value="3"><span class="v" id="w-vis-v">3</span></div>
+          <div class="sl"><label for="w-ext"><span>الأثر على العملاء والقطاع</span></label><input type="range" id="w-ext" min="0" max="5" value="2"><span class="v" id="w-ext-v">2</span></div>
+          <div class="stat-row" id="prioStats" style="margin-top:8px"></div>
+        </div>
+        <div class="prio" id="prioList"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="p-targets" role="tabpanel" hidden>
+      <div class="panel-head"><h3>المستهدفات: عدد القدرات يحدد عدد ما يلزم البنك</h3><p>القرار مثلًا: سياسة لكل قدرة مستوى 0، وإجراء عمل لكل قدرة مستوى 1، وأداة تنظيمية لكل قدرة رقابية مستوى 1، ودليل مهام لكل وحدة إدارية. فتصبح المستهدفات أرقامًا حقيقية قابلة للقياس بدل تقديرات.</p></div>
+      <div class="tgt" id="targets"></div>
+    </div>
+
+    <div class="panel" id="p-comm" role="tabpanel" hidden>
+      <div class="panel-head"><h3>تشكيل اللجان: من يجب أن يجلس على الطاولة؟</h3><p>اربط اللجنة بقدرة، فتظهر فورًا الوحدات الإدارية المالكة للقدرات تحتها. هذا هو تشكيل اللجنة المقترح، مبنيًا على الخريطة لا على الاجتهاد.</p></div>
+      <div class="controls"><label for="commL0" style="font-size:13px;color:var(--ink-2)">نطاق اللجنة</label><select id="commL0"></select><select id="commL1"></select></div>
+      <div class="two"><div><h3 style="margin-bottom:10px;font-size:14px" id="commTitle"></h3><div class="members" id="commMembers"></div></div><div><h3 style="margin-bottom:10px;font-size:14px">القدرات التي تغطيها اللجنة</h3><div class="list" id="commCaps"></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="s-reports">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">الفصل 6 · التقارير</span>
+      <h2>أسئلة كانت تحتاج أسابيع، تُجاب الآن من الخريطة مباشرة</h2>
+      <p class="lead">كم صلاحية بيد معالي المحافظ؟ كم إدارة تعمل بلا إجراء موثق؟ أي الأنظمة تخدم أكثر من قدرة؟ كلها استعلامات على البيانات المترابطة نفسها.</p>
+    </div>
+    <div class="kpis" id="repKpis" style="margin-top:0;margin-bottom:20px"></div>
+    <div class="rep-grid">
+      <div class="panel"><h3 style="margin-bottom:14px;font-size:14px">توزيع صلاحيات الاعتماد حسب المستوى الوظيفي</h3><div class="hbar" id="repBar"></div></div>
+      <div class="panel"><h3 style="margin-bottom:14px;font-size:14px">وحدات إدارية تملك قدرات بلا إجراء عمل موثق</h3><div class="tbl"><table id="repTbl"><thead><tr><th>الوحدة الإدارية</th><th>القدرة</th><th>القدرة الرئيسية</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <div class="sec-head" style="margin-top:56px;margin-bottom:18px"><span class="eyebrow">الخلاصة</span><h2>ماذا يعني هذا لقيادة البنك؟</h2></div>
+    <div class="close-grid">
+      <div class="c"><h3>قرار مبني على خريطة</h3><p>أي مبادرة أو لجنة أو سياسة تبدأ من القدرة، فتظهر كل تبعاتها التشغيلية قبل اتخاذ القرار لا بعده.</p></div>
+      <div class="c"><h3>مستهدفات قابلة للقياس</h3><p>عدد السياسات والإجراءات والأدوات التنظيمية يُشتق من عدد القدرات، فتصبح الفجوة رقمًا واضحًا ومسارًا لإغلاقها.</p></div>
+      <div class="c"><h3>لغة واحدة للبنك</h3><p>الوحدات والأنظمة والصلاحيات والخدمات تُوصف بالمرجع نفسه، فيتحدث الجميع عن الشيء نفسه بالاسم نفسه.</p></div>
+    </div>
+  </div>
+</section>
+<footer><div class="wrap">نموذج أولي تفاعلي. أسماء القدرات مستمدة من مهام نظام البنك المركزي السعودي، أما عناصر الطبقة التشغيلية وأرقامها فبيانات توضيحية لغرض العرض فقط.</div></footer>
+<div class="tip" id="tip" hidden></div>
+</div>
+<script>
+(function(){
+'use strict';
+/* ---------- بيانات القدرات ---------- */
+const CAPS=[
+ {n:'السياسة النقدية',task:'وضع السياسة النقدية وتنفيذها',gd:'الإدارة العامة للسياسة النقدية',sys:['نظام إدارة السيولة','منصة التحليل النقدي','نظام عمليات السوق المفتوحة'],svc:['نافذة الإيداع والإقراض للبنوك'],l1:[
+  {n:'صياغة السياسة النقدية',l2:['تحليل التطورات النقدية','نمذجة التضخم والتوقعات','تحديد موقف السياسة']},
+  {n:'تنفيذ عمليات السوق',l2:['عمليات إعادة الشراء','أدوات السيولة الطارئة','إدارة السيولة اليومية']},
+  {n:'إدارة سعر الصرف',l2:['إدارة ربط الريال','عمليات سوق الصرف']},
+  {n:'الاحتياطي النظامي',l2:['تحديد نسب الاحتياطي','احتساب الالتزام ومتابعته']}]},
+ {n:'إصدار العملة وإدارتها',task:'إصدار العملة الوطنية وإدارتها',gd:'الإدارة العامة للعملة',sys:['نظام إدارة المخزون النقدي','نظام مراكز النقد','منصة تتبع الفئات'],svc:['تزويد البنوك بالنقد','استبدال العملة التالفة'],l1:[
+  {n:'تصميم العملة وإنتاجها',l2:['تصميم الفئات','مواصفات الأمان','التعاقد على الطباعة والسك']},
+  {n:'توزيع النقد',l2:['تخطيط الطلب على النقد','تشغيل مراكز النقد','نقل النقد وتأمينه']},
+  {n:'جودة النقد وسحبه',l2:['فرز التالف وإتلافه','مكافحة التزييف']},
+  {n:'العملة الرقمية',l2:['تجارب الريال الرقمي','إطار الإصدار الرقمي']}]},
+ {n:'إدارة الاحتياطيات والاستثمار',task:'إدارة احتياطيات الدولة من النقد الأجنبي',gd:'الإدارة العامة للاستثمار',sys:['نظام إدارة المحافظ','نظام الخزينة والتسوية','منصة قياس المخاطر'],svc:null,l1:[
+  {n:'استراتيجية الاستثمار',l2:['التوزيع الاستراتيجي للأصول','سياسة المخاطر الاستثمارية']},
+  {n:'إدارة المحافظ',l2:['المحافظ الداخلية','مديرو الأصول الخارجيون','أدوات الدخل الثابت']},
+  {n:'عمليات الخزينة والتسوية',l2:['التسوية والحفظ','إدارة الضمانات']},
+  {n:'قياس الأداء والمخاطر',l2:['قياس أداء المحافظ','مخاطر السوق والائتمان']}]},
+ {n:'الخدمات المصرفية للحكومة',task:'القيام بأعمال مصرف الحكومة',gd:'الإدارة العامة للعمليات المصرفية',sys:['نظام الحسابات الحكومية','نظام التحويلات الحكومية'],svc:['فتح الحسابات الحكومية','صرف المستحقات الحكومية','التحويلات الدولية للجهات الحكومية'],l1:[
+  {n:'حسابات الحكومة',l2:['فتح الحسابات الحكومية وإدارتها','كشوف الحسابات والمطابقة']},
+  {n:'المدفوعات الحكومية',l2:['صرف المستحقات','التحويلات الدولية للحكومة']},
+  {n:'إدارة إصدارات الدين (بالتنسيق)',l2:['إصدارات الصكوك والسندات','خدمة الدين']}]},
+ {n:'الإشراف على البنوك',task:'الإشراف على البنوك والمصارف ومراقبتها',gd:'الإدارة العامة للرقابة على البنوك',sup:true,sys:['نظام الرقابة المصرفية','منصة الإفصاح الرقابي','نظام إدارة التفتيش'],svc:['ترخيص البنوك وفروعها','الموافقة على المنتجات المصرفية'],l1:[
+  {n:'الترخيص',l2:['دراسة طلبات الترخيص','تراخيص الفروع والمنتجات','الموافقة على كبار المساهمين']},
+  {n:'التفتيش الميداني',l2:['تخطيط التفتيش','تنفيذ الزيارات','متابعة الملاحظات']},
+  {n:'الرقابة المكتبية',l2:['التقارير الرقابية الدورية','مؤشرات الإنذار المبكر']},
+  {n:'التعليمات والأطر التنظيمية',l2:['إعداد التعليمات','استطلاع آراء القطاع','نشر التعليمات']},
+  {n:'الإجراءات التصحيحية والجزاءات',l2:['خطط التصحيح','الغرامات والجزاءات']}]},
+ {n:'الإشراف على شركات التمويل',task:'الإشراف على شركات التمويل ومراقبتها',gd:'الإدارة العامة للرقابة على التمويل',sup:true,sys:['نظام الرقابة على التمويل','منصة الإفصاح الرقابي'],svc:['ترخيص شركات التمويل'],l1:[
+  {n:'ترخيص شركات التمويل',l2:['التمويل الاستهلاكي','التمويل العقاري','التمويل الجماعي']},
+  {n:'الرقابة على شركات التمويل',l2:['التقارير الرقابية','الزيارات التفتيشية']},
+  {n:'الحد من المخاطر الائتمانية',l2:['حدود التعرض','ضوابط الملاءة']}]},
+ {n:'الإشراف على المؤسسات المالية غير المصرفية',task:'الرقابة على الصرافة ومقدمي خدمات المدفوعات',gd:'الإدارة العامة للرقابة على المؤسسات المالية',sup:true,sys:['نظام تراخيص المدفوعات','نظام مراقبة التحويلات'],svc:['ترخيص مقدمي خدمات المدفوعات','ترخيص محلات الصرافة'],l1:[
+  {n:'ترخيص مقدمي خدمات المدفوعات',l2:['المحافظ الإلكترونية','مقدمو خدمات الدفع']},
+  {n:'الرقابة على الصرافة',l2:['الترخيص والرقابة','مراقبة التحويلات']},
+  {n:'مكافحة غسل الأموال في المؤسسات الخاضعة',l2:['فحص الالتزام','التنسيق مع الجهات المختصة']}]},
+ {n:'أنظمة المدفوعات والبنية التحتية المالية',task:'تشغيل أنظمة المدفوعات والإشراف عليها',gd:'الإدارة العامة للمدفوعات',sup:true,sys:['نظام المدفوعات الفورية (سريع)','نظام سداد','شبكة مدى','نظام التحويلات الإجمالية'],svc:['التحويل الفوري بين البنوك','سداد الفواتير','المدفوعات عبر نقاط البيع'],l1:[
+  {n:'تشغيل أنظمة المدفوعات',l2:['المدفوعات الفورية','سداد الفواتير','شبكة مدى','التسويات الإجمالية']},
+  {n:'الإشراف على أنظمة المدفوعات',l2:['تقييم البنى التحتية','معايير أمن المدفوعات']},
+  {n:'التسوية النهائية',l2:['تسوية الأوراق المالية','إدارة مخاطر التسوية']},
+  {n:'الشمول المالي والوصول',l2:['انتشار نقاط البيع','الخدمات الرقمية للمناطق']}]},
+ {n:'الاستقرار المالي',task:'تعزيز الاستقرار المالي ودعم الثقة بالقطاع',gd:'الإدارة العامة للاستقرار المالي',sys:['منصة المؤشرات الكلية','نظام اختبارات التحمل'],svc:null,l1:[
+  {n:'الرصد الكلي الاحترازي',l2:['مؤشرات المخاطر النظامية','اختبارات التحمل الكلية']},
+  {n:'أدوات السياسة الاحترازية الكلية',l2:['هوامش رأس المال المعاكسة للدورة','نسب القرض إلى القيمة']},
+  {n:'إدارة الأزمات والتعافي',l2:['خطط التعافي والتصفية','حماية الودائع']},
+  {n:'تقرير الاستقرار المالي',l2:['إعداد التقرير','التواصل مع الأسواق']}]},
+ {n:'حماية العملاء',task:'حماية عملاء المؤسسات المالية',gd:'الإدارة العامة لحماية العملاء',sup:true,sys:['نظام إدارة الشكاوى','منصة التوعية المالية'],svc:['استقبال شكاوى العملاء','الاستفسار عن حالة الشكوى'],l1:[
+  {n:'الشكاوى وتسوية المنازعات',l2:['استقبال الشكاوى','التصعيد والتحقيق','لجان الفصل']},
+  {n:'قواعد حماية العملاء',l2:['قواعد التعامل مع العملاء','الإفصاح والشفافية']},
+  {n:'التوعية والثقافة المالية',l2:['الحملات التوعوية','التعليم المالي']}]},
+ {n:'الابتكار والتقنية المالية',task:'دعم الابتكار والتقنية المالية',gd:'الإدارة العامة للتقنية المالية',sup:true,sys:['منصة البيئة التجريبية','منصة المصرفية المفتوحة'],svc:['الانضمام إلى البيئة التجريبية','واجهات المصرفية المفتوحة'],l1:[
+  {n:'البيئة التجريبية التشريعية',l2:['قبول الطلبات','متابعة التجارب','التخرج من البيئة']},
+  {n:'المصرفية المفتوحة',l2:['إطار المصرفية المفتوحة','منصة الربط']},
+  {n:'تمكين شركات التقنية المالية',l2:['التوجيه والتمكين','الشراكات']}]},
+ {n:'الشؤون الدولية',task:'تمثيل المملكة لدى المؤسسات المالية الدولية',gd:'الإدارة العامة للشؤون الدولية',sys:['نظام إدارة الاتفاقيات'],svc:null,l1:[
+  {n:'المنظمات الدولية',l2:['صندوق النقد الدولي','بنك التسويات الدولية','مجموعة العشرين']},
+  {n:'التعاون الثنائي',l2:['مذكرات التفاهم','تبادل المعلومات الرقابية']}]},
+ {n:'البحوث والإحصاءات',task:'إعداد الإحصاءات النقدية والمصرفية ونشرها',gd:'الإدارة العامة للبحوث الاقتصادية',sys:['نظام جمع البيانات الإحصائية','منصة النشر الإحصائي'],svc:['النشرة الإحصائية','طلبات البيانات'],l1:[
+  {n:'الإحصاءات النقدية والمصرفية',l2:['جمع البيانات','النشرات الإحصائية']},
+  {n:'البحوث الاقتصادية',l2:['التقرير السنوي','أوراق العمل']},
+  {n:'التنبؤ والنمذجة',l2:['النماذج الكلية','السيناريوهات']}]},
+ {n:'الحوكمة والاستراتيجية والتميز المؤسسي',task:null,gd:'الإدارة العامة للاستراتيجية',sys:['نظام إدارة الاستراتيجية','نظام إدارة الوثائق','منصة إدارة المخاطر المؤسسية'],svc:null,l1:[
+  {n:'التخطيط الاستراتيجي',l2:['صياغة الاستراتيجية','متابعة المبادرات','مؤشرات الأداء المؤسسية']},
+  {n:'الحوكمة المؤسسية',l2:['اللجان الداخلية','السياسات والصلاحيات','إدارة الوثائق']},
+  {n:'التميز والجودة',l2:['الجوائز والاعتمادات','تحسين الإجراءات']},
+  {n:'المخاطر المؤسسية واستمرارية الأعمال',l2:['سجل المخاطر','استمرارية الأعمال']}]},
+ {n:'الشؤون المالية والمشتريات',task:null,gd:'الإدارة العامة للشؤون المالية',sys:['نظام تخطيط الموارد','منصة المنافسات والمشتريات'],svc:null,l1:[
+  {n:'الميزانية والتقارير المالية',l2:['إعداد الميزانية','القوائم المالية']},
+  {n:'المشتريات والعقود',l2:['طرح المنافسات','إدارة العقود','إدارة الموردين']},
+  {n:'المدفوعات والرواتب',l2:['صرف المستحقات','الرواتب']}]},
+ {n:'الموارد البشرية',task:null,gd:'الإدارة العامة للموارد البشرية',sys:['نظام الموارد البشرية','منصة التعلم'],svc:null,l1:[
+  {n:'استقطاب المواهب',l2:['التوظيف','الابتعاث والتدريب التعاوني']},
+  {n:'تطوير القيادات والكفاءات',l2:['برامج القيادة','التدريب المتخصص']},
+  {n:'الأداء والمكافآت',l2:['تقييم الأداء','هيكل الأجور']},
+  {n:'علاقات الموظفين',l2:['الخدمات الذاتية','الشؤون الوظيفية']}]},
+ {n:'التقنية والبيانات',task:null,gd:'الإدارة العامة لتقنية المعلومات',sys:['منصة البنية التحتية','نظام إدارة الهويات','مركز العمليات الأمنية','منصة البيانات والتحليلات'],svc:null,l1:[
+  {n:'البنية التحتية التقنية',l2:['مراكز البيانات','الشبكات','التشغيل والمراقبة']},
+  {n:'تطوير الأنظمة',l2:['تحليل المتطلبات','التطوير','الاختبار والإطلاق']},
+  {n:'الأمن السيبراني',l2:['مركز العمليات الأمنية','إدارة الهويات','الاستجابة للحوادث']},
+  {n:'حوكمة البيانات',l2:['جودة البيانات','الخصوصية','التحليلات']}]},
+ {n:'الشؤون القانونية',task:null,gd:'الإدارة العامة للشؤون القانونية',sys:['نظام إدارة القضايا'],svc:null,l1:[
+  {n:'الاستشارات القانونية',l2:['الرأي القانوني','مراجعة العقود']},
+  {n:'التقاضي والتمثيل',l2:['الدعاوى','التحكيم']},
+  {n:'الصياغة التنظيمية',l2:['صياغة الأنظمة واللوائح','المراجعة القانونية للتعليمات']}]},
+ {n:'الخدمات الإدارية والمساندة',task:null,gd:'الإدارة العامة للخدمات المساندة',sys:['نظام إدارة المرافق','نظام الفعاليات'],svc:null,l1:[
+  {n:'المرافق والصيانة',l2:['إدارة المباني','الصيانة']},
+  {n:'الأمن والسلامة',l2:['أمن المنشآت','السلامة المهنية']},
+  {n:'الاتصال المؤسسي',l2:['الإعلام','العلاقات العامة','الفعاليات']}]}
+];
+
+/* ---------- المبادرات (دراسة الأثر) ---------- */
+const INITS=[
+ {n:'إطلاق الريال الرقمي (عملة البنك المركزي الرقمية)',d:'إصدار نسخة رقمية من الريال للتسويات بين البنوك ثم للأفراد.',hits:[[1,3,null,'إضافة'],[1,1,2,'تعديل'],[0,1,2,'تحسين'],[7,0,0,'تعديل'],[7,2,1,'تعديل'],[16,2,1,'إضافة'],[16,1,null,'تعديل'],[17,2,0,'تعديل']]},
+ {n:'التحول إلى الرقابة القائمة على المخاطر لشركات التمويل',d:'استبدال الرقابة الدورية الموحدة بنموذج مبني على تصنيف المخاطر.',hits:[[5,1,null,'تعديل'],[5,2,0,'تحسين'],[5,2,1,'تحسين'],[4,2,1,'تحسين'],[8,0,0,'تعديل'],[16,3,2,'إضافة']]},
+ {n:'منصة موحدة لشكاوى عملاء القطاع المالي',d:'قناة واحدة لاستقبال الشكاوى وتحويلها للمؤسسات المالية ومتابعتها.',hits:[[9,0,0,'تعديل'],[9,0,1,'تعديل'],[9,0,2,'تحسين'],[9,1,1,'تعديل'],[7,3,1,'تحسين'],[16,1,null,'إضافة'],[12,0,0,'تحسين']]},
+ {n:'إلغاء الرقابة المكتبية الورقية والاعتماد على الإفصاح الرقمي',d:'إيقاف التقارير الورقية واعتماد منصة الإفصاح الرقابي مصدرًا وحيدًا.',hits:[[4,2,0,'حذف'],[4,2,1,'تحسين'],[5,1,0,'حذف'],[6,1,1,'تعديل'],[16,3,0,'تحسين'],[12,0,0,'تعديل']]}
+];
+
+/* ---------- مولّد بيانات الطبقة التشغيلية (حتمي) ---------- */
+let seed=20261;
+function rnd(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}
+const ri=(a,b)=>a+Math.floor(rnd()*(b-a+1));
+const pick=a=>a[Math.floor(rnd()*a.length)];
+const DEP=[ 'وكيل المحافظ للبحوث والشؤون الدولية','وكيل المحافظ للعمليات','وكيل المحافظ للعمليات','وكيل المحافظ للعمليات','وكيل المحافظ للإشراف','وكيل المحافظ للإشراف','وكيل المحافظ للإشراف','وكيل المحافظ للمدفوعات','وكيل المحافظ للبحوث والشؤون الدولية','وكيل المحافظ للإشراف','وكيل المحافظ للمدفوعات','وكيل المحافظ للبحوث والشؤون الدولية','وكيل المحافظ للبحوث والشؤون الدولية','وكيل المحافظ للشؤون المساندة','وكيل المحافظ للشؤون المساندة','وكيل المحافظ للشؤون المساندة','وكيل المحافظ للشؤون المساندة','وكيل المحافظ للشؤون المساندة','وكيل المحافظ للشؤون المساندة'];
+const M={l0:[],l1:[],l2:[],units:[]};
+const unitByName={};
+function unit(n,gd){if(!unitByName[n]){unitByName[n]={n,gd,manual:rnd()<.68,l1:[]};M.units.push(unitByName[n])}return unitByName[n]}
+CAPS.forEach((c,i)=>{
+  const l0={id:'L0-'+String(i+1).padStart(2,'0'),lvl:0,n:c.n,task:c.task,sup:!!c.sup,idx:i,gd:c.gd,dep:DEP[i],
+    policy:rnd()<.72?{n:'سياسة '+c.n}:null,committee:rnd()<.45?{n:'لجنة '+c.n}:null,
+    scores:{reg:c.task?ri(3,5):ri(1,2),risk:ri(1,5),vis:ri(1,5),ext:c.sup?ri(3,5):ri(1,4)},l1:[]};
+  M.l0.push(l0);
+  c.l1.forEach((s,j)=>{
+    const shared=j>0&&rnd()<.15;
+    const u=rnd()<.06?null:(shared?l0.l1[j-1].unit:unit('إدارة '+s.n,c.gd));
+    const l1={id:l0.id+'.'+(j+1),lvl:1,n:s.n,l0,unit:u,idx:j,
+      proc:rnd()<.78?{n:'إجراء '+s.n,auto:ri(8,98),kq:ri(72,99),kt:ri(2,30)}:null,
+      policy:rnd()<.42?{n:'سياسة '+s.n}:null,
+      reg:l0.sup&&rnd()<.68?{n:pick(['قواعد ','تعليمات ','ضوابط '])+s.n}:null,
+      committee:rnd()<.18?{n:'لجنة '+s.n}:null,l2:[]};
+    if(u)u.l1.push(l1);
+    l0.l1.push(l1);M.l1.push(l1);
+    s.l2.forEach((t,k)=>{
+      const nsys=c.sys?Math.min(c.sys.length,ri(0,2)):0;
+      const sys=[];for(let q=0;q<nsys;q++){const x=pick(c.sys);if(!sys.includes(x))sys.push(x)}
+      const appr=rnd();const approver=appr<.12?'معالي المحافظ':appr<.32?'معالي نائب المحافظ':appr<.68?l0.dep:appr<.88?'مدير عام '+c.gd.replace('الإدارة العامة ','').replace(/^ل/,''):'مدير '+(u?u.n.replace('إدارة ',''):s.n);
+      const l2={id:l1.id+'.'+(k+1),lvl:2,n:t,l1,idx:k,sys,
+        perm:{n:'صلاحية اعتماد '+t,approver,resp:u?'مدير '+u.n.replace('إدارة ',''):'مدير الإدارة المعنية',adv:pick(['الشؤون القانونية','إدارة المخاطر','الالتزام']),rec:'رئيس قسم '+t,inf:pick(['المراجعة الداخلية','الحوكمة','الاستراتيجية'])},
+        svc:c.svc&&rnd()<.5?pick(c.svc):null};
+      l1.l2.push(l2);M.l2.push(l2);
+    });
+  });
+});
+const SUM={
+  policies:M.l0.filter(x=>x.policy).length+M.l1.filter(x=>x.policy).length,
+  procs:M.l1.filter(x=>x.proc).length,
+  regs:M.l1.filter(x=>x.reg).length,
+  comms:M.l0.filter(x=>x.committee).length+M.l1.filter(x=>x.committee).length,
+  sysLinks:M.l2.reduce((a,x)=>a+x.sys.length,0),
+  perms:M.l2.length,
+  svcs:M.l2.filter(x=>x.svc).length,
+  units:M.units.length
+};
+SUM.elements=SUM.policies+SUM.procs+SUM.regs+SUM.comms+SUM.sysLinks+SUM.perms+SUM.svcs+SUM.units;
+
+/* ---------- أدوات ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>new Intl.NumberFormat('en-US').format(n);
+const ICON={
+  sys:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="8" rx="1.5"/><path d="M5 14h6M8 11v3"/></svg>',
+  perm:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="3"/><path d="M9 6h5M12 6v3M2 14c0-2.5 2-4 4-4s4 1.5 4 4"/></svg>',
+  proc:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M6 4h4v6"/></svg>',
+  pol:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M6 8h5M6 11h5"/></svg>',
+  unit:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 14h12M3 14V6l5-3 5 3v8"/><path d="M6 14v-4h4v4"/></svg>',
+  svc:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>',
+  reg:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v12M3 5h10M4 5l-2 4h4zM12 5l-2 4h4z"/></svg>',
+  comm:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5" cy="5" r="2"/><circle cx="11" cy="5" r="2"/><path d="M1.5 13c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5M7.5 13c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5"/></svg>'
+};
+const tip=$('#tip');
+function showTip(html,x,y){tip.innerHTML=html;tip.hidden=false;const r=tip.getBoundingClientRect();let L=x-r.width/2;L=Math.max(8,Math.min(window.innerWidth-r.width-8,L));let T=y-r.height-12;if(T<8)T=y+14;tip.style.left=L+'px';tip.style.top=T+'px'}
+function hideTip(){tip.hidden=true}
+
+/* ---------- الحالة ---------- */
+const S={l0:null,l1:null,l2:null};
+{const best=M.l2.find(x=>x.l1.l0.idx===7&&x.sys.length&&x.svc&&x.l1.proc&&x.l1.reg&&x.l1.unit)||M.l2.find(x=>x.l1.l0.idx===7&&x.sys.length&&x.l1.proc&&x.l1.unit)||M.l2.find(x=>x.sys.length&&x.svc&&x.l1.proc&&x.l1.unit)||M.l2[0];S.l2=best;S.l1=best.l1;S.l0=best.l1.l0}
+
+/* ---------- البطل ---------- */
+$('#heroKpis').innerHTML=[[M.l0.length,'قدرة رئيسية (المستوى 0)'],[M.l1.length,'قدرة فرعية (المستوى 1)'],[M.l2.length,'قدرة تفصيلية (المستوى 2)'],[SUM.elements,'ارتباط بعناصر طبقة التشغيل']].map(k=>`<div class="kpi"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
+
+/* ---------- الخريطة الشاملة ---------- */
+function capCard(l0){const n2=l0.l1.reduce((a,x)=>a+x.l2.length,0);return `<button class="cap${S.l0===l0?' active':''}" data-id="${l0.id}"><div class="id"><span>${l0.id}</span><i class="src${l0.task?'':' sup'}"></i></div><div class="n">${esc(l0.n)}</div><div class="task">${l0.task?'المهمة النظامية: '+esc(l0.task):'قدرة مساندة لا ينص عليها النظام'}</div><div class="meta"><span>${l0.l1.length} فرعية</span><span>${n2} تفصيلية</span></div></button>`}
+function renderMap(){
+  const law=M.l0.filter(x=>x.task),sup=M.l0.filter(x=>!x.task);
+  $('#mapLaw').innerHTML=`<div class="group-title">قدرات مستمدة من مهام نظام البنك المركزي السعودي · ${law.length}</div><div class="map">${law.map(capCard).join('')}</div>`;
+  $('#mapSup').innerHTML=`<div class="group-title">قدرات مؤسسية مساندة · ${sup.length}</div><div class="map">${sup.map(capCard).join('')}</div>`;
+}
+document.addEventListener('click',e=>{const b=e.target.closest('.cap');if(!b)return;const l0=M.l0.find(x=>x.id===b.dataset.id);select(l0,l0.l1[0],l0.l1[0].l2[0]);document.getElementById('s-hier').scrollIntoView({behavior:'smooth',block:'start'})});
+
+/* ---------- الهرمية ---------- */
+function select(l0,l1,l2){S.l0=l0;S.l1=l1||l0.l1[0];S.l2=l2||S.l1.l2[0];renderMap();renderHier();renderRadial();renderConst();syncL2Select()}
+function renderHier(){
+  $('#col0').innerHTML=M.l0.map(x=>`<button class="item${x===S.l0?' active':''}" data-l="0" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.l1.length}</span></button>`).join('');
+  $('#col1').innerHTML=S.l0.l1.map(x=>`<button class="item${x===S.l1?' active':''}" data-l="1" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.l2.length}</span></button>`).join('');
+  $('#col2').innerHTML=S.l1.l2.map(x=>`<button class="item${x===S.l2?' active':''}" data-l="2" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.sys.length+1+(x.svc?1:0)} ارتباط</span></button>`).join('');
+  $('#c0n').textContent=M.l0.length+' قدرة';$('#c1n').textContent=S.l0.l1.length+' قدرة';$('#c2n').textContent=S.l1.l2.length+' قدرة';
+  $('#crumb').innerHTML=`<span class="lvl">L0</span><span>${esc(S.l0.n)}</span><span class="sep">‹</span><span class="lvl">L1</span><span>${esc(S.l1.n)}</span><span class="sep">‹</span><span class="lvl">L2</span><b>${esc(S.l2.n)}</b>`;
+  const a=document.querySelector('#col0 .item.active');if(a){const c=a.closest('.col');c.scrollTop=Math.max(0,a.offsetTop-c.clientHeight/2)}
+}
+document.addEventListener('click',e=>{const b=e.target.closest('.item');if(!b)return;const l=b.dataset.l,id=b.dataset.id;
+  if(l==='0'){const x=M.l0.find(y=>y.id===id);select(x,x.l1[0],x.l1[0].l2[0])}
+  else if(l==='1'){const x=M.l1.find(y=>y.id===id);select(x.l0,x,x.l2[0])}
+  else{const x=M.l2.find(y=>y.id===id);select(x.l1.l0,x.l1,x)}
+});
+
+/* ---------- الشجرة الدائرية ---------- */
+function renderRadial(){
+  const l0=S.l0,W=720,cx=W/2,cy=W/2,r1=150,r2=275;
+  const n2=l0.l1.reduce((a,x)=>a+x.l2.length,0);
+  let ang=-Math.PI/2;const gap=0.18/Math.max(1,l0.l1.length);
+  let lines='',nodes='',labels='';
+  const wrapText=(t,max)=>{const w=t.split(' ');const out=[];let cur='';w.forEach(x=>{if((cur+' '+x).trim().length>max){out.push(cur.trim());cur=x}else cur+=' '+x});if(cur.trim())out.push(cur.trim());return out};
+  l0.l1.forEach(l1=>{
+    const span=(l1.l2.length/n2)*(Math.PI*2-gap*l0.l1.length);
+    const a1=ang+span/2;const x1=cx+Math.cos(a1)*r1,y1=cy+Math.sin(a1)*r1;
+    lines+=`<line x1="${cx}" y1="${cy}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}"/>`;
+    let a=ang;
+    l1.l2.forEach(l2=>{
+      const step=span/l1.l2.length;const a2=a+step/2;a+=step;
+      const x2=cx+Math.cos(a2)*r2,y2=cy+Math.sin(a2)*r2;
+      lines+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+      const on=l2===S.l2;
+      nodes+=`<g class="nd" data-id="${l2.id}" data-l="2" style="cursor:pointer"><circle class="l2n${on?' on':''}" cx="${x2.toFixed(1)}" cy="${y2.toFixed(1)}" r="6"/></g>`;
+      const lx=cx+Math.cos(a2)*(r2+13),ly=cy+Math.sin(a2)*(r2+13);
+      const anchor=Math.cos(a2)>0.15?'start':Math.cos(a2)<-0.15?'end':'middle';
+      const lns=wrapText(l2.n,16);
+      labels+=`<text class="l2t" x="${lx.toFixed(1)}" y="${(ly+4-(lns.length-1)*6).toFixed(1)}" text-anchor="${anchor}">${lns.map((t,i)=>`<tspan x="${lx.toFixed(1)}" dy="${i?12:0}">${esc(t)}</tspan>`).join('')}</text>`;
+    });
+    const on=l1===S.l1;
+    const lns=wrapText(l1.n,14);
+    nodes+=`<g class="nd" data-id="${l1.id}" data-l="1" style="cursor:pointer"><circle class="l1n${on?' on':''}" cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="34"/><text class="l1t${on?' on':''}" x="${x1.toFixed(1)}" y="${(y1+4-(lns.length-1)*7).toFixed(1)}" text-anchor="middle">${lns.map((t,i)=>`<tspan x="${x1.toFixed(1)}" dy="${i?13:0}">${esc(t)}</tspan>`).join('')}</text></g>`;
+    ang+=span+gap;
+  });
+  const l0l=wrapText(l0.n,16);
+  const center=`<circle cx="${cx}" cy="${cy}" r="62" fill="var(--accent)"/><text class="l0t" x="${cx}" y="${cy+5-(l0l.length-1)*8}" text-anchor="middle">${l0l.map((t,i)=>`<tspan x="${cx}" dy="${i?16:0}">${esc(t)}</tspan>`).join('')}</text>`;
+  $('#radial').innerHTML=`<svg viewBox="0 0 ${W} ${W}" role="img" aria-label="الشجرة الدائرية لقدرة ${esc(l0.n)}">${lines}${nodes}${labels}${center}</svg>`;
+}
+$('#radial').addEventListener('click',e=>{const g=e.target.closest('.nd');if(!g)return;if(g.dataset.l==='1'){const x=M.l1.find(y=>y.id===g.dataset.id);select(x.l0,x,x.l2[0])}else{const x=M.l2.find(y=>y.id===g.dataset.id);select(x.l1.l0,x.l1,x)}});
+
+/* ---------- الارتباطات ---------- */
+function syncL2Select(){const s=$('#selL2');if(!s.options.length){s.innerHTML=M.l2.map(x=>`<option value="${x.id}">${esc(x.l1.l0.n)} › ${esc(x.l1.n)} › ${esc(x.n)}</option>`).join('')}s.value=S.l2.id}
+$('#selL2').addEventListener('change',e=>{const x=M.l2.find(y=>y.id===e.target.value);select(x.l1.l0,x.l1,x)});
+function el(type,title,body,lvl,none){return `<div class="el${none?' none':''}" data-el><div class="t"><span>${ICON[type]} ${title}</span>${none?'':`<span class="lv">مرتبط بالمستوى ${lvl}</span>`}</div>${body}</div>`}
+function renderConst(){
+  const l2=S.l2,l1=l2.l1,l0=l1.l0;
+  const pol=l1.policy?{n:l1.policy.n,lv:1}:l0.policy?{n:l0.policy.n,lv:0}:null;
+  const com=l1.committee?{n:l1.committee.n,lv:1}:l0.committee?{n:l0.committee.n,lv:0}:null;
+  const cards=[
+    l2.sys.length?el('sys','نظام تقني',`<div class="n">${l2.sys.map(esc).join('<br>')}</div><div class="sub">${l2.sys.length>1?'نظامان يخدمان هذه القدرة':'يخدم أيضًا قدرات أخرى'}</div>`,2):el('sys','نظام تقني','<div class="n">لا يوجد نظام يغطي هذه القدرة</div><div class="sub">فجوة أتمتة</div>',2,true),
+    el('perm','صلاحية',`<div class="n">${esc(l2.perm.n)}</div><div class="raci"><span>معتمد <b>${esc(l2.perm.approver)}</b></span><span>مسؤول <b>${esc(l2.perm.resp)}</b></span><span>مستشار <b>${esc(l2.perm.adv)}</b></span><span>موصي <b>${esc(l2.perm.rec)}</b></span><span>مطلع <b>${esc(l2.perm.inf)}</b></span></div>`,2),
+    l1.proc?el('proc','إجراء عمل',`<div class="n">${esc(l1.proc.n)}</div><div class="kpi-mini"><span>الجودة <b>${l1.proc.kq}%</b></span><span>الزمن <b>${l1.proc.kt} يوم</b></span><span>الأتمتة <b>${l1.proc.auto}%</b></span></div>`,1):el('proc','إجراء عمل','<div class="n">لا يوجد إجراء موثق</div><div class="sub">فجوة إجرائية</div>',1,true),
+    l1.unit?el('unit','الوحدة المالكة',`<div class="n">${esc(l1.unit.n)}</div><div class="sub">${esc(l1.unit.gd)}</div><div class="sub">${l1.unit.manual?'✓ دليل مهام معتمد':'دليل المهام غير معتمد'}</div>`,1):el('unit','الوحدة المالكة','<div class="n">لا مالك محدد</div><div class="sub">فجوة ملكية</div>',1,true),
+    pol?el('pol','سياسة داخلية',`<div class="n">${esc(pol.n)}</div><div class="sub">${pol.lv===0?'السياسة العامة للقدرة الرئيسية تغطي هذه القدرة':'سياسة خاصة بالقدرة الفرعية'}</div>`,pol.lv):el('pol','سياسة داخلية','<div class="n">لا سياسة تغطي هذه القدرة</div><div class="sub">فجوة سياسات</div>',1,true),
+    l2.svc?el('svc','خدمة يقدمها البنك',`<div class="n">${esc(l2.svc)}</div><div class="sub">خدمة خارجية للمستفيدين</div>`,2):el('svc','خدمة يقدمها البنك','<div class="n">قدرة داخلية بلا خدمة مباشرة</div>',2,true),
+    l1.reg?el('reg','أداة تنظيمية',`<div class="n">${esc(l1.reg.n)}</div><div class="sub">صادرة عن البنك للجهات الخاضعة</div>`,1):el('reg','أداة تنظيمية',l0.sup?'<div class="n">لا أداة تنظيمية تغطي القدرة</div><div class="sub">فجوة تنظيمية</div>':'<div class="n">قدرة غير رقابية</div>',1,true),
+    com?el('comm','لجنة',`<div class="n">${esc(com.n)}</div><div class="sub">أعضاؤها من الوحدات المالكة للقدرات تحتها</div>`,com.lv):el('comm','لجنة','<div class="n">لا لجنة مرتبطة</div>',0,true)
+  ];
+  const center=`<div class="el center"><span class="lv" style="justify-self:center;font-size:10.5px;padding:1px 8px;border-radius:999px">${l2.id} · المستوى 2</span><div class="n">${esc(l2.n)}</div><div class="sub">${esc(l1.n)} › ${esc(l0.n)}</div></div>`;
+  const order=[cards[0],cards[1],cards[2],cards[3],center,cards[4],cards[5],cards[6],cards[7]];
+  $('#const').innerHTML=`<svg class="lines" aria-hidden="true"></svg>`+order.join('');
+  requestAnimationFrame(drawLines);
+}
+function drawLines(){
+  const c=$('#const'),svg=c.querySelector('svg.lines'),ctr=c.querySelector('.el.center');if(!svg||!ctr)return;
+  if(window.innerWidth<=760){svg.innerHTML='';return}
+  const cr=c.getBoundingClientRect(),m=ctr.getBoundingClientRect();
+  const mx=m.left-cr.left+m.width/2,my=m.top-cr.top+m.height/2;
+  svg.setAttribute('viewBox',`0 0 ${cr.width} ${cr.height}`);
+  svg.innerHTML=[...c.querySelectorAll('[data-el]')].map(e=>{const r=e.getBoundingClientRect();const x=r.left-cr.left+r.width/2,y=r.top-cr.top+r.height/2;return `<line x1="${mx}" y1="${my}" x2="${x}" y2="${y}"/>`}).join('');
+}
+window.addEventListener('resize',()=>requestAnimationFrame(drawLines));
+
+/* ---------- التبويبات ---------- */
+$('#tabs').addEventListener('click',e=>{const t=e.target.closest('.tab');if(!t)return;document.querySelectorAll('#tabs .tab').forEach(x=>x.setAttribute('aria-selected',x===t));document.querySelectorAll('[role=tabpanel]').forEach(p=>p.hidden=p.id!=='p-'+t.dataset.t)});
+
+/* ---------- دراسة الأثر ---------- */
+$('#selInit').innerHTML=INITS.map((x,i)=>`<option value="${i}">${esc(x.n)}</option>`).join('');
+const ACT={'إضافة':'good','تعديل':'warn','حذف':'crit','تحسين':'teal'};
+function renderImpact(){
+  const init=INITS[+$('#selInit').value];
+  const hits=[];init.hits.forEach(h=>{const l0=M.l0[h[0]],l1=l0.l1[h[1]];if(h[2]===null)l1.l2.forEach(l2=>hits.push({l2,a:h[3]}));else hits.push({l2:l1.l2[h[2]],a:h[3]})});
+  const l1s=[...new Set(hits.map(h=>h.l2.l1))],l0s=[...new Set(l1s.map(x=>x.l0))];
+  const sys=new Set(),units=new Set(),procs=[],pols=new Set(),regs=[],svcs=new Set(),perms=hits.length;
+  hits.forEach(h=>{h.l2.sys.forEach(s=>sys.add(s));if(h.l2.svc)svcs.add(h.l2.svc)});
+  l1s.forEach(x=>{if(x.unit)units.add(x.unit.n);if(x.proc)procs.push(x.proc.n);if(x.policy)pols.add(x.policy.n);else if(x.l0.policy)pols.add(x.l0.policy.n);if(x.reg)regs.push(x.reg.n)});
+  const total=sys.size+units.size+procs.length+pols.size+regs.length+svcs.size+perms;
+  $('#impStats').innerHTML=[[l0s.length,'قدرة رئيسية متأثرة'],[l1s.length,'قدرة فرعية'],[hits.length,'قدرة تفصيلية'],[total,'عنصر تشغيلي يجب مراجعته']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');
+  $('#impTree').innerHTML=`<p style="font-size:13px;color:var(--ink-2);margin-bottom:4px">${esc(init.d)}</p>`+l0s.map(l0=>`<div class="l0b"><header><span>${esc(l0.n)}</span><span class="chip grey">${l0.id}</span></header>${l1s.filter(x=>x.l0===l0).map(l1=>`<div class="l1r"><div class="h"><span>${esc(l1.n)}</span></div><div class="l2s">${hits.filter(h=>h.l2.l1===l1).map(h=>`<span class="chip ${ACT[h.a]}">${h.a} · ${esc(h.l2.n)}</span>`).join('')}</div></div>`).join('')}</div>`).join('');
+  const rows=[['sys','أنظمة تقنية',[...sys]],['perm','صلاحيات',[`${perms} صلاحية اعتماد تُراجع مصفوفة أدوارها`]],['proc','إجراءات عمل',procs],['pol','سياسات',[...pols]],['reg','أدوات تنظيمية',regs],['unit','وحدات إدارية',[...units]],['svc','خدمات',[...svcs]]];
+  $('#impEls').innerHTML=rows.filter(r=>r[2].length).map(r=>`<div class="row"><div><div class="n">${ICON[r[0]]} ${r[1]}</div><div class="s">${r[2].map(esc).join(' · ')}</div></div><span class="chip grey num">${r[0]==='perm'?perms:r[2].length}</span></div>`).join('');
+}
+$('#selInit').addEventListener('change',renderImpact);
+
+/* ---------- الفجوات ---------- */
+function gapsOf(l1){const g=[];if(!l1.proc)g.push(['proc','بلا إجراء']);if(!l1.policy&&!l1.l0.policy)g.push(['pol','بلا سياسة']);if(l1.l0.sup&&!l1.reg)g.push(['reg','بلا أداة تنظيمية']);if(!l1.l2.some(x=>x.sys.length))g.push(['sys','بلا نظام']);if(!l1.unit)g.push(['own','بلا مالك']);return g}
+function renderGaps(){
+  const on={proc:$('#g-proc').checked,pol:$('#g-pol').checked,reg:$('#g-reg').checked,sys:$('#g-sys').checked,own:$('#g-own').checked};
+  const flagged=M.l1.filter(x=>gapsOf(x).some(g=>on[g[0]]));
+  const cnt=k=>M.l1.filter(x=>gapsOf(x).some(g=>g[0]===k)).length;
+  $('#gapStats').innerHTML=[[flagged.length+' / '+M.l1.length,'قدرة فرعية فيها فجوة مختارة'],[cnt('proc'),'بلا إجراء عمل'],[cnt('pol'),'بلا سياسة'],[cnt('reg'),'رقابية بلا أداة تنظيمية'],[cnt('sys'),'بلا نظام تقني'],[cnt('own'),'بلا وحدة مالكة']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');
+  $('#gapTree').innerHTML=M.l0.map(l0=>{const f=l0.l1.filter(x=>flagged.includes(x)).length;return `<div class="l0b"><header><span>${esc(l0.n)}</span><span class="chip ${f?'crit':'good'}">${f?f+' من '+l0.l1.length+' فجوة':'مغطاة'}</span></header><div class="l1r"><div class="l2s">${l0.l1.map(l1=>{const g=gapsOf(l1).filter(x=>on[x[0]]);return g.length?`<span class="chip crit" title="${g.map(x=>x[1]).join('، ')}">${esc(l1.n)} · ${g.map(x=>x[1]).join('، ')}</span>`:`<span class="chip grey">${esc(l1.n)}</span>`}).join('')}</div></div></div>`}).join('');
+}
+$('#gapCtl').addEventListener('change',renderGaps);
+
+/* ---------- الخريطة الحرارية ---------- */
+const SEQ=['--seq1','--seq2','--seq3','--seq4','--seq5','--seq6','--seq7'];
+function heatVal(l1,m){if(m==='auto')return l1.proc?l1.proc.auto:null;if(m==='kq')return l1.proc?l1.proc.kq:null;return l1.l2.length}
+function renderHeat(){
+  const m=$('#selMetric').value;
+  const vals=M.l1.map(x=>heatVal(x,m)).filter(v=>v!==null);
+  const lo=Math.min(...vals),hi=Math.max(...vals);
+  const step=v=>{const t=(v-lo)/Math.max(1,hi-lo);return SEQ[Math.min(6,Math.floor(t*6.999))]};
+  $('#heat').innerHTML=M.l0.map(l0=>`<div class="hm-row"><div class="lbl">${esc(l0.n)}</div><div class="hm-cells">${l0.l1.map(l1=>{const v=heatVal(l1,m);return `<button class="hm-cell${v===null?' none':''}" data-id="${l1.id}" data-v="${v===null?'':v}" style="${v===null?'':'background:var('+step(v)+')'}" aria-label="${esc(l1.n)}"></button>`}).join('')}</div></div>`).join('');
+  const unitL=m==='perm'?'صلاحية':'%';
+  $('#heatLegend').innerHTML=`<span>أقل (${lo}${unitL==='%'?'%':''})</span><span class="ramp">${SEQ.map(s=>`<i style="background:var(${s})"></i>`).join('')}</span><span>أعلى (${hi}${unitL==='%'?'%':''})</span><span style="margin-inline-start:14px"><i class="none"></i> لا إجراء عمل يغطي القدرة</span>`;
+}
+$('#selMetric').addEventListener('change',renderHeat);
+$('#heat').addEventListener('mouseover',e=>{const c=e.target.closest('.hm-cell');if(!c)return;const l1=M.l1.find(x=>x.id===c.dataset.id);const m=$('#selMetric').value;const lbl=m==='auto'?'نسبة الأتمتة':m==='kq'?'مؤشر الجودة':'الصلاحيات المرتبطة';const v=c.dataset.v===''?'لا يوجد إجراء عمل':c.dataset.v+(m==='perm'?' صلاحية':'%');const r=c.getBoundingClientRect();showTip(`<b>${esc(l1.n)}</b><br>${esc(l1.l0.n)}<br>${lbl}: ${v}`,r.left+r.width/2,r.top)});
+$('#heat').addEventListener('mouseout',e=>{if(e.target.closest('.hm-cell'))hideTip()});
+$('#heat').addEventListener('click',e=>{const c=e.target.closest('.hm-cell');if(!c)return;const l1=M.l1.find(x=>x.id===c.dataset.id);select(l1.l0,l1,l1.l2[0])});
+
+/* ---------- الأولويات ---------- */
+const W=['reg','risk','vis','ext'];
+function renderPrio(){
+  const w={};W.forEach(k=>{w[k]=+$('#w-'+k).value;$('#w-'+k+'-v').textContent=w[k]});
+  const tw=W.reduce((a,k)=>a+w[k],0)||1;
+  const rows=M.l0.map(l0=>{const sc=W.reduce((a,k)=>a+w[k]*l0.scores[k],0)/tw;const els=l0.l1.reduce((a,x)=>a+(x.proc?1:0)+(x.policy?1:0)+(x.reg?1:0)+(x.unit?1:0)+x.l2.reduce((b,y)=>b+y.sys.length+1+(y.svc?1:0),0),0)+(l0.policy?1:0)+(l0.committee?1:0);return {l0,sc,els}}).sort((a,b)=>b.sc-a.sc);
+  const tier=s=>s>=3.8?['عالية','crit']:s>=2.8?['متوسطة','warn']:['منخفضة','grey'];
+  const hi=rows.filter(r=>r.sc>=3.8);
+  $('#prioStats').innerHTML=[[hi.length,'قدرة رئيسية بأولوية عالية'],[hi.reduce((a,r)=>a+r.els,0),'عنصر تشغيلي يرث الأولوية العالية']].map(k=>`<div class="stat"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
+  $('#prioList').innerHTML=rows.map((r,i)=>{const t=tier(r.sc);return `<div class="r"><span class="rk">${i+1}</span><span>${esc(r.l0.n)}<div class="sc">${r.els} عنصر يرث الأولوية</div></span><div class="bar"><i style="width:${(r.sc/5*100).toFixed(0)}%"></i></div><span class="chip ${t[1]}">${t[0]} · ${r.sc.toFixed(1)}</span></div>`}).join('');
+}
+W.forEach(k=>$('#w-'+k).addEventListener('input',renderPrio));
+
+/* ---------- المستهدفات ---------- */
+function renderTargets(){
+  const supL1=M.l1.filter(x=>x.l0.sup);
+  const rows=[
+    ['السياسات الداخلية','سياسة واحدة لكل قدرة مستوى 0',M.l0.filter(x=>x.policy).length,M.l0.length],
+    ['إجراءات العمل','إجراء واحد لكل قدرة مستوى 1',M.l1.filter(x=>x.proc).length,M.l1.length],
+    ['الأدوات التنظيمية','أداة لكل قدرة رقابية مستوى 1',supL1.filter(x=>x.reg).length,supL1.length],
+    ['أدلة المهام','دليل معتمد لكل وحدة إدارية مالكة',M.units.filter(x=>x.manual).length,M.units.length],
+    ['التغطية التقنية','نظام واحد على الأقل لكل قدرة مستوى 2',M.l2.filter(x=>x.sys.length).length,M.l2.length]
+  ];
+  $('#targets').innerHTML=rows.map(r=>`<div class="r"><div class="h"><span>${r[0]} <span class="why">· ${r[1]}</span></span><b>${r[2]} من ${r[3]} <span style="color:var(--muted);font-weight:400">(الفجوة ${r[3]-r[2]})</span></b></div><div class="bar"><i class="${r[2]/r[3]<.7?'gold':''}" style="width:${(r[2]/r[3]*100).toFixed(0)}%"></i></div></div>`).join('');
+}
+
+/* ---------- اللجان ---------- */
+$('#commL0').innerHTML=M.l0.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('');
+$('#commL0').value='L0-09';
+function fillCommL1(){const l0=M.l0.find(x=>x.id===$('#commL0').value);$('#commL1').innerHTML=`<option value="">كامل القدرة الرئيسية</option>`+l0.l1.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('')}
+function renderComm(){
+  const l0=M.l0.find(x=>x.id===$('#commL0').value);const l1id=$('#commL1').value;const scope=l1id?[M.l1.find(x=>x.id===l1id)]:l0.l1;
+  const units=[...new Set(scope.map(x=>x.unit).filter(Boolean))];
+  const related=[...new Set(M.l1.filter(x=>x.l0!==l0&&x.l2.some(y=>y.sys.some(s=>scope.some(z=>z.l2.some(q=>q.sys.includes(s)))))).map(x=>x.unit).filter(Boolean))].slice(0,3);
+  $('#commTitle').textContent='التشكيل المقترح: لجنة '+(l1id?scope[0].n:l0.n);
+  $('#commMembers').innerHTML=`<div class="m chair">${esc(l0.gd)}<small>رئيس اللجنة · الإدارة العامة المالكة</small></div>`+units.map(u=>`<div class="m">${esc(u.n)}<small>عضو · مالك ${u.l1.filter(x=>scope.includes(x)).length} قدرة في النطاق</small></div>`).join('')+related.map(u=>`<div class="m">${esc(u.n)}<small>عضو مدعو · تشارك النظام التقني</small></div>`).join('')+`<div class="m">الشؤون القانونية<small>مستشار · بحكم السياسة</small></div>`;
+  $('#commCaps').innerHTML=scope.map(x=>`<div class="row"><div><div class="n">${esc(x.n)}</div><div class="s">${x.unit?esc(x.unit.n):'بلا مالك'} · ${x.l2.length} قدرة تفصيلية</div></div><span class="chip grey">${x.id}</span></div>`).join('');
+}
+$('#commL0').addEventListener('change',()=>{fillCommL1();renderComm()});$('#commL1').addEventListener('change',renderComm);
+
+/* ---------- التقارير ---------- */
+function renderReports(){
+  const gov=M.l2.filter(x=>x.perm.approver==='معالي المحافظ').length;
+  const dep=M.l2.filter(x=>x.perm.approver==='معالي نائب المحافظ').length;
+  const noProc=M.units.filter(u=>u.l1.some(x=>!x.proc));
+  const sysCount={};M.l2.forEach(x=>x.sys.forEach(s=>sysCount[s]=(sysCount[s]||0)+1));
+  const multi=Object.values(sysCount).filter(v=>v>1).length;
+  $('#repKpis').innerHTML=[[gov,'صلاحية اعتماد بيد معالي المحافظ'],[dep,'صلاحية اعتماد بيد معالي نائب المحافظ'],[noProc.length,'وحدة إدارية تملك قدرة بلا إجراء'],[multi,'نظام تقني يخدم أكثر من قدرة']].map(k=>`<div class="kpi"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
+  const lv=a=>a==='معالي المحافظ'?'المحافظ':a==='معالي نائب المحافظ'?'نائب المحافظ':a.startsWith('وكيل')?'وكلاء المحافظ':a.startsWith('مدير عام')?'المديرون العامون':'مديرو الإدارات';
+  const dist={};M.l2.forEach(x=>{const k=lv(x.perm.approver);dist[k]=(dist[k]||0)+1});
+  const order=['المحافظ','نائب المحافظ','وكلاء المحافظ','المديرون العامون','مديرو الإدارات'];const mx=Math.max(...Object.values(dist));
+  $('#repBar').innerHTML=order.map(k=>`<div class="r"><span class="lbl">${k}</span><div class="track"><i style="width:${((dist[k]||0)/mx*100).toFixed(0)}%"></i></div><span class="v">${dist[k]||0}</span></div>`).join('');
+  $('#repTbl tbody').innerHTML=noProc.slice(0,8).flatMap(u=>u.l1.filter(x=>!x.proc).map(x=>`<tr><td>${esc(u.n)}</td><td>${esc(x.n)}</td><td>${esc(x.l0.n)}</td></tr>`)).join('')+(noProc.length>8?`<tr><td colspan="3" style="color:var(--muted)">و${noProc.length-8} وحدات أخرى</td></tr>`:'');
+}
+
+/* ---------- التنقل ---------- */
+const links=[...document.querySelectorAll('#nav a')];
+if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+en.target.id))}})},{rootMargin:'-40% 0px -55% 0px'});document.querySelectorAll('section[id]').forEach(s=>io.observe(s))}
+
+/* ---------- تشغيل ---------- */
+renderMap();renderHier();renderRadial();syncL2Select();renderConst();renderImpact();renderGaps();renderHeat();renderPrio();renderTargets();fillCommL1();renderComm();renderReports();
+})();
+</script>
+</body></html>
