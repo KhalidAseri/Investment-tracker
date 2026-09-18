@@ -67,10 +67,24 @@ jobs:
         if: steps.signing.outputs.signed != 'true'
         run: cd android && ./gradlew assembleDebug --no-daemon
 
+      # Name the file after the version so downloads are self-describing, and
+      # mark debug builds as such rather than shipping an ambiguous app.apk.
       - name: Collect APK
+        id: collect
         run: |
           mkdir -p dist
-          find android/app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \;
+          version="${GITHUB_REF_NAME}"
+          case "$GITHUB_REF" in
+            refs/tags/*) ;;
+            *) version="build-${GITHUB_RUN_NUMBER}" ;;
+          esac
+          suffix=""
+          if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then suffix="-debug"; fi
+          src=$(find android/app/build/outputs/apk -name '*.apk' | head -1)
+          test -n "$src" || { echo "no APK produced"; exit 1; }
+          name="gold-calculator-${version}${suffix}.apk"
+          cp "$src" "dist/$name"
+          echo "apk_name=$name" >> "$GITHUB_OUTPUT"
           ls -lh dist
 
       - uses: actions/upload-artifact@v4
@@ -80,8 +94,44 @@ jobs:
           if-no-files-found: error
 
       # Tag pushes also publish the APK as a downloadable release asset.
-      - name: Attach APK to release
+      # Done with the REST API rather than a third-party action: one less
+      # dependency, and it works under org policies that restrict marketplace
+      # actions. Re-running the same tag replaces the asset instead of failing.
+      - name: Publish release with APK
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APK_NAME: ${{ steps.collect.outputs.apk_name }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+
+          if [ "$SIGNED" = "true" ]; then
+            note="موقّع بمفتاح الإصدار."
+          else
+            note="موقّع بمفتاح التصحيح (debug) — يثبّت ويشتغل للاستخدام الشخصي. التحديث لاحقاً بمفتاح إصدار يتطلب حذف النسخة المثبّتة."
+          fi
+
+          body=$(printf '## حاسبة الذهب %s\n\nنزّل `%s` من الأسفل وثبّته على جوالك (أندرويد 6.0 فأعلى).\nبيطلب منك أندرويد تفعيل "تثبيت من مصادر غير معروفة" أول مرة.\n\n%s\n\nكل الواجهة مضمّنة داخل التطبيق ويشتغل بدون إنترنت؛ الشبكة تُستخدم فقط لجلب سعر الذهب اللحظي.\n' "$GITHUB_REF_NAME" "$APK_NAME" "$note")
+
+          # Reuse the release if this tag was published before.
+          id=$(curl -sS "${auth[@]}" "$api/releases/tags/$GITHUB_REF_NAME" | jq -r '.id // empty')
+          if [ -z "$id" ]; then
+            id=$(jq -n --arg t "$GITHUB_REF_NAME" --arg b "$body" \
+                   '{tag_name:$t, name:("حاسبة الذهب " + $t), body:$b}' \
+                 | curl -sS -X POST "${auth[@]}" -d @- "$api/releases" | jq -r '.id')
+          fi
+          test -n "$id" && [ "$id" != "null" ] || { echo "could not create release"; exit 1; }
+
+          # Drop a same-named asset from a previous run of this tag.
+          old=$(curl -sS "${auth[@]}" "$api/releases/$id/assets" \
+                | jq -r --arg n "$APK_NAME" '.[] | select(.name==$n) | .id')
+          for a in $old; do curl -sS -X DELETE "${auth[@]}" "$api/releases/assets/$a"; done
+
+          curl -sS -X POST "${auth[@]}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @"dist/$APK_NAME" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$id/assets?name=$APK_NAME" \
+            | jq -r '"uploaded: " + .browser_download_url'
