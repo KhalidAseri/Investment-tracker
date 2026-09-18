@@ -1,30 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, TrendingUp, Wallet, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Building2, TrendingUp, Wallet, Globe, Coins, Home, PiggyBank, Shield, Briefcase, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useLocale } from '@/components/shared/LocaleContext'
 import CurrencyDisplay from '@/components/shared/CurrencyDisplay'
 import PercentBadge from '@/components/shared/PercentBadge'
-import { ACCOUNT_CONFIGS, type AccountType } from '@/lib/constants'
+import { ACCOUNT_CONFIGS, COLOR_MAP } from '@/lib/constants'
 import type { AccountSummary } from '@/types'
 
 const iconMap: Record<string, React.ElementType> = {
-  Building2,
-  TrendingUp,
-  Wallet,
-}
-
-const colorMap: Record<string, string> = {
-  blue: 'bg-blue-100 text-blue-600',
-  green: 'bg-green-100 text-green-600',
-  purple: 'bg-purple-100 text-purple-600',
+  Building2, TrendingUp, Wallet, Globe, Coins, Home, PiggyBank, Shield, Briefcase,
 }
 
 export default function AccountSummaryCard({ account }: { account: AccountSummary }) {
   const { locale, t } = useLocale()
-  const config = ACCOUNT_CONFIGS[account.type as AccountType]
-  const Icon = config ? iconMap[config.icon] : Wallet
-  const color = config ? colorMap[config.color] : colorMap.blue
+  const config = ACCOUNT_CONFIGS[account.type]
+  const Icon = config ? (iconMap[config.icon] ?? Briefcase) : Briefcase
+  const color = config ? (COLOR_MAP[config.color] ?? COLOR_MAP.gray) : COLOR_MAP.gray
   const Chevron = locale === 'ar' ? ChevronLeft : ChevronRight
 
   return (
