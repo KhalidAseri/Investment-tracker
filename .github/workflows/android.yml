@@ -35,7 +35,25 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu-latest image already ships an Android SDK, so it is used
+      # directly. android-actions/setup-android@v3 was tried first and fails on
+      # this image: it asks sdkmanager for the long-obsolete `tools` package,
+      # which no longer exists in the repository ("Failed to find package
+      # 'tools'", exit 1) and takes the whole job down with it.
+      - name: Prepare Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          test -d "$sdk" || { echo "no Android SDK on this runner"; exit 1; }
+          manager=$(find "$sdk/cmdline-tools" -type f -name sdkmanager | sort | tail -1)
+          test -n "$manager" || { echo "sdkmanager not found under $sdk"; exit 1; }
+          echo "using $manager"
+          yes | "$manager" --licenses > /dev/null 2>&1 || true
+          "$manager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          {
+            echo "ANDROID_HOME=$sdk"
+            echo "ANDROID_SDK_ROOT=$sdk"
+          } >> "$GITHUB_ENV"
 
       - run: npm ci
 
