@@ -1,12 +1,14 @@
 {
   "name": "investment-tracker",
   "version": "1.0.0",
-  "description": "",
+  "description": "متتبع استثمارات وحاسبة أسعار الذهب — Investment tracker with a live Saudi/Gulf gold price calculator",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "npx prisma studio"
@@ -45,6 +47,7 @@
     "@tailwindcss/forms": "^0.5.11",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "vitest": "^2.1.9"
   }
 }

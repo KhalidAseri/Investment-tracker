@@ -9,7 +9,10 @@
   "orientation": "any",
   "dir": "auto",
   "lang": "ar",
-  "categories": ["finance", "business"],
+  "categories": [
+    "finance",
+    "business"
+  ],
   "icons": [
     {
       "src": "/icons/icon.svg",
@@ -26,6 +29,12 @@
   ],
   "screenshots": [],
   "shortcuts": [
+    {
+      "name": "حاسبة الذهب",
+      "short_name": "الذهب",
+      "url": "/gold",
+      "description": "احسب سعر الذهب بالمصنعية والضريبة"
+    },
     {
       "name": "لوحة التحكم",
       "short_name": "Dashboard",

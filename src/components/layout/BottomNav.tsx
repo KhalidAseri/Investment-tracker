@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Wallet, TrendingUp, Settings } from 'lucide-react'
+import { LayoutDashboard, Wallet, Gem, TrendingUp, Settings } from 'lucide-react'
 import { useLocale } from '@/components/shared/LocaleContext'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +13,7 @@ export default function BottomNav() {
   const navItems = [
     { href: '/dashboard', label: t.nav.dashboard, icon: LayoutDashboard },
     { href: '/accounts', label: t.nav.accounts, icon: Wallet },
+    { href: '/gold', label: t.nav.gold, icon: Gem },
     { href: '/dividends', label: t.nav.dividends, icon: TrendingUp },
     { href: '/settings', label: t.nav.settings, icon: Settings },
   ]
