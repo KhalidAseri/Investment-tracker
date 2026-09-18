@@ -1,468 +1,240 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>خريطة قدرات البنك المركزي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
 :root{
-  --bg:#F3F4F0; --surface:#FFFFFF; --surface-2:#EDF0EB;
-  --ink:#14231F; --ink-2:#46564F; --muted:#7B8A84; --line:#D8DED8; --line-2:#C4CCC6;
-  --accent:#0E6B55; --accent-ink:#0B5643; --accent-soft:#DFEDE6;
-  --gold:#B58B2E; --gold-ink:#8A6716; --gold-soft:#F5ECD8;
-  --teal:#2B7F8C; --teal-soft:#DCEEF0;
-  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
-  --seq1:#D9ECE4; --seq2:#B4DACB; --seq3:#8CC6B0; --seq4:#63B095; --seq5:#3E9A7A; --seq6:#227F60; --seq7:#0E6249;
-  --shadow:0 1px 2px rgba(20,35,31,.06),0 8px 24px rgba(20,35,31,.06);
-  --radius:12px;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#0F1A17; --surface:#16241F; --surface-2:#1C2D27;
-    --ink:#E8ECE9; --ink-2:#B7C2BC; --muted:#7F8E88; --line:#27382F; --line-2:#334840;
-    --accent:#4FB596; --accent-ink:#7DD1B8; --accent-soft:#1B3A31;
-    --gold:#D4A94A; --gold-ink:#E7C87C; --gold-soft:#3A3120;
-    --teal:#5FB7C4; --teal-soft:#193A40;
-    --seq1:#1B3A31; --seq2:#22503F; --seq3:#2B6A52; --seq4:#358566; --seq5:#45A07B; --seq6:#63BC95; --seq7:#8FD8B7;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0F1A17; --surface:#16241F; --surface-2:#1C2D27;
-  --ink:#E8ECE9; --ink-2:#B7C2BC; --muted:#7F8E88; --line:#27382F; --line-2:#334840;
-  --accent:#4FB596; --accent-ink:#7DD1B8; --accent-soft:#1B3A31;
-  --gold:#D4A94A; --gold-ink:#E7C87C; --gold-soft:#3A3120;
-  --teal:#5FB7C4; --teal-soft:#193A40;
-  --seq1:#1B3A31; --seq2:#22503F; --seq3:#2B6A52; --seq4:#358566; --seq5:#45A07B; --seq6:#63BC95; --seq7:#8FD8B7;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  color-scheme:dark;
+  --bg:#0A1412; --bg-2:#0F1C18; --surface:#142420; --surface-2:#1B2F29; --line:#25392F; --line-2:#35504A;
+  --ink:#EAF0EC; --ink-2:#B9C7C0; --muted:#7F9389;
+  --cap:#3FBF97; --cap-ink:#8EE3C6; --cap-dim:#1F5A48;
+  --gold:#E0B45C; --gold-soft:#3D3419;
+  --tech:#6FA8FF; --gov:#E0B45C; --ops:#B693F5; --org:#F28FB8;
+  --good:#59D08A; --warn:#F4C25B; --crit:#F0665E;
+  --seq1:#173A30; --seq2:#1E5443; --seq3:#276E56; --seq4:#328A6B; --seq5:#3FA57F; --seq6:#63C39C; --seq7:#9BE0C4;
+  --shadow:0 2px 6px rgba(0,0,0,.35),0 14px 40px rgba(0,0,0,.35);
+  --font:'IBM Plex Sans Arabic',system-ui,'Segoe UI',Tahoma,sans-serif;
+  --disp:'Noto Kufi Arabic','IBM Plex Sans Arabic',sans-serif;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,'Segoe UI',Tahoma,sans-serif;font-size:15px;line-height:1.7;direction:rtl}
-@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto} *{animation:none!important;transition:none!important}}
-.wrap{max-width:1180px;margin:0 auto;padding-inline:20px}
-h1,h2,h3{font-family:'Noto Kufi Arabic','IBM Plex Sans Arabic',sans-serif;line-height:1.4;margin:0;text-wrap:balance}
-h1{font-size:clamp(26px,3.6vw,42px);font-weight:800}
-h2{font-size:clamp(21px,2.6vw,29px);font-weight:800}
-h3{font-size:17px;font-weight:600}
+svg{direction:ltr}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.6;direction:rtl;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+select,input{font:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+h1,h2,h3{font-family:var(--disp);margin:0;line-height:1.35;text-wrap:balance}
 p{margin:0}
-button{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .num{font-variant-numeric:tabular-nums}
 
-/* top nav */
-.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
-.top .wrap{display:flex;align-items:center;gap:18px;min-height:58px;flex-wrap:wrap;padding-block:8px}
-.brand{display:flex;align-items:center;gap:10px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:800;font-size:15px;white-space:nowrap}
-.brand .mark{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center}
-.brand .mark svg{width:16px;height:16px}
-.nav{display:flex;gap:4px;flex-wrap:wrap;margin-inline-start:auto}
-.nav a{text-decoration:none;color:var(--ink-2);padding:6px 11px;border-radius:999px;font-size:13px;white-space:nowrap}
-.nav a:hover{background:var(--surface-2)}
-.nav a.active{background:var(--ink);color:var(--bg)}
-.nav a b{font-weight:500;color:var(--muted);margin-inline-end:4px;font-variant-numeric:tabular-nums}
-.nav a.active b{color:inherit;opacity:.7}
+#app{height:100%;display:grid;grid-template-columns:232px 1fr;background:
+  radial-gradient(1200px 600px at 85% -10%,rgba(63,191,151,.10),transparent 60%),
+  radial-gradient(900px 500px at 10% 110%,rgba(224,180,92,.07),transparent 60%),var(--bg)}
+/* rail */
+.rail{border-inline-start:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:14px;min-height:0}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:800;font-size:14px;padding:4px 6px}
+.brand .mark{width:30px;height:30px;border-radius:9px;background:var(--cap);display:grid;place-items:center;flex-shrink:0}
+.brand small{display:block;font-family:var(--font);font-weight:400;font-size:11px;color:var(--muted)}
+.acts{display:flex;flex-direction:column;gap:2px;overflow:auto;min-height:0}
+.acts button{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:center;text-align:start;padding:8px 8px;border-radius:9px;color:var(--ink-2);font-size:13px;line-height:1.35}
+.acts button b{font-weight:500;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;text-align:center;border:1px solid var(--line-2);border-radius:6px;padding:1px 0}
+.acts button:hover{background:var(--surface)}
+.acts button.on{background:var(--surface-2);color:var(--ink)}
+.acts button.on b{background:var(--cap);border-color:var(--cap);color:#06201A;font-weight:700}
+.acts button.done b{color:var(--cap)}
+.rail .hint{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.7}
+.rail .hint kbd{font-family:inherit;border:1px solid var(--line-2);border-radius:5px;padding:0 6px;font-size:11px;color:var(--ink-2)}
 
-/* sections */
-section{padding-block:64px;border-top:1px solid var(--line)}
-section:first-of-type{border-top:0}
-.sec-head{display:grid;gap:10px;max-width:760px;margin-bottom:34px}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--gold-ink)}
-.eyebrow::before{content:"";width:22px;height:2px;background:var(--gold)}
-.lead{color:var(--ink-2);font-size:16px;max-width:66ch}
+/* stage */
+.stage{display:grid;grid-template-rows:auto 1fr auto;min-height:0;min-width:0;padding:22px 28px 14px}
+.stage-head{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:end;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--gold)}
+.eyebrow::before{content:"";width:18px;height:2px;background:var(--gold)}
+.stage-head h1{font-size:clamp(19px,2.2vw,27px);font-weight:800;margin-top:6px}
+.stage-head .lead{font-size:13.5px;color:var(--ink-2);max-width:78ch;margin-top:4px}
+.stage-head .tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.scene{min-height:0;min-width:0;position:relative;padding-top:16px}
+.ctl{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding-top:12px;border-top:1px solid var(--line)}
+.ctl .btns{display:flex;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;border:1px solid var(--line-2);font-size:13px;color:var(--ink);background:var(--surface)}
+.btn:hover{border-color:var(--cap);background:var(--surface-2)}
+.btn.primary{background:var(--cap);color:#06201A;border-color:var(--cap);font-weight:600}
+.btn.primary:hover{background:var(--cap-ink)}
+.btn.small{padding:4px 10px;font-size:12px}
+.btn[aria-pressed="true"]{background:var(--surface-2);border-color:var(--cap);color:var(--cap-ink)}
+.steps{display:flex;gap:6px;align-items:center;justify-content:center}
+.steps i{width:22px;height:4px;border-radius:2px;background:var(--line-2);display:block;transition:background .3s}
+.steps i.on{background:var(--cap)}
+.steps i.past{background:var(--cap-dim)}
+.progress{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:10px}
+.progress .bar{width:120px;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.progress .bar i{display:block;height:100%;background:var(--gold);transition:width .4s}
 
-/* hero */
-.hero{padding-block:56px 48px}
-.hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:start}
-.hero .lead{font-size:17px}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:28px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
-.kpi .v{font-size:32px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
-.kpi .l{font-size:12.5px;color:var(--muted);margin-top:6px}
-.concepts{display:grid;gap:12px}
-.concept{display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
-.concept svg{width:64px;height:64px}
-.concept h3{margin-bottom:4px}
-.concept p{font-size:13.5px;color:var(--ink-2)}
-.concept .tag{font-size:11.5px;color:var(--accent-ink);font-weight:600;margin-bottom:2px}
-
-/* map */
-.group-title{display:flex;align-items:center;gap:12px;margin:26px 0 12px;font-size:13.5px;color:var(--ink-2);font-weight:600}
-.group-title::after{content:"";flex:1;height:1px;background:var(--line)}
-.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.cap{display:grid;gap:8px;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;position:relative}
-.cap:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--line-2)}
-.cap.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.cap .id{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;align-items:center}
-.cap .n{font-weight:600;font-size:14.5px;line-height:1.45}
-.cap .task{font-size:12px;color:var(--ink-2);line-height:1.5}
-.cap .meta{display:flex;gap:6px;font-size:11.5px;color:var(--muted);margin-top:2px;flex-wrap:wrap}
-.cap .meta span{background:var(--surface-2);padding:1px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
-.src{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
-.src.sup{background:var(--gold)}
-.legend-inline{display:flex;gap:18px;font-size:12.5px;color:var(--ink-2);flex-wrap:wrap}
-.legend-inline span{display:inline-flex;align-items:center;gap:6px}
-
-/* hierarchy */
-.hier{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-.miller{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.col{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);max-height:460px;overflow:auto;display:flex;flex-direction:column}
-.col>header{padding:9px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1;display:flex;justify-content:space-between}
-.col>header b{color:var(--ink);font-weight:600}
-.item{display:flex;width:100%;text-align:start;padding:9px 12px;border:0;background:none;cursor:pointer;justify-content:space-between;gap:8px;align-items:center;border-inline-start:3px solid transparent;font-size:13.5px;line-height:1.45}
-.item:hover{background:var(--surface-2)}
-.item.active{background:var(--accent-soft);border-inline-start-color:var(--accent);font-weight:600}
-.item .c{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0}
-.crumb{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin-bottom:10px;align-items:center}
-.crumb .lvl{font-size:11px;background:var(--surface-2);padding:1px 8px;border-radius:999px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* generic scene pieces */
+.split{display:grid;grid-template-columns:1fr 320px;gap:18px;height:100%;min-height:0}
+.split.wide{grid-template-columns:1fr 380px}
+.viz{position:relative;min-height:0;min-width:0;background:var(--bg-2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.viz svg{display:block;width:100%;height:100%}
+.viz .overlay{position:absolute;inset:auto 14px 12px auto;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
+.viz .overlay.top{inset:12px 14px auto auto}
+.viz .overlay.bl{inset:auto auto 12px 14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto}
+.panel h3{font-size:14px;font-weight:600;color:var(--ink)}
+.panel .sub{font-size:12.5px;color:var(--muted)}
+.panel hr{border:0;border-top:1px solid var(--line);margin:2px 0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;color:var(--ink)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11.5px;background:var(--surface-2);color:var(--ink-2);line-height:1.6;border:1px solid transparent}
+.chip.cap{background:rgba(63,191,151,.14);color:var(--cap-ink)}
+.chip.gold{background:rgba(224,180,92,.14);color:var(--gold)}
+.chip.crit{border-color:var(--crit);color:var(--crit);background:transparent}
+.chip.good{border-color:var(--good);color:var(--good);background:transparent}
+.chip.warn{border-color:var(--warn);color:var(--warn);background:transparent}
+.chip.tech{background:rgba(111,168,255,.14);color:var(--tech)}
+.chip.ops{background:rgba(182,147,245,.14);color:var(--ops)}
+.chip.org{background:rgba(242,143,184,.14);color:var(--org)}
+.chip.gov{background:rgba(224,180,92,.14);color:var(--gov)}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.stat{background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.stat .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;font-family:var(--disp)}
+.stat .l{font-size:11.5px;color:var(--muted);margin-top:3px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.list{display:grid;gap:6px}
+.row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:9px;background:var(--surface-2);font-size:12.5px}
+.row .n{font-weight:500}.row .s{font-size:11.5px;color:var(--muted)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.legend i.sq{border-radius:2px}
+select.sel{background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:8px;padding:6px 10px;max-width:100%;font-size:13px}
+.tip{position:fixed;z-index:50;background:#F3F6F4;color:#0B1614;font-size:12px;padding:8px 10px;border-radius:8px;pointer-events:none;max-width:260px;line-height:1.5;box-shadow:var(--shadow)}
+.tip b{font-weight:600}
+.crumb{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink-2);flex-wrap:wrap}
+.crumb button{padding:2px 8px;border-radius:6px;background:var(--surface-2);color:var(--ink-2)}
+.crumb button:hover{color:var(--ink)}
 .crumb .sep{color:var(--muted)}
-.radial{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;overflow:hidden}
-.radial svg{width:100%;height:auto;display:block;max-width:100%}
-.radial text{font-family:'IBM Plex Sans Arabic',sans-serif;fill:var(--ink)}
-.radial .l2t{font-size:10.5px;fill:var(--ink-2)}
-.radial .l1t{font-size:12px;font-weight:600}
-.radial .l0t{font-size:13px;font-weight:700;fill:#fff}
-.radial line{stroke:var(--line-2);stroke-width:1}
-.radial .l1n{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
-.radial .l2n{fill:var(--surface);stroke:var(--line-2);stroke-width:1.2}
-.radial .l2n.on{stroke:var(--accent);fill:var(--accent-soft)}
-.radial .l1n.on{fill:var(--accent);}
-.radial .l1t.on{fill:#fff}
-.note{font-size:12.5px;color:var(--muted);margin-top:8px}
 
-/* constellation */
-.const-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;position:relative}
-.const{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.const svg.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.const svg.lines line{stroke:var(--line-2);stroke-width:1.5;stroke-dasharray:4 4}
-.el{position:relative;z-index:1;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:6px;min-height:118px;align-content:start}
-.el .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.el .t .lv{font-size:10.5px;padding:1px 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.el .n{font-weight:600;font-size:13.5px;line-height:1.45}
-.el .sub{font-size:12px;color:var(--ink-2)}
-.el.none{border-style:dashed;background:transparent}
-.el.none .n{color:var(--muted);font-weight:500}
-.el.center{background:var(--ink);color:var(--bg);border-color:var(--ink);grid-column:2;grid-row:2;display:grid;place-content:center;text-align:center;gap:6px}
-.el.center .lv{background:rgba(255,255,255,.14);color:inherit}
-.el.center .n{font-size:16px;font-family:'Noto Kufi Arabic',sans-serif;font-weight:800}
-.el.center .sub{color:inherit;opacity:.75}
-.ico{width:16px;height:16px;flex-shrink:0;vertical-align:-3px}
-.raci{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
-.raci span{font-size:11px;background:var(--surface-2);padding:1px 7px;border-radius:6px;color:var(--ink-2)}
-.raci span b{font-weight:600;color:var(--ink)}
-.kpi-mini{display:flex;gap:10px;font-size:11.5px;color:var(--ink-2)}
-.kpi-mini b{color:var(--ink);font-variant-numeric:tabular-nums}
-.rule-box{margin-top:16px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;background:var(--gold-soft);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--ink)}
-.rule-box b{color:var(--gold-ink)}
+/* title act */
+.title-act{height:100%;display:grid;grid-template-columns:1.1fr .9fr;gap:30px;align-items:center}
+.title-act h2{font-size:clamp(28px,3.6vw,50px);font-weight:800;line-height:1.3}
+.title-act .lead{font-size:16px;color:var(--ink-2);max-width:60ch;margin-top:18px}
+.title-act .cta{margin-top:26px;display:flex;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+.counters{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.counter{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+.counter .v{font-family:var(--disp);font-size:44px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:var(--cap-ink)}
+.counter .v.gold{color:var(--gold)}
+.counter .l{font-size:12.5px;color:var(--ink-2);margin-top:8px}
 
-/* chips */
-.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:12px;background:var(--accent-soft);color:var(--accent-ink);font-weight:500;line-height:1.6}
-.chip.gold{background:var(--gold-soft);color:var(--gold-ink)}
-.chip.teal{background:var(--teal-soft);color:var(--teal)}
-.chip.grey{background:var(--surface-2);color:var(--ink-2)}
-.chip.crit{background:transparent;border:1px solid var(--crit);color:var(--crit)}
-.chip.good{background:transparent;border:1px solid var(--good);color:var(--good)}
-.chip.warn{background:transparent;border:1px solid var(--warn);color:var(--gold-ink)}
+/* law act */
+.law-svg text{font-family:var(--font);fill:var(--ink)}
+.law-svg .task rect{fill:var(--surface);stroke:var(--line-2)}
+.law-svg .task text{font-size:12px}
+.law-svg .task .art{fill:var(--gold);font-size:10.5px}
+.law-svg .capn rect{fill:rgba(63,191,151,.16);stroke:var(--cap)}
+.law-svg .capn.sup rect{fill:rgba(224,180,92,.14);stroke:var(--gold)}
+.law-svg .capn text{font-size:12px;font-weight:600}
+.law-svg .flow{fill:none;stroke:var(--cap);stroke-width:1.5;opacity:.7}
+.law-svg .hdr{font-size:12px;fill:var(--muted)}
 
-/* tabs */
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
-.tab{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:13.5px;display:inline-flex;gap:6px;align-items:center}
-.tab:hover{border-color:var(--line-2)}
-.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
-.panel-head{display:grid;gap:6px;margin-bottom:18px;max-width:70ch}
-.panel-head p{font-size:14px;color:var(--ink-2)}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
-select,input[type=range]{font:inherit}
-select{background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:8px;padding:7px 12px;min-width:220px;max-width:100%}
-label.ck{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer}
-label.ck:has(input:checked){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
-.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.stat{background:var(--surface-2);border-radius:10px;padding:12px 14px}
-.stat .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
-.stat .l{font-size:12px;color:var(--muted);margin-top:4px}
-.list{display:grid;gap:8px}
-.row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
-.row .n{font-size:13.5px;font-weight:500}
-.row .s{font-size:12px;color:var(--ink-2)}
-.tree{display:grid;gap:10px}
-.tree .l0b{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.tree .l0b>header{padding:9px 12px;background:var(--surface-2);font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;gap:8px;align-items:center}
-.tree .l1r{padding:8px 12px;border-top:1px solid var(--line);display:grid;gap:5px}
-.tree .l1r .h{font-size:13px;font-weight:500;display:flex;justify-content:space-between;gap:8px;align-items:center}
-.tree .l2s{display:flex;flex-wrap:wrap;gap:5px}
-.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
-.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
-.bar i.gold{background:var(--gold)}
+/* sunburst */
+.sb path{stroke:var(--bg-2);stroke-width:1.2;cursor:pointer}
+.sb text{font-family:var(--font);fill:var(--ink);font-size:10.5px;pointer-events:none;user-select:none}
+.sb .center{cursor:pointer}
+.sb .ct{font-family:var(--disp);font-weight:700;font-size:13px;fill:var(--ink);text-anchor:middle;pointer-events:none}
+.sb .cs{font-size:11px;fill:var(--muted);text-anchor:middle;pointer-events:none}
 
-/* heatmap */
-.hm{display:grid;gap:6px}
-.hm-row{display:grid;grid-template-columns:210px 1fr;gap:10px;align-items:center}
-.hm-row .lbl{font-size:12.5px;color:var(--ink-2);text-align:start;line-height:1.35}
-.hm-cells{display:flex;flex-wrap:wrap;gap:3px}
-.hm-cell{width:38px;height:30px;border-radius:4px;border:0;padding:0;cursor:pointer;background:var(--seq1)}
-.hm-cell.none{background:repeating-linear-gradient(135deg,var(--surface-2) 0 4px,var(--line) 4px 6px)}
-.hm-cell:hover{outline:2px solid var(--ink);outline-offset:1px}
-.hm-legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2);margin-top:14px;flex-wrap:wrap}
-.hm-legend .ramp{display:flex;gap:2px}
-.hm-legend .ramp i{width:22px;height:12px;border-radius:2px;display:block}
-.hm-legend .none{width:22px;height:12px;border-radius:2px;display:inline-block;vertical-align:middle;background:repeating-linear-gradient(135deg,var(--surface-2) 0 4px,var(--line) 4px 6px)}
+/* graph */
+.g text{font-family:var(--font);fill:var(--ink);pointer-events:none;user-select:none}
+.g .link{stroke:var(--line-2);stroke-opacity:.7;stroke-width:1.1}
+.g .link.tree{stroke:var(--cap);stroke-opacity:.5;stroke-width:1.6}
+.g .node{cursor:grab}
+.g .node.dim{opacity:.12}
+.g .link.dim{opacity:.06}
+.g .node.hit path,.g .node.hit circle{filter:drop-shadow(0 0 6px currentColor)}
+.g .lbl{font-size:11px;paint-order:stroke;stroke:var(--bg-2);stroke-width:3px;stroke-linejoin:round}
+.g .lbl.cap{font-weight:600;font-size:12px}
+.g .link.wave{stroke:var(--gold);stroke-opacity:1;stroke-width:2}
+.pulse{animation:pulse 1.2s ease-out 2}
+@keyframes pulse{0%{stroke-width:2;opacity:1}100%{stroke-width:18;opacity:0}}
 
-/* priority */
+/* bars */
+.bars text{font-family:var(--font);fill:var(--ink);font-size:12px}
+.bars .lbl{fill:var(--ink-2)}
+.bars .v{fill:var(--muted);font-size:11px}
+.bars .axis line,.bars .axis path{stroke:var(--line)}
+.bars .axis text{fill:var(--muted);font-size:10.5px}
 .sliders{display:grid;gap:12px}
-.sl{display:grid;grid-template-columns:1fr 60px;gap:10px;align-items:center;font-size:13px}
-.sl label{display:flex;justify-content:space-between}
-.sl input{width:100%;accent-color:var(--accent)}
-.sl .v{font-variant-numeric:tabular-nums;color:var(--ink-2);text-align:center}
-.prio{display:grid;gap:6px}
-.prio .r{display:grid;grid-template-columns:24px 1fr 130px 90px;gap:10px;align-items:center;font-size:13px;padding:6px 8px;border-radius:8px}
-.prio .r:nth-child(odd){background:var(--surface-2)}
-.prio .rk{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
-.prio .sc{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:12px}
+.sl{display:grid;grid-template-columns:1fr 34px;gap:8px;align-items:center;font-size:12.5px}
+.sl input{width:100%;accent-color:var(--cap)}
+.sl .v{text-align:center;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.gauge{background:var(--surface-2);border-radius:12px;padding:10px;text-align:center}
+.gauge svg{width:100%;height:auto;display:block}
+.gauge .l{font-size:11.5px;color:var(--ink-2);line-height:1.4}
+.gauge text{font-family:var(--disp);fill:var(--ink);font-weight:700}
 
-/* targets */
-.tgt{display:grid;gap:14px}
-.tgt .r{display:grid;gap:6px}
-.tgt .h{display:flex;justify-content:space-between;font-size:13.5px}
-.tgt .h b{font-variant-numeric:tabular-nums;font-weight:600}
-.tgt .why{font-size:12px;color:var(--muted)}
+/* table act */
+.table-svg text{font-family:var(--font);fill:var(--ink);font-size:11.5px}
+.seat rect{fill:var(--surface);stroke:var(--line-2)}
+.seat.chair rect{fill:rgba(63,191,151,.18);stroke:var(--cap)}
+.seat.guest rect{stroke-dasharray:4 3}
+.seat .role{fill:var(--muted);font-size:10px}
 
-/* committee */
-.members{display:flex;flex-wrap:wrap;gap:6px}
-.members .m{background:var(--surface-2);border-radius:10px;padding:8px 12px;font-size:13px;display:grid;gap:2px}
-.members .m small{color:var(--muted);font-size:11px}
-.members .m.chair{background:var(--accent-soft);color:var(--accent-ink)}
-
-/* reports */
-.rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-.hbar{display:grid;gap:8px}
-.hbar .r{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:13px}
-.hbar .r .lbl{color:var(--ink-2);text-align:start}
-.hbar .r .v{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:12px}
-.hbar .track{height:14px;background:var(--surface-2);border-radius:3px;overflow:hidden}
-.hbar .track i{display:block;height:100%;background:var(--accent);border-radius:0 3px 3px 0}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:start;padding:8px 10px;border-bottom:1px solid var(--line)}
-th{font-weight:600;color:var(--ink-2);font-size:12px}
-.tbl{overflow-x:auto}
+/* queries */
+.qgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.q{text-align:start;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:13px;line-height:1.5;display:grid;gap:4px}
+.q small{color:var(--muted);font-size:11.5px}
+.q:hover{border-color:var(--line-2)}
+.q.on{border-color:var(--cap);background:var(--surface-2)}
+.answer{display:grid;grid-template-rows:auto 1fr;gap:14px;min-height:0}
+.answer .big{font-family:var(--disp);font-size:64px;font-weight:800;color:var(--cap-ink);line-height:1;font-variant-numeric:tabular-nums}
+.answer .how{font-size:12.5px;color:var(--ink-2)}
+.answer .how b{color:var(--gold)}
 
 /* closing */
-.close-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.close-grid .c{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.close-grid .c h3{margin-bottom:6px}
-.close-grid .c p{font-size:13.5px;color:var(--ink-2)}
-footer{padding-block:30px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+.close{height:100%;display:grid;grid-template-rows:auto 1fr;gap:20px}
+.close .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-content:start}
+.close .c{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;opacity:0;transform:translateY(12px);transition:opacity .5s,transform .5s}
+.close .c.in{opacity:1;transform:none}
+.close .c h3{font-size:16px;margin-bottom:8px}
+.close .c p{font-size:13.5px;color:var(--ink-2)}
+.close .c .k{font-family:var(--disp);font-size:34px;font-weight:800;color:var(--gold);line-height:1;margin-bottom:10px}
 
-/* tooltip */
-.tip{position:fixed;z-index:50;background:var(--ink);color:var(--bg);font-size:12px;padding:8px 10px;border-radius:8px;pointer-events:none;max-width:260px;line-height:1.5;box-shadow:var(--shadow)}
-.tip b{font-weight:600}
+.fade{opacity:0;transform:translateY(8px);transition:opacity .45s ease,transform .45s ease}
+.fade.in{opacity:1;transform:none}
 
-@media (max-width:900px){
-  .hero-grid,.hier,.two,.rep-grid{grid-template-columns:1fr}
-  .kpis{grid-template-columns:repeat(2,1fr)}
-  .close-grid{grid-template-columns:1fr}
+@media (max-width:1000px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .rail{border:0;border-bottom:1px solid var(--line);flex-direction:row;align-items:center;padding:10px 14px;gap:10px;overflow:auto}
+  .acts{flex-direction:row;overflow:auto}
+  .acts button{grid-template-columns:18px auto;white-space:nowrap;padding:5px 8px}
+  .rail .hint{display:none}
+  .stage{padding:14px 16px 10px;overflow:auto;grid-template-rows:auto auto auto}
+  .scene{min-height:520px}
+  .split,.split.wide,.title-act,.qgrid{grid-template-columns:1fr}
+  .viz{min-height:380px}
+  .close .cards{grid-template-columns:1fr}
+  .stage-head{grid-template-columns:1fr}
 }
-@media (max-width:760px){
-  .const{grid-template-columns:1fr}
-  .const svg.lines{display:none}
-  .el.center{grid-column:1;grid-row:1}
-  .miller{grid-template-columns:1fr}
-  .col{max-height:260px}
-  .hm-row{grid-template-columns:1fr}
-  .hbar .r{grid-template-columns:110px 1fr 40px}
-  .prio .r{grid-template-columns:20px 1fr 90px 80px}
-  section{padding-block:44px}
-}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
-<div dir="rtl" lang="ar">
-<nav class="top" aria-label="فصول العرض">
-  <div class="wrap">
-    <div class="brand"><span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></span>خريطة القدرات المؤسسية</div>
-    <div class="nav" id="nav">
-      <a href="#s-concept"><b>1</b>المفهوم</a>
-      <a href="#s-map"><b>2</b>الخريطة الشاملة</a>
-      <a href="#s-hier"><b>3</b>الهرمية</a>
-      <a href="#s-links"><b>4</b>الارتباطات</a>
-      <a href="#s-benefits"><b>5</b>الفوائد</a>
-      <a href="#s-reports"><b>6</b>التقارير</a>
-    </div>
-  </div>
-</nav>
-
-<section class="hero" id="s-concept">
-  <div class="wrap">
-    <div class="hero-grid">
-      <div>
-        <span class="eyebrow">عرض لمعالي نائب المحافظ · هيكلية الأعمال</span>
-        <h1 style="margin-top:12px">خريطة واحدة تربط مهام البنك المركزي بكل ما يجري في طبقة التشغيل</h1>
-        <p class="lead" style="margin-top:16px">نبدأ من المهام المنصوص عليها في نظام البنك المركزي السعودي، نترجمها إلى قدرات مؤسسية، نفرّعها إلى ثلاثة مستويات، ثم نربط كل قدرة بأنظمتها وصلاحياتها وإجراءاتها وسياساتها ووحداتها المالكة. النتيجة: أي سؤال عن البنك يُجاب عليه من خريطة واحدة.</p>
-        <div class="kpis" id="heroKpis"></div>
-      </div>
-      <div class="concepts">
-        <div class="concept">
-          <svg viewBox="0 0 64 64" fill="none"><rect x="6" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="24.5" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="43" y="6" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="6" y="24.5" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="24.5" y="24.5" width="15" height="15" rx="3" fill="var(--accent)"/><rect x="43" y="24.5" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="6" y="43" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="24.5" y="43" width="15" height="15" rx="3" fill="var(--gold)"/><rect x="43" y="43" width="15" height="15" rx="3" fill="var(--gold)"/></svg>
-          <div><div class="tag">المفهوم الأول</div><h3>الشمولية</h3><p>خريطة تغطي البنك كاملًا: قدرات مستمدة من مهام النظام، وقدرات مؤسسية مساندة لا ينص عليها النظام مثل الحوكمة والمالية والمشتريات.</p></div>
-        </div>
-        <div class="concept">
-          <svg viewBox="0 0 64 64" fill="none" stroke="var(--line-2)" stroke-width="1.5"><path d="M32 14v10M32 24H16v10M32 24h16v10M16 34H8v10M16 34h8v10M48 34h-8v10M48 34h8v10"/><circle cx="32" cy="10" r="6" fill="var(--accent)" stroke="none"/><circle cx="16" cy="30" r="4.5" fill="var(--accent-soft)" stroke="var(--accent)"/><circle cx="48" cy="30" r="4.5" fill="var(--accent-soft)" stroke="var(--accent)"/><circle cx="8" cy="48" r="3.5" fill="var(--surface)"/><circle cx="24" cy="48" r="3.5" fill="var(--surface)"/><circle cx="40" cy="48" r="3.5" fill="var(--surface)"/><circle cx="56" cy="48" r="3.5" fill="var(--surface)"/></svg>
-          <div><div class="tag">المفهوم الثاني</div><h3>الهرمية</h3><p>كل قدرة تتفرّع لمستويين تحتها: المستوى 0 ثم المستوى 1 ثم المستوى 2، بحيث يمكن النزول من نطاق عريض إلى أدق مهمة تشغيلية.</p></div>
-        </div>
-        <div class="concept">
-          <svg viewBox="0 0 64 64" fill="none" stroke="var(--line-2)" stroke-width="1.5"><path d="M32 32L12 14M32 32l20-18M32 32L10 36M32 32l22 4M32 32L18 54M32 32l14 22"/><circle cx="32" cy="32" r="8" fill="var(--accent)" stroke="none"/><rect x="6" y="8" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="46" y="8" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="4" y="30" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/><rect x="48" y="30" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/><rect x="12" y="48" width="12" height="12" rx="3" fill="var(--gold-soft)" stroke="var(--gold)"/><rect x="40" y="48" width="12" height="12" rx="3" fill="var(--teal-soft)" stroke="var(--teal)"/></svg>
-          <div><div class="tag">المفهوم الثالث</div><h3>الارتباطات</h3><p>القدرة تتصل بعناصر الطبقة التشغيلية: نظام تقني، صلاحية، إجراء عمل ومؤشراته، سياسة، وحدة مالكة ودليل مهامها، خدمة، أداة تنظيمية، ولجنة. وكل عنصر يُربط بأدق قدرة تغطيه.</p></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="s-map">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">الفصل 2 · الشمولية</span>
-      <h2>الخريطة الشاملة: المستوى 0 لقدرات البنك المركزي</h2>
-      <p class="lead">كل بطاقة قدرة رئيسية. الخضراء مستمدة مباشرة من مهمة نصّ عليها نظام البنك المركزي، والذهبية قدرة مؤسسية مساندة يحتاجها البنك ليعمل. اختر أي قدرة للنزول في هرميتها.</p>
-      <div class="legend-inline"><span><i class="src"></i> مستمدة من نظام البنك المركزي</span><span><i class="src sup"></i> قدرة مؤسسية مساندة</span></div>
-    </div>
-    <div id="mapLaw"></div>
-    <div id="mapSup"></div>
-  </div>
-</section>
-
-<section id="s-hier">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">الفصل 3 · الهرمية</span>
-      <h2>ثلاثة مستويات: من النطاق العريض إلى المهمة الدقيقة</h2>
-      <p class="lead">المستوى 0 يتفرّع إلى واحدة أو أكثر من قدرات المستوى 1، وكل منها تتفرّع إلى واحدة أو أكثر من قدرات المستوى 2. الشجرة الدائرية تعرض القدرة المختارة كاملة.</p>
-    </div>
-    <div class="crumb" id="crumb"></div>
-    <div class="hier">
-      <div class="miller">
-        <div class="col"><header><span>المستوى 0</span><b id="c0n"></b></header><div id="col0"></div></div>
-        <div class="col"><header><span>المستوى 1</span><b id="c1n"></b></header><div id="col1"></div></div>
-        <div class="col"><header><span>المستوى 2</span><b id="c2n"></b></header><div id="col2"></div></div>
-      </div>
-      <div>
-        <div class="radial" id="radial"></div>
-        <p class="note">المركز: القدرة الرئيسية المختارة. الحلقة الوسطى: المستوى 1. الحلقة الخارجية: المستوى 2. اضغط أي عقدة لاختيارها.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="s-links">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">الفصل 4 · الارتباطات</span>
-      <h2>بطاقة القدرة: كل ما يرتبط بها في طبقة التشغيل</h2>
-      <p class="lead">القدرة في المنتصف، وحولها عناصر الطبقة التشغيلية المرتبطة بها. الشارة على كل عنصر تبيّن عند أي مستوى تم الربط، تطبيقًا لقاعدة الربط بأدق قدرة يغطيها العنصر.</p>
-    </div>
-    <div class="controls">
-      <label for="selL2" style="font-size:13px;color:var(--ink-2)">القدرة المعروضة</label>
-      <select id="selL2"></select>
-    </div>
-    <div class="const-wrap">
-      <div class="const" id="const"></div>
-      <div class="rule-box">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--gold-ink)" stroke-width="1.6"><circle cx="11" cy="11" r="9"/><path d="M11 7v5M11 15h.01"/></svg>
-        <div><b>قاعدة الربط بأدق مستوى:</b> إذا كان نطاق العنصر أوسع من قدرة المستوى 2 نربطه بالمستوى 1، وإذا كان أوسع من المستوى 1 نربطه بالمستوى 0. لذلك ترى الإجراء والوحدة المالكة مرتبطين بالمستوى 1 بينما النظام والصلاحية مرتبطان بالمستوى 2، ومن الطبيعي أن يرتبط العنصر الواحد بأكثر من قدرة.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="s-benefits">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">الفصل 5 · الفوائد</span>
-      <h2>ماذا يعطينا الترابط؟ ست حالات استخدام حيّة</h2>
-      <p class="lead">كل تبويب أدناه يعمل على البيانات نفسها. غيّر المدخلات وشاهد كيف تنتقل النتيجة من القدرة إلى كل العناصر المرتبطة بها.</p>
-    </div>
-    <div class="tabs" role="tablist" id="tabs">
-      <button class="tab" role="tab" aria-selected="true" data-t="impact">دراسة الأثر</button>
-      <button class="tab" role="tab" aria-selected="false" data-t="gaps">تحليل الفجوات</button>
-      <button class="tab" role="tab" aria-selected="false" data-t="heat">الخريطة الحرارية</button>
-      <button class="tab" role="tab" aria-selected="false" data-t="prio">التخطيط والأولويات</button>
-      <button class="tab" role="tab" aria-selected="false" data-t="targets">المستهدفات</button>
-      <button class="tab" role="tab" aria-selected="false" data-t="comm">تشكيل اللجان</button>
-    </div>
-
-    <div class="panel" id="p-impact" role="tabpanel">
-      <div class="panel-head"><h3>دراسة الأثر: مبادرة جديدة، فأي القدرات تتأثر وأي العناصر تتبعها؟</h3><p>اختر مبادرة. تحدَّد القدرات المتأثرة على الخريطة، ولأن القدرات مرتبطة بطبقة التشغيل نحصل فورًا على كل نظام وصلاحية وإجراء وسياسة ووحدة ستتأثر بالإضافة أو التعديل أو الحذف أو التحسين.</p></div>
-      <div class="controls"><label for="selInit" style="font-size:13px;color:var(--ink-2)">المبادرة</label><select id="selInit"></select></div>
-      <div class="stat-row" id="impStats"></div>
-      <div class="two"><div><h3 style="margin-bottom:10px;font-size:14px">القدرات المتأثرة</h3><div class="tree" id="impTree"></div></div><div><h3 style="margin-bottom:10px;font-size:14px">عناصر الطبقة التشغيلية المتأثرة</h3><div class="list" id="impEls"></div></div></div>
-    </div>
-
-    <div class="panel" id="p-gaps" role="tabpanel" hidden>
-      <div class="panel-head"><h3>تحليل الفجوات: أي القدرات بلا غطاء؟</h3><p>فعّل نوع الفجوة لتظهر قدرات المستوى 1 التي لا يغطيها هذا العنصر. الفجوة الواحدة تعني عملًا يجري في البنك بلا إجراء موثق أو بلا سياسة أو بلا أداة تنظيمية.</p></div>
-      <div class="controls" id="gapCtl">
-        <label class="ck"><input type="checkbox" id="g-proc" checked> بلا إجراء عمل</label>
-        <label class="ck"><input type="checkbox" id="g-pol"> بلا سياسة</label>
-        <label class="ck"><input type="checkbox" id="g-reg"> بلا أداة تنظيمية</label>
-        <label class="ck"><input type="checkbox" id="g-sys"> بلا نظام تقني</label>
-        <label class="ck"><input type="checkbox" id="g-own"> بلا وحدة مالكة</label>
-      </div>
-      <div class="stat-row" id="gapStats"></div>
-      <div class="tree" id="gapTree"></div>
-    </div>
-
-    <div class="panel" id="p-heat" role="tabpanel" hidden>
-      <div class="panel-head"><h3>الخريطة الحرارية: مقياس واحد على كل القدرات دفعة واحدة</h3><p>كل خلية قدرة من المستوى 1 مجمّعة تحت قدرتها الرئيسية. اللون يمثّل قيمة المقياس المختار، والخلية المخططة تعني أن لا إجراء عمل يغطي القدرة أصلًا.</p></div>
-      <div class="controls"><label for="selMetric" style="font-size:13px;color:var(--ink-2)">المقياس</label><select id="selMetric"><option value="auto">نسبة أتمتة إجراء العمل</option><option value="perm">عدد الصلاحيات المرتبطة</option><option value="kq">مؤشر الجودة للإجراء</option></select></div>
-      <div class="hm" id="heat"></div>
-      <div class="hm-legend" id="heatLegend"></div>
-    </div>
-
-    <div class="panel" id="p-prio" role="tabpanel" hidden>
-      <div class="panel-head"><h3>التخطيط والأولويات: معايير على القدرة، فترثها كل عناصرها</h3><p>حرّك أوزان المعايير. تُحتسب أولوية كل قدرة رئيسية، وتنتقل الأولوية نفسها تلقائيًا إلى الأنظمة والإجراءات والصلاحيات المرتبطة بها، فتصبح خطة العمل مرتبة دون جهد يدوي.</p></div>
-      <div class="two">
-        <div class="sliders">
-          <div class="sl"><label for="w-reg"><span>الارتباط بمهمة نظامية</span></label><input type="range" id="w-reg" min="0" max="5" value="4"><span class="v" id="w-reg-v">4</span></div>
-          <div class="sl"><label for="w-risk"><span>مستوى المخاطر</span></label><input type="range" id="w-risk" min="0" max="5" value="3"><span class="v" id="w-risk-v">3</span></div>
-          <div class="sl"><label for="w-vis"><span>الارتباط بالاستراتيجية ورؤية 2030</span></label><input type="range" id="w-vis" min="0" max="5" value="3"><span class="v" id="w-vis-v">3</span></div>
-          <div class="sl"><label for="w-ext"><span>الأثر على العملاء والقطاع</span></label><input type="range" id="w-ext" min="0" max="5" value="2"><span class="v" id="w-ext-v">2</span></div>
-          <div class="stat-row" id="prioStats" style="margin-top:8px"></div>
-        </div>
-        <div class="prio" id="prioList"></div>
-      </div>
-    </div>
-
-    <div class="panel" id="p-targets" role="tabpanel" hidden>
-      <div class="panel-head"><h3>المستهدفات: عدد القدرات يحدد عدد ما يلزم البنك</h3><p>القرار مثلًا: سياسة لكل قدرة مستوى 0، وإجراء عمل لكل قدرة مستوى 1، وأداة تنظيمية لكل قدرة رقابية مستوى 1، ودليل مهام لكل وحدة إدارية. فتصبح المستهدفات أرقامًا حقيقية قابلة للقياس بدل تقديرات.</p></div>
-      <div class="tgt" id="targets"></div>
-    </div>
-
-    <div class="panel" id="p-comm" role="tabpanel" hidden>
-      <div class="panel-head"><h3>تشكيل اللجان: من يجب أن يجلس على الطاولة؟</h3><p>اربط اللجنة بقدرة، فتظهر فورًا الوحدات الإدارية المالكة للقدرات تحتها. هذا هو تشكيل اللجنة المقترح، مبنيًا على الخريطة لا على الاجتهاد.</p></div>
-      <div class="controls"><label for="commL0" style="font-size:13px;color:var(--ink-2)">نطاق اللجنة</label><select id="commL0"></select><select id="commL1"></select></div>
-      <div class="two"><div><h3 style="margin-bottom:10px;font-size:14px" id="commTitle"></h3><div class="members" id="commMembers"></div></div><div><h3 style="margin-bottom:10px;font-size:14px">القدرات التي تغطيها اللجنة</h3><div class="list" id="commCaps"></div></div></div>
-    </div>
-  </div>
-</section>
-
-<section id="s-reports">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">الفصل 6 · التقارير</span>
-      <h2>أسئلة كانت تحتاج أسابيع، تُجاب الآن من الخريطة مباشرة</h2>
-      <p class="lead">كم صلاحية بيد معالي المحافظ؟ كم إدارة تعمل بلا إجراء موثق؟ أي الأنظمة تخدم أكثر من قدرة؟ كلها استعلامات على البيانات المترابطة نفسها.</p>
-    </div>
-    <div class="kpis" id="repKpis" style="margin-top:0;margin-bottom:20px"></div>
-    <div class="rep-grid">
-      <div class="panel"><h3 style="margin-bottom:14px;font-size:14px">توزيع صلاحيات الاعتماد حسب المستوى الوظيفي</h3><div class="hbar" id="repBar"></div></div>
-      <div class="panel"><h3 style="margin-bottom:14px;font-size:14px">وحدات إدارية تملك قدرات بلا إجراء عمل موثق</h3><div class="tbl"><table id="repTbl"><thead><tr><th>الوحدة الإدارية</th><th>القدرة</th><th>القدرة الرئيسية</th></tr></thead><tbody></tbody></table></div></div>
-    </div>
-    <div class="sec-head" style="margin-top:56px;margin-bottom:18px"><span class="eyebrow">الخلاصة</span><h2>ماذا يعني هذا لقيادة البنك؟</h2></div>
-    <div class="close-grid">
-      <div class="c"><h3>قرار مبني على خريطة</h3><p>أي مبادرة أو لجنة أو سياسة تبدأ من القدرة، فتظهر كل تبعاتها التشغيلية قبل اتخاذ القرار لا بعده.</p></div>
-      <div class="c"><h3>مستهدفات قابلة للقياس</h3><p>عدد السياسات والإجراءات والأدوات التنظيمية يُشتق من عدد القدرات، فتصبح الفجوة رقمًا واضحًا ومسارًا لإغلاقها.</p></div>
-      <div class="c"><h3>لغة واحدة للبنك</h3><p>الوحدات والأنظمة والصلاحيات والخدمات تُوصف بالمرجع نفسه، فيتحدث الجميع عن الشيء نفسه بالاسم نفسه.</p></div>
-    </div>
-  </div>
-</section>
-<footer><div class="wrap">نموذج أولي تفاعلي. أسماء القدرات مستمدة من مهام نظام البنك المركزي السعودي، أما عناصر الطبقة التشغيلية وأرقامها فبيانات توضيحية لغرض العرض فقط.</div></footer>
-<div class="tip" id="tip" hidden></div>
+<div id="app" lang="ar">
+  <aside class="rail">
+    <div class="brand"><span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#06201A" stroke-width="1.7"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></span><span>خريطة القدرات المؤسسية<small>عرض تفاعلي لمعالي نائب المحافظ</small></span></div>
+    <div class="acts" id="acts"></div>
+    <div class="hint">التنقل: <kbd>مسافة</kbd> أو <kbd>←</kbd> للتالي، <kbd>→</kbd> للسابق، <kbd>F</kbd> ملء الشاشة. كل فصل يحتوي خطوات تُبنى تدريجيًا.</div>
+  </aside>
+  <main class="stage">
+    <header class="stage-head"><div><span class="eyebrow" id="hdEyebrow"></span><h1 id="hdTitle"></h1><p class="lead" id="hdLead"></p></div><div class="tools" id="hdTools"></div></header>
+    <div class="scene" id="scene"></div>
+    <footer class="ctl">
+      <div class="btns"><button class="btn" id="btnPrev">السابق</button><button class="btn primary" id="btnNext">التالي</button></div>
+      <div class="steps" id="steps"></div>
+      <div class="progress"><span id="progTxt"></span><span class="bar"><i id="progBar"></i></span><button class="btn small" id="btnFull" title="ملء الشاشة">⛶</button></div>
+    </footer>
+  </main>
 </div>
+<div class="tip" id="tip" hidden></div>
 <script>
 (function(){
 'use strict';
@@ -610,233 +382,477 @@ const SUM={
 };
 SUM.elements=SUM.policies+SUM.procs+SUM.regs+SUM.comms+SUM.sysLinks+SUM.perms+SUM.svcs+SUM.units;
 
-/* ---------- أدوات ---------- */
+
+/* ---------- أدوات عامة ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmt=n=>new Intl.NumberFormat('en-US').format(n);
-const ICON={
-  sys:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="8" rx="1.5"/><path d="M5 14h6M8 11v3"/></svg>',
-  perm:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="3"/><path d="M9 6h5M12 6v3M2 14c0-2.5 2-4 4-4s4 1.5 4 4"/></svg>',
-  proc:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M6 4h4v6"/></svg>',
-  pol:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M6 8h5M6 11h5"/></svg>',
-  unit:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 14h12M3 14V6l5-3 5 3v8"/><path d="M6 14v-4h4v4"/></svg>',
-  svc:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>',
-  reg:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v12M3 5h10M4 5l-2 4h4zM12 5l-2 4h4z"/></svg>',
-  comm:'<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5" cy="5" r="2"/><circle cx="11" cy="5" r="2"/><path d="M1.5 13c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5M7.5 13c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5"/></svg>'
+const fmt=n=>new Intl.NumberFormat('en-US').format(Math.round(n));
+const RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dur=ms=>RM?0:ms;
+const C={cap:'#3FBF97',capInk:'#8EE3C6',capDim:'#1F5A48',gold:'#E0B45C',tech:'#6FA8FF',gov:'#E0B45C',ops:'#B693F5',org:'#F28FB8',good:'#59D08A',warn:'#F4C25B',crit:'#F0665E',muted:'#7F9389',line:'#35504A',bg:'#0F1C18',ink:'#EAF0EC'};
+const SEQ=['#173A30','#1E5443','#276E56','#328A6B','#3FA57F','#63C39C','#9BE0C4'];
+const TYPES={
+  sys:{n:'نظام تقني',g:'tech',sym:d3.symbolSquare,lvl:2},
+  perm:{n:'صلاحية',g:'org',sym:d3.symbolDiamond,lvl:2},
+  svc:{n:'خدمة',g:'ops',sym:d3.symbolCross,lvl:2},
+  proc:{n:'إجراء عمل',g:'ops',sym:d3.symbolTriangle,lvl:1},
+  unit:{n:'وحدة إدارية مالكة',g:'org',sym:d3.symbolWye,lvl:1},
+  pol:{n:'سياسة',g:'gov',sym:d3.symbolStar,lvl:'0/1'},
+  reg:{n:'أداة تنظيمية',g:'gov',sym:d3.symbolAsterisk,lvl:1},
+  comm:{n:'لجنة',g:'gov',sym:d3.symbolCircle,lvl:'0/1'}
 };
+const GC={tech:C.tech,gov:C.gov,ops:C.ops,org:C.org};
+const ACT_COLOR={'إضافة':C.good,'تعديل':C.warn,'حذف':C.crit,'تحسين':C.tech};
 const tip=$('#tip');
-function showTip(html,x,y){tip.innerHTML=html;tip.hidden=false;const r=tip.getBoundingClientRect();let L=x-r.width/2;L=Math.max(8,Math.min(window.innerWidth-r.width-8,L));let T=y-r.height-12;if(T<8)T=y+14;tip.style.left=L+'px';tip.style.top=T+'px'}
+function showTip(html,x,y){tip.innerHTML=html;tip.hidden=false;const r=tip.getBoundingClientRect();let L=x-r.width/2;L=Math.max(8,Math.min(window.innerWidth-r.width-8,L));let T=y-r.height-14;if(T<8)T=y+16;tip.style.left=L+'px';tip.style.top=T+'px'}
 function hideTip(){tip.hidden=true}
+function countUp(el,to,ms,suffix){const from=+(el.dataset.v||0);el.dataset.v=to;if(!dur(1)){el.textContent=fmt(to)+(suffix||'');return}const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/ms);const e=1-Math.pow(1-k,3);el.textContent=fmt(from+(to-from)*e)+(suffix||'');if(k<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
+function wrap(t,max){const w=String(t).split(' ');const out=[];let cur='';w.forEach(x=>{if((cur+' '+x).trim().length>max&&cur){out.push(cur.trim());cur=x}else cur+=' '+x});if(cur.trim())out.push(cur.trim());return out}
+function tspans(sel,lines,x,lh){sel.text(null);lines.forEach((l,i)=>sel.append('tspan').attr('x',x).attr('dy',i?lh:0).text(l))}
+function ownerUnitCount(l0){return new Set(l0.l1.map(x=>x.unit).filter(Boolean)).size}
+function heat(l1){return l1.proc?l1.proc.auto:null}
+function l0heat(l0){const v=l0.l1.map(heat).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null}
+function seqColor(v,lo,hi){const t=(v-lo)/Math.max(1,hi-lo);return SEQ[Math.min(6,Math.floor(t*6.999))]}
+const PW={reg:4,risk:3,vis:3,ext:2};
+function prioScore(l0,w){w=w||PW;const tw=Object.values(w).reduce((a,b)=>a+b,0)||1;return Object.keys(w).reduce((a,k)=>a+w[k]*l0.scores[k],0)/tw}
+const tier=s=>s>=3.8?['عالية',C.crit]:s>=2.8?['متوسطة',C.warn]:['منخفضة',C.muted];
+function gapsOf(l1){const g=[];if(!l1.proc)g.push('proc');if(!l1.policy&&!l1.l0.policy)g.push('pol');if(l1.l0.sup&&!l1.reg)g.push('reg');if(!l1.l2.some(x=>x.sys.length))g.push('sys');if(!l1.unit)g.push('own');return g}
+const GAPN={proc:'بلا إجراء عمل',pol:'بلا سياسة',reg:'بلا أداة تنظيمية',sys:'بلا نظام تقني',own:'بلا وحدة مالكة'};
+function elementsUnder(l0){return l0.l1.reduce((a,x)=>a+(x.proc?1:0)+(x.policy?1:0)+(x.reg?1:0)+(x.unit?1:0)+(x.committee?1:0)+x.l2.reduce((b,y)=>b+y.sys.length+1+(y.svc?1:0),0),0)+(l0.policy?1:0)+(l0.committee?1:0)}
 
-/* ---------- الحالة ---------- */
-const S={l0:null,l1:null,l2:null};
-{const best=M.l2.find(x=>x.l1.l0.idx===7&&x.sys.length&&x.svc&&x.l1.proc&&x.l1.reg&&x.l1.unit)||M.l2.find(x=>x.l1.l0.idx===7&&x.sys.length&&x.l1.proc&&x.l1.unit)||M.l2.find(x=>x.sys.length&&x.svc&&x.l1.proc&&x.l1.unit)||M.l2[0];S.l2=best;S.l1=best.l1;S.l0=best.l1.l0}
-
-/* ---------- البطل ---------- */
-$('#heroKpis').innerHTML=[[M.l0.length,'قدرة رئيسية (المستوى 0)'],[M.l1.length,'قدرة فرعية (المستوى 1)'],[M.l2.length,'قدرة تفصيلية (المستوى 2)'],[SUM.elements,'ارتباط بعناصر طبقة التشغيل']].map(k=>`<div class="kpi"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
-
-/* ---------- الخريطة الشاملة ---------- */
-function capCard(l0){const n2=l0.l1.reduce((a,x)=>a+x.l2.length,0);return `<button class="cap${S.l0===l0?' active':''}" data-id="${l0.id}"><div class="id"><span>${l0.id}</span><i class="src${l0.task?'':' sup'}"></i></div><div class="n">${esc(l0.n)}</div><div class="task">${l0.task?'المهمة النظامية: '+esc(l0.task):'قدرة مساندة لا ينص عليها النظام'}</div><div class="meta"><span>${l0.l1.length} فرعية</span><span>${n2} تفصيلية</span></div></button>`}
-function renderMap(){
-  const law=M.l0.filter(x=>x.task),sup=M.l0.filter(x=>!x.task);
-  $('#mapLaw').innerHTML=`<div class="group-title">قدرات مستمدة من مهام نظام البنك المركزي السعودي · ${law.length}</div><div class="map">${law.map(capCard).join('')}</div>`;
-  $('#mapSup').innerHTML=`<div class="group-title">قدرات مؤسسية مساندة · ${sup.length}</div><div class="map">${sup.map(capCard).join('')}</div>`;
+/* ---------- الرسم الشمسي القابل للتكبير ---------- */
+function makeSunburst(el,opts){
+  opts=opts||{};
+  const W=el.clientWidth||700,H=el.clientHeight||560;const size=Math.min(W,H)-16;const radius=size/2/3.05;
+  const data={n:'البنك المركزي',children:M.l0.map(l0=>({ref:l0,children:l0.l1.map(l1=>({ref:l1,children:l1.l2.map(l2=>({ref:l2,value:1}))}))}))};
+  const root=d3.hierarchy(data).sum(d=>d.value||0);
+  d3.partition().size([2*Math.PI,root.height+1])(root);
+  root.each(d=>d.current=d);
+  const arc=d3.arc().startAngle(d=>d.x0).endAngle(d=>d.x1).padAngle(d=>Math.min((d.x1-d.x0)/2,0.004)).padRadius(radius*1.5).innerRadius(d=>d.y0*radius).outerRadius(d=>Math.max(d.y0*radius,d.y1*radius-1.5));
+  const svg=d3.select(el).append('svg').attr('viewBox',[-W/2,-H/2,W,H]).attr('class','sb');
+  const defs=svg.append('defs');
+  defs.append('pattern').attr('id','hatch').attr('width',6).attr('height',6).attr('patternUnits','userSpaceOnUse').attr('patternTransform','rotate(45)').call(p=>{p.append('rect').attr('width',6).attr('height',6).attr('fill','#1B2F29');p.append('rect').attr('width',2).attr('height',6).attr('fill','#35504A')});
+  const g=svg.append('g');
+  let mode=opts.mode||'src',maxDepth=opts.maxDepth||3,focus=root,gapSet=opts.gapSet||new Set(['proc']);
+  const autoVals=M.l1.map(heat).filter(x=>x!==null);const lo=Math.min(...autoVals),hi=Math.max(...autoVals);
+  function refOf(d){return d.data.ref}
+  function l1Of(d){const r=refOf(d);return r.lvl===1?r:r.lvl===2?r.l1:null}
+  function l0Of(d){const r=refOf(d);return r.lvl===0?r:r.lvl===1?r.l0:r.l1.l0}
+  function fill(d){
+    const r=refOf(d);
+    if(mode==='src'){return l0Of(d).task?C.cap:C.gold}
+    if(mode==='auto'){let v=r.lvl===0?l0heat(r):heat(l1Of(d));return v===null?'url(#hatch)':seqColor(v,lo,hi)}
+    if(mode==='prio'){return tier(prioScore(l0Of(d)))[1]}
+    if(mode==='gap'){const has=x=>gapsOf(x).some(k=>gapSet.has(k));const bad=r.lvl===0?r.l1.some(has):has(l1Of(d));return bad?C.crit:'#22362E'}
+    return C.cap}
+  function opac(d){if(mode==='src')return d.depth===1?1:d.depth===2?.72:.5;if(mode==='gap'){const r=refOf(d);return 1}return d.depth===1?1:d.depth===2?.9:.75}
+  function arcVisible(d){return d.y1<=3&&d.y0>=1&&d.x1>d.x0&&d.depth<=maxDepth}
+  function labelVisible(d){return d.y1<=3&&d.y0>=1&&d.depth<=maxDepth&&(d.y1-d.y0)*(d.x1-d.x0)>(d.depth===3?0.05:0.03)}
+  function labelTransform(d){const x=(d.x0+d.x1)/2*180/Math.PI;const y=(d.y0+d.y1)/2*radius;return `rotate(${x-90}) translate(${y},0) rotate(${x<180?0:180})`}
+  const path=g.append('g').selectAll('path').data(root.descendants().slice(1)).join('path')
+    .attr('fill',fill).attr('fill-opacity',d=>arcVisible(d.current)?opac(d):0).attr('pointer-events',d=>arcVisible(d.current)?'auto':'none').attr('d',d=>arc(d.current));
+  path.on('click',(e,d)=>{if(d.children&&d.depth<3){zoom(d)}if(opts.onSelect)opts.onSelect(refOf(d),d)})
+    .on('mousemove',(e,d)=>{const r=refOf(d);const l1=l1Of(d);let extra='';if(mode==='auto'){const v=r.lvl===0?l0heat(r):heat(l1);extra='نسبة الأتمتة: '+(v===null?'لا إجراء':Math.round(v)+'%')}else if(mode==='prio'){extra='الأولوية: '+tier(prioScore(l0Of(d)))[0]+' ('+prioScore(l0Of(d)).toFixed(1)+')'}else if(mode==='gap'&&l1){const gs=gapsOf(l1).filter(k=>gapSet.has(k));extra=gs.length?gs.map(k=>GAPN[k]).join('، '):'مغطاة'}else{extra=r.lvl===0?(r.task?'مستمدة من النظام: '+r.task:'قدرة مساندة'):r.lvl===1?(r.l2.length+' قدرة تفصيلية · '+(r.unit?r.unit.n:'بلا مالك')):(r.sys.length+' نظام · '+(r.svc?'خدمة':'بلا خدمة'))}
+      showTip(`<b>${esc(r.n)}</b><br><span style="opacity:.7">المستوى ${r.lvl}</span><br>${esc(extra)}`,e.clientX,e.clientY)})
+    .on('mouseleave',hideTip);
+  const label=g.append('g').attr('pointer-events','none').selectAll('text').data(root.descendants().slice(1)).join('text')
+    .attr('dy','0.35em').attr('text-anchor','middle').attr('fill-opacity',d=>+labelVisible(d.current)).attr('transform',d=>labelTransform(d.current))
+    .attr('font-size',d=>d.depth===1?11.5:d.depth===2?10.5:9.5).attr('font-weight',d=>d.depth===1?600:400)
+    .text(d=>{const n=refOf(d).n;const max=d.depth===1?16:d.depth===2?18:16;return n.length>max?n.slice(0,max-1)+'…':n});
+  const center=g.append('g').attr('class','center').on('click',()=>{if(focus.parent)zoom(focus.parent)});
+  center.append('circle').attr('r',radius-4).attr('fill','#142420').attr('stroke','#25392F');
+  const ct=center.append('text').attr('class','ct').attr('y',-4);
+  const cs=center.append('text').attr('class','cs').attr('y',16);
+  function setCenter(){const r=focus.data.ref;const n=r?r.n:'البنك المركزي';const lines=wrap(n,14).slice(0,3);tspans(ct,lines,0,15);ct.attr('y',-4-(lines.length-1)*7);cs.attr('y',16+(lines.length-1)*8).text(focus===root?M.l0.length+' قدرة رئيسية':focus.depth===1?r.l1.length+' فرعية · '+r.l1.reduce((a,x)=>a+x.l2.length,0)+' تفصيلية':r.l2.length+' قدرة تفصيلية · اضغط للرجوع')}
+  setCenter();
+  function zoom(p){
+    focus=p;setCenter();if(opts.onZoom)opts.onZoom(p);
+    root.each(d=>d.target={x0:Math.max(0,Math.min(1,(d.x0-p.x0)/(p.x1-p.x0)))*2*Math.PI,x1:Math.max(0,Math.min(1,(d.x1-p.x0)/(p.x1-p.x0)))*2*Math.PI,y0:Math.max(0,d.y0-p.depth),y1:Math.max(0,d.y1-p.depth)});
+    const t=g.transition().duration(dur(700));
+    path.transition(t).tween('data',d=>{const i=d3.interpolate(d.current,d.target);return t=>d.current=i(t)})
+      .filter(function(d){return +this.getAttribute('fill-opacity')||arcVisible(d.target)})
+      .attr('fill-opacity',d=>arcVisible(d.target)?opac(d):0).attr('pointer-events',d=>arcVisible(d.target)?'auto':'none').attrTween('d',d=>()=>arc(d.current));
+    label.filter(function(d){return +this.getAttribute('fill-opacity')||labelVisible(d.target)}).transition(t).attr('fill-opacity',d=>+labelVisible(d.target)).attrTween('transform',d=>()=>labelTransform(d.current));
+  }
+  function repaint(ms){path.transition().duration(dur(ms==null?500:ms)).attr('fill',fill).attr('fill-opacity',d=>arcVisible(d.current)?opac(d):0).attr('pointer-events',d=>arcVisible(d.current)?'auto':'none');label.transition().duration(dur(ms==null?500:ms)).attr('fill-opacity',d=>+labelVisible(d.current))}
+  return {
+    setMaxDepth(n,ms){maxDepth=n;repaint(ms)},
+    setMode(m){mode=m;repaint()},
+    setGaps(s){gapSet=s;repaint(300)},
+    zoomTo(ref){const d=root.descendants().find(x=>x.data.ref===ref);if(d)zoom(d)},
+    reset(){zoom(root)},
+    root
+  };
 }
-document.addEventListener('click',e=>{const b=e.target.closest('.cap');if(!b)return;const l0=M.l0.find(x=>x.id===b.dataset.id);select(l0,l0.l1[0],l0.l1[0].l2[0]);document.getElementById('s-hier').scrollIntoView({behavior:'smooth',block:'start'})});
 
-/* ---------- الهرمية ---------- */
-function select(l0,l1,l2){S.l0=l0;S.l1=l1||l0.l1[0];S.l2=l2||S.l1.l2[0];renderMap();renderHier();renderRadial();renderConst();syncL2Select()}
-function renderHier(){
-  $('#col0').innerHTML=M.l0.map(x=>`<button class="item${x===S.l0?' active':''}" data-l="0" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.l1.length}</span></button>`).join('');
-  $('#col1').innerHTML=S.l0.l1.map(x=>`<button class="item${x===S.l1?' active':''}" data-l="1" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.l2.length}</span></button>`).join('');
-  $('#col2').innerHTML=S.l1.l2.map(x=>`<button class="item${x===S.l2?' active':''}" data-l="2" data-id="${x.id}"><span>${esc(x.n)}</span><span class="c">${x.sys.length+1+(x.svc?1:0)} ارتباط</span></button>`).join('');
-  $('#c0n').textContent=M.l0.length+' قدرة';$('#c1n').textContent=S.l0.l1.length+' قدرة';$('#c2n').textContent=S.l1.l2.length+' قدرة';
-  $('#crumb').innerHTML=`<span class="lvl">L0</span><span>${esc(S.l0.n)}</span><span class="sep">‹</span><span class="lvl">L1</span><span>${esc(S.l1.n)}</span><span class="sep">‹</span><span class="lvl">L2</span><b>${esc(S.l2.n)}</b>`;
-  const a=document.querySelector('#col0 .item.active');if(a){const c=a.closest('.col');c.scrollTop=Math.max(0,a.offsetTop-c.clientHeight/2)}
-}
-document.addEventListener('click',e=>{const b=e.target.closest('.item');if(!b)return;const l=b.dataset.l,id=b.dataset.id;
-  if(l==='0'){const x=M.l0.find(y=>y.id===id);select(x,x.l1[0],x.l1[0].l2[0])}
-  else if(l==='1'){const x=M.l1.find(y=>y.id===id);select(x.l0,x,x.l2[0])}
-  else{const x=M.l2.find(y=>y.id===id);select(x.l1.l0,x.l1,x)}
-});
-
-/* ---------- الشجرة الدائرية ---------- */
-function renderRadial(){
-  const l0=S.l0,W=720,cx=W/2,cy=W/2,r1=150,r2=275;
-  const n2=l0.l1.reduce((a,x)=>a+x.l2.length,0);
-  let ang=-Math.PI/2;const gap=0.18/Math.max(1,l0.l1.length);
-  let lines='',nodes='',labels='';
-  const wrapText=(t,max)=>{const w=t.split(' ');const out=[];let cur='';w.forEach(x=>{if((cur+' '+x).trim().length>max){out.push(cur.trim());cur=x}else cur+=' '+x});if(cur.trim())out.push(cur.trim());return out};
-  l0.l1.forEach(l1=>{
-    const span=(l1.l2.length/n2)*(Math.PI*2-gap*l0.l1.length);
-    const a1=ang+span/2;const x1=cx+Math.cos(a1)*r1,y1=cy+Math.sin(a1)*r1;
-    lines+=`<line x1="${cx}" y1="${cy}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}"/>`;
-    let a=ang;
-    l1.l2.forEach(l2=>{
-      const step=span/l1.l2.length;const a2=a+step/2;a+=step;
-      const x2=cx+Math.cos(a2)*r2,y2=cy+Math.sin(a2)*r2;
-      lines+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
-      const on=l2===S.l2;
-      nodes+=`<g class="nd" data-id="${l2.id}" data-l="2" style="cursor:pointer"><circle class="l2n${on?' on':''}" cx="${x2.toFixed(1)}" cy="${y2.toFixed(1)}" r="6"/></g>`;
-      const lx=cx+Math.cos(a2)*(r2+13),ly=cy+Math.sin(a2)*(r2+13);
-      const anchor=Math.cos(a2)>0.15?'start':Math.cos(a2)<-0.15?'end':'middle';
-      const lns=wrapText(l2.n,16);
-      labels+=`<text class="l2t" x="${lx.toFixed(1)}" y="${(ly+4-(lns.length-1)*6).toFixed(1)}" text-anchor="${anchor}">${lns.map((t,i)=>`<tspan x="${lx.toFixed(1)}" dy="${i?12:0}">${esc(t)}</tspan>`).join('')}</text>`;
+/* ---------- شبكة القوى ---------- */
+function buildGraph(l0s){
+  const nodes=[],links=[],byId={};
+  const add=(id,o)=>{if(!byId[id]){byId[id]=Object.assign({id},o);nodes.push(byId[id])}return byId[id]};
+  const link=(a,b,k)=>links.push({source:a.id,target:b.id,k:k||'el'});
+  l0s.forEach(l0=>{
+    const n0=add(l0.id,{t:'cap',lvl:0,ref:l0,n:l0.n});
+    if(l0.policy)link(add('pol:'+l0.policy.n,{t:'pol',n:l0.policy.n,at:0}),n0);
+    if(l0.committee)link(add('comm:'+l0.committee.n,{t:'comm',n:l0.committee.n,at:0}),n0);
+    l0.l1.forEach(l1=>{
+      const n1=add(l1.id,{t:'cap',lvl:1,ref:l1,n:l1.n});link(n0,n1,'tree');
+      if(l1.unit)link(add('unit:'+l1.unit.n,{t:'unit',n:l1.unit.n,at:1,ref:l1.unit}),n1);
+      if(l1.proc)link(add('proc:'+l1.proc.n,{t:'proc',n:l1.proc.n,at:1,ref:l1.proc}),n1);
+      if(l1.policy)link(add('pol:'+l1.policy.n,{t:'pol',n:l1.policy.n,at:1}),n1);
+      if(l1.reg)link(add('reg:'+l1.reg.n,{t:'reg',n:l1.reg.n,at:1}),n1);
+      if(l1.committee)link(add('comm:'+l1.committee.n,{t:'comm',n:l1.committee.n,at:1}),n1);
+      l1.l2.forEach(l2=>{
+        const n2=add(l2.id,{t:'cap',lvl:2,ref:l2,n:l2.n});link(n1,n2,'tree');
+        l2.sys.forEach(s=>link(add('sys:'+s,{t:'sys',n:s,at:2}),n2));
+        link(add('perm:'+l2.id,{t:'perm',n:l2.perm.n,at:2,ref:l2.perm}),n2);
+        if(l2.svc)link(add('svc:'+l2.svc,{t:'svc',n:l2.svc,at:2}),n2);
+      });
     });
-    const on=l1===S.l1;
-    const lns=wrapText(l1.n,14);
-    nodes+=`<g class="nd" data-id="${l1.id}" data-l="1" style="cursor:pointer"><circle class="l1n${on?' on':''}" cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="34"/><text class="l1t${on?' on':''}" x="${x1.toFixed(1)}" y="${(y1+4-(lns.length-1)*7).toFixed(1)}" text-anchor="middle">${lns.map((t,i)=>`<tspan x="${x1.toFixed(1)}" dy="${i?13:0}">${esc(t)}</tspan>`).join('')}</text></g>`;
-    ang+=span+gap;
   });
-  const l0l=wrapText(l0.n,16);
-  const center=`<circle cx="${cx}" cy="${cy}" r="62" fill="var(--accent)"/><text class="l0t" x="${cx}" y="${cy+5-(l0l.length-1)*8}" text-anchor="middle">${l0l.map((t,i)=>`<tspan x="${cx}" dy="${i?16:0}">${esc(t)}</tspan>`).join('')}</text>`;
-  $('#radial').innerHTML=`<svg viewBox="0 0 ${W} ${W}" role="img" aria-label="الشجرة الدائرية لقدرة ${esc(l0.n)}">${lines}${nodes}${labels}${center}</svg>`;
+  return {nodes,links};
 }
-$('#radial').addEventListener('click',e=>{const g=e.target.closest('.nd');if(!g)return;if(g.dataset.l==='1'){const x=M.l1.find(y=>y.id===g.dataset.id);select(x.l0,x,x.l2[0])}else{const x=M.l2.find(y=>y.id===g.dataset.id);select(x.l1.l0,x.l1,x)}});
-
-/* ---------- الارتباطات ---------- */
-function syncL2Select(){const s=$('#selL2');if(!s.options.length){s.innerHTML=M.l2.map(x=>`<option value="${x.id}">${esc(x.l1.l0.n)} › ${esc(x.l1.n)} › ${esc(x.n)}</option>`).join('')}s.value=S.l2.id}
-$('#selL2').addEventListener('change',e=>{const x=M.l2.find(y=>y.id===e.target.value);select(x.l1.l0,x.l1,x)});
-function el(type,title,body,lvl,none){return `<div class="el${none?' none':''}" data-el><div class="t"><span>${ICON[type]} ${title}</span>${none?'':`<span class="lv">مرتبط بالمستوى ${lvl}</span>`}</div>${body}</div>`}
-function renderConst(){
-  const l2=S.l2,l1=l2.l1,l0=l1.l0;
-  const pol=l1.policy?{n:l1.policy.n,lv:1}:l0.policy?{n:l0.policy.n,lv:0}:null;
-  const com=l1.committee?{n:l1.committee.n,lv:1}:l0.committee?{n:l0.committee.n,lv:0}:null;
-  const cards=[
-    l2.sys.length?el('sys','نظام تقني',`<div class="n">${l2.sys.map(esc).join('<br>')}</div><div class="sub">${l2.sys.length>1?'نظامان يخدمان هذه القدرة':'يخدم أيضًا قدرات أخرى'}</div>`,2):el('sys','نظام تقني','<div class="n">لا يوجد نظام يغطي هذه القدرة</div><div class="sub">فجوة أتمتة</div>',2,true),
-    el('perm','صلاحية',`<div class="n">${esc(l2.perm.n)}</div><div class="raci"><span>معتمد <b>${esc(l2.perm.approver)}</b></span><span>مسؤول <b>${esc(l2.perm.resp)}</b></span><span>مستشار <b>${esc(l2.perm.adv)}</b></span><span>موصي <b>${esc(l2.perm.rec)}</b></span><span>مطلع <b>${esc(l2.perm.inf)}</b></span></div>`,2),
-    l1.proc?el('proc','إجراء عمل',`<div class="n">${esc(l1.proc.n)}</div><div class="kpi-mini"><span>الجودة <b>${l1.proc.kq}%</b></span><span>الزمن <b>${l1.proc.kt} يوم</b></span><span>الأتمتة <b>${l1.proc.auto}%</b></span></div>`,1):el('proc','إجراء عمل','<div class="n">لا يوجد إجراء موثق</div><div class="sub">فجوة إجرائية</div>',1,true),
-    l1.unit?el('unit','الوحدة المالكة',`<div class="n">${esc(l1.unit.n)}</div><div class="sub">${esc(l1.unit.gd)}</div><div class="sub">${l1.unit.manual?'✓ دليل مهام معتمد':'دليل المهام غير معتمد'}</div>`,1):el('unit','الوحدة المالكة','<div class="n">لا مالك محدد</div><div class="sub">فجوة ملكية</div>',1,true),
-    pol?el('pol','سياسة داخلية',`<div class="n">${esc(pol.n)}</div><div class="sub">${pol.lv===0?'السياسة العامة للقدرة الرئيسية تغطي هذه القدرة':'سياسة خاصة بالقدرة الفرعية'}</div>`,pol.lv):el('pol','سياسة داخلية','<div class="n">لا سياسة تغطي هذه القدرة</div><div class="sub">فجوة سياسات</div>',1,true),
-    l2.svc?el('svc','خدمة يقدمها البنك',`<div class="n">${esc(l2.svc)}</div><div class="sub">خدمة خارجية للمستفيدين</div>`,2):el('svc','خدمة يقدمها البنك','<div class="n">قدرة داخلية بلا خدمة مباشرة</div>',2,true),
-    l1.reg?el('reg','أداة تنظيمية',`<div class="n">${esc(l1.reg.n)}</div><div class="sub">صادرة عن البنك للجهات الخاضعة</div>`,1):el('reg','أداة تنظيمية',l0.sup?'<div class="n">لا أداة تنظيمية تغطي القدرة</div><div class="sub">فجوة تنظيمية</div>':'<div class="n">قدرة غير رقابية</div>',1,true),
-    com?el('comm','لجنة',`<div class="n">${esc(com.n)}</div><div class="sub">أعضاؤها من الوحدات المالكة للقدرات تحتها</div>`,com.lv):el('comm','لجنة','<div class="n">لا لجنة مرتبطة</div>',0,true)
-  ];
-  const center=`<div class="el center"><span class="lv" style="justify-self:center;font-size:10.5px;padding:1px 8px;border-radius:999px">${l2.id} · المستوى 2</span><div class="n">${esc(l2.n)}</div><div class="sub">${esc(l1.n)} › ${esc(l0.n)}</div></div>`;
-  const order=[cards[0],cards[1],cards[2],cards[3],center,cards[4],cards[5],cards[6],cards[7]];
-  $('#const').innerHTML=`<svg class="lines" aria-hidden="true"></svg>`+order.join('');
-  requestAnimationFrame(drawLines);
-}
-function drawLines(){
-  const c=$('#const'),svg=c.querySelector('svg.lines'),ctr=c.querySelector('.el.center');if(!svg||!ctr)return;
-  if(window.innerWidth<=760){svg.innerHTML='';return}
-  const cr=c.getBoundingClientRect(),m=ctr.getBoundingClientRect();
-  const mx=m.left-cr.left+m.width/2,my=m.top-cr.top+m.height/2;
-  svg.setAttribute('viewBox',`0 0 ${cr.width} ${cr.height}`);
-  svg.innerHTML=[...c.querySelectorAll('[data-el]')].map(e=>{const r=e.getBoundingClientRect();const x=r.left-cr.left+r.width/2,y=r.top-cr.top+r.height/2;return `<line x1="${mx}" y1="${my}" x2="${x}" y2="${y}"/>`}).join('');
-}
-window.addEventListener('resize',()=>requestAnimationFrame(drawLines));
-
-/* ---------- التبويبات ---------- */
-$('#tabs').addEventListener('click',e=>{const t=e.target.closest('.tab');if(!t)return;document.querySelectorAll('#tabs .tab').forEach(x=>x.setAttribute('aria-selected',x===t));document.querySelectorAll('[role=tabpanel]').forEach(p=>p.hidden=p.id!=='p-'+t.dataset.t)});
-
-/* ---------- دراسة الأثر ---------- */
-$('#selInit').innerHTML=INITS.map((x,i)=>`<option value="${i}">${esc(x.n)}</option>`).join('');
-const ACT={'إضافة':'good','تعديل':'warn','حذف':'crit','تحسين':'teal'};
-function renderImpact(){
-  const init=INITS[+$('#selInit').value];
-  const hits=[];init.hits.forEach(h=>{const l0=M.l0[h[0]],l1=l0.l1[h[1]];if(h[2]===null)l1.l2.forEach(l2=>hits.push({l2,a:h[3]}));else hits.push({l2:l1.l2[h[2]],a:h[3]})});
-  const l1s=[...new Set(hits.map(h=>h.l2.l1))],l0s=[...new Set(l1s.map(x=>x.l0))];
-  const sys=new Set(),units=new Set(),procs=[],pols=new Set(),regs=[],svcs=new Set(),perms=hits.length;
-  hits.forEach(h=>{h.l2.sys.forEach(s=>sys.add(s));if(h.l2.svc)svcs.add(h.l2.svc)});
-  l1s.forEach(x=>{if(x.unit)units.add(x.unit.n);if(x.proc)procs.push(x.proc.n);if(x.policy)pols.add(x.policy.n);else if(x.l0.policy)pols.add(x.l0.policy.n);if(x.reg)regs.push(x.reg.n)});
-  const total=sys.size+units.size+procs.length+pols.size+regs.length+svcs.size+perms;
-  $('#impStats').innerHTML=[[l0s.length,'قدرة رئيسية متأثرة'],[l1s.length,'قدرة فرعية'],[hits.length,'قدرة تفصيلية'],[total,'عنصر تشغيلي يجب مراجعته']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');
-  $('#impTree').innerHTML=`<p style="font-size:13px;color:var(--ink-2);margin-bottom:4px">${esc(init.d)}</p>`+l0s.map(l0=>`<div class="l0b"><header><span>${esc(l0.n)}</span><span class="chip grey">${l0.id}</span></header>${l1s.filter(x=>x.l0===l0).map(l1=>`<div class="l1r"><div class="h"><span>${esc(l1.n)}</span></div><div class="l2s">${hits.filter(h=>h.l2.l1===l1).map(h=>`<span class="chip ${ACT[h.a]}">${h.a} · ${esc(h.l2.n)}</span>`).join('')}</div></div>`).join('')}</div>`).join('');
-  const rows=[['sys','أنظمة تقنية',[...sys]],['perm','صلاحيات',[`${perms} صلاحية اعتماد تُراجع مصفوفة أدوارها`]],['proc','إجراءات عمل',procs],['pol','سياسات',[...pols]],['reg','أدوات تنظيمية',regs],['unit','وحدات إدارية',[...units]],['svc','خدمات',[...svcs]]];
-  $('#impEls').innerHTML=rows.filter(r=>r[2].length).map(r=>`<div class="row"><div><div class="n">${ICON[r[0]]} ${r[1]}</div><div class="s">${r[2].map(esc).join(' · ')}</div></div><span class="chip grey num">${r[0]==='perm'?perms:r[2].length}</span></div>`).join('');
-}
-$('#selInit').addEventListener('change',renderImpact);
-
-/* ---------- الفجوات ---------- */
-function gapsOf(l1){const g=[];if(!l1.proc)g.push(['proc','بلا إجراء']);if(!l1.policy&&!l1.l0.policy)g.push(['pol','بلا سياسة']);if(l1.l0.sup&&!l1.reg)g.push(['reg','بلا أداة تنظيمية']);if(!l1.l2.some(x=>x.sys.length))g.push(['sys','بلا نظام']);if(!l1.unit)g.push(['own','بلا مالك']);return g}
-function renderGaps(){
-  const on={proc:$('#g-proc').checked,pol:$('#g-pol').checked,reg:$('#g-reg').checked,sys:$('#g-sys').checked,own:$('#g-own').checked};
-  const flagged=M.l1.filter(x=>gapsOf(x).some(g=>on[g[0]]));
-  const cnt=k=>M.l1.filter(x=>gapsOf(x).some(g=>g[0]===k)).length;
-  $('#gapStats').innerHTML=[[flagged.length+' / '+M.l1.length,'قدرة فرعية فيها فجوة مختارة'],[cnt('proc'),'بلا إجراء عمل'],[cnt('pol'),'بلا سياسة'],[cnt('reg'),'رقابية بلا أداة تنظيمية'],[cnt('sys'),'بلا نظام تقني'],[cnt('own'),'بلا وحدة مالكة']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');
-  $('#gapTree').innerHTML=M.l0.map(l0=>{const f=l0.l1.filter(x=>flagged.includes(x)).length;return `<div class="l0b"><header><span>${esc(l0.n)}</span><span class="chip ${f?'crit':'good'}">${f?f+' من '+l0.l1.length+' فجوة':'مغطاة'}</span></header><div class="l1r"><div class="l2s">${l0.l1.map(l1=>{const g=gapsOf(l1).filter(x=>on[x[0]]);return g.length?`<span class="chip crit" title="${g.map(x=>x[1]).join('، ')}">${esc(l1.n)} · ${g.map(x=>x[1]).join('، ')}</span>`:`<span class="chip grey">${esc(l1.n)}</span>`}).join('')}</div></div></div>`}).join('');
-}
-$('#gapCtl').addEventListener('change',renderGaps);
-
-/* ---------- الخريطة الحرارية ---------- */
-const SEQ=['--seq1','--seq2','--seq3','--seq4','--seq5','--seq6','--seq7'];
-function heatVal(l1,m){if(m==='auto')return l1.proc?l1.proc.auto:null;if(m==='kq')return l1.proc?l1.proc.kq:null;return l1.l2.length}
-function renderHeat(){
-  const m=$('#selMetric').value;
-  const vals=M.l1.map(x=>heatVal(x,m)).filter(v=>v!==null);
-  const lo=Math.min(...vals),hi=Math.max(...vals);
-  const step=v=>{const t=(v-lo)/Math.max(1,hi-lo);return SEQ[Math.min(6,Math.floor(t*6.999))]};
-  $('#heat').innerHTML=M.l0.map(l0=>`<div class="hm-row"><div class="lbl">${esc(l0.n)}</div><div class="hm-cells">${l0.l1.map(l1=>{const v=heatVal(l1,m);return `<button class="hm-cell${v===null?' none':''}" data-id="${l1.id}" data-v="${v===null?'':v}" style="${v===null?'':'background:var('+step(v)+')'}" aria-label="${esc(l1.n)}"></button>`}).join('')}</div></div>`).join('');
-  const unitL=m==='perm'?'صلاحية':'%';
-  $('#heatLegend').innerHTML=`<span>أقل (${lo}${unitL==='%'?'%':''})</span><span class="ramp">${SEQ.map(s=>`<i style="background:var(${s})"></i>`).join('')}</span><span>أعلى (${hi}${unitL==='%'?'%':''})</span><span style="margin-inline-start:14px"><i class="none"></i> لا إجراء عمل يغطي القدرة</span>`;
-}
-$('#selMetric').addEventListener('change',renderHeat);
-$('#heat').addEventListener('mouseover',e=>{const c=e.target.closest('.hm-cell');if(!c)return;const l1=M.l1.find(x=>x.id===c.dataset.id);const m=$('#selMetric').value;const lbl=m==='auto'?'نسبة الأتمتة':m==='kq'?'مؤشر الجودة':'الصلاحيات المرتبطة';const v=c.dataset.v===''?'لا يوجد إجراء عمل':c.dataset.v+(m==='perm'?' صلاحية':'%');const r=c.getBoundingClientRect();showTip(`<b>${esc(l1.n)}</b><br>${esc(l1.l0.n)}<br>${lbl}: ${v}`,r.left+r.width/2,r.top)});
-$('#heat').addEventListener('mouseout',e=>{if(e.target.closest('.hm-cell'))hideTip()});
-$('#heat').addEventListener('click',e=>{const c=e.target.closest('.hm-cell');if(!c)return;const l1=M.l1.find(x=>x.id===c.dataset.id);select(l1.l0,l1,l1.l2[0])});
-
-/* ---------- الأولويات ---------- */
-const W=['reg','risk','vis','ext'];
-function renderPrio(){
-  const w={};W.forEach(k=>{w[k]=+$('#w-'+k).value;$('#w-'+k+'-v').textContent=w[k]});
-  const tw=W.reduce((a,k)=>a+w[k],0)||1;
-  const rows=M.l0.map(l0=>{const sc=W.reduce((a,k)=>a+w[k]*l0.scores[k],0)/tw;const els=l0.l1.reduce((a,x)=>a+(x.proc?1:0)+(x.policy?1:0)+(x.reg?1:0)+(x.unit?1:0)+x.l2.reduce((b,y)=>b+y.sys.length+1+(y.svc?1:0),0),0)+(l0.policy?1:0)+(l0.committee?1:0);return {l0,sc,els}}).sort((a,b)=>b.sc-a.sc);
-  const tier=s=>s>=3.8?['عالية','crit']:s>=2.8?['متوسطة','warn']:['منخفضة','grey'];
-  const hi=rows.filter(r=>r.sc>=3.8);
-  $('#prioStats').innerHTML=[[hi.length,'قدرة رئيسية بأولوية عالية'],[hi.reduce((a,r)=>a+r.els,0),'عنصر تشغيلي يرث الأولوية العالية']].map(k=>`<div class="stat"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
-  $('#prioList').innerHTML=rows.map((r,i)=>{const t=tier(r.sc);return `<div class="r"><span class="rk">${i+1}</span><span>${esc(r.l0.n)}<div class="sc">${r.els} عنصر يرث الأولوية</div></span><div class="bar"><i style="width:${(r.sc/5*100).toFixed(0)}%"></i></div><span class="chip ${t[1]}">${t[0]} · ${r.sc.toFixed(1)}</span></div>`}).join('');
-}
-W.forEach(k=>$('#w-'+k).addEventListener('input',renderPrio));
-
-/* ---------- المستهدفات ---------- */
-function renderTargets(){
-  const supL1=M.l1.filter(x=>x.l0.sup);
-  const rows=[
-    ['السياسات الداخلية','سياسة واحدة لكل قدرة مستوى 0',M.l0.filter(x=>x.policy).length,M.l0.length],
-    ['إجراءات العمل','إجراء واحد لكل قدرة مستوى 1',M.l1.filter(x=>x.proc).length,M.l1.length],
-    ['الأدوات التنظيمية','أداة لكل قدرة رقابية مستوى 1',supL1.filter(x=>x.reg).length,supL1.length],
-    ['أدلة المهام','دليل معتمد لكل وحدة إدارية مالكة',M.units.filter(x=>x.manual).length,M.units.length],
-    ['التغطية التقنية','نظام واحد على الأقل لكل قدرة مستوى 2',M.l2.filter(x=>x.sys.length).length,M.l2.length]
-  ];
-  $('#targets').innerHTML=rows.map(r=>`<div class="r"><div class="h"><span>${r[0]} <span class="why">· ${r[1]}</span></span><b>${r[2]} من ${r[3]} <span style="color:var(--muted);font-weight:400">(الفجوة ${r[3]-r[2]})</span></b></div><div class="bar"><i class="${r[2]/r[3]<.7?'gold':''}" style="width:${(r[2]/r[3]*100).toFixed(0)}%"></i></div></div>`).join('');
+function makeGraph(el,l0s,opts){
+  opts=opts||{};
+  const W=el.clientWidth||800,H=el.clientHeight||560;
+  const G=buildGraph(l0s);
+  const svg=d3.select(el).append('svg').attr('viewBox',[0,0,W,H]).attr('class','g');
+  const gz=svg.append('g');
+  const gl=gz.append('g'),gn=gz.append('g');
+  svg.call(d3.zoom().scaleExtent([.35,4]).on('zoom',e=>{gz.attr('transform',e.transform);gn.selectAll('.lbl.el').attr('opacity',e.transform.k>1.5?1:0)}));
+  const vis=new Set(opts.vis||Object.keys(TYPES));
+  const adj={};G.links.forEach(l=>{(adj[l.source]=adj[l.source]||new Set()).add(l.target);(adj[l.target]=adj[l.target]||new Set()).add(l.source)});
+  const rad=d=>d.t==='cap'?(d.lvl===0?24:d.lvl===1?14:9):6;
+  const sim=d3.forceSimulation().force('link',d3.forceLink().id(d=>d.id).distance(l=>l.k==='tree'?(l.source.lvl===0?110:60):30).strength(l=>l.k==='tree'?.9:.6))
+    .force('charge',d3.forceManyBody().strength(d=>d.t==='cap'?(d.lvl===0?-500:d.lvl===1?-220:-90):-40))
+    .force('collide',d3.forceCollide().radius(d=>rad(d)+6).iterations(2))
+    .force('center',d3.forceCenter(W/2,H/2)).force('x',d3.forceX(W/2).strength(.04)).force('y',d3.forceY(H/2).strength(.06));
+  let selected=null;
+  function color(d){return d.t==='cap'?C.cap:GC[TYPES[d.t].g]}
+  function render(){
+    const nodes=G.nodes.filter(n=>n.t==='cap'||vis.has(n.t));const ids=new Set(nodes.map(n=>n.id));
+    const links=G.links.filter(l=>ids.has(typeof l.source==='object'?l.source.id:l.source)&&ids.has(typeof l.target==='object'?l.target.id:l.target));
+    const ln=gl.selectAll('line').data(links,l=>(l.source.id||l.source)+'|'+(l.target.id||l.target));
+    ln.exit().remove();ln.enter().append('line').attr('class',l=>'link '+l.k).merge(ln);
+    const nd=gn.selectAll('g.node').data(nodes,d=>d.id);
+    nd.exit().transition().duration(dur(300)).attr('opacity',0).remove();
+    const en=nd.enter().append('g').attr('class','node').attr('opacity',0).call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(.3).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+    en.each(function(d){const g=d3.select(this);if(d.t==='cap'){g.append('circle').attr('r',rad(d)).attr('fill',d.lvl===0?C.cap:d.lvl===1?'#2A8C6E':'#1F5A48').attr('stroke',C.capInk).attr('stroke-width',d.lvl===0?2:1.2).attr('stroke-opacity',.6)}else{g.append('path').attr('d',d3.symbol().type(TYPES[d.t].sym).size(d.t==='comm'?60:110)).attr('fill',d.t==='comm'?'none':color(d)).attr('stroke',color(d)).attr('stroke-width',1.5)}
+      g.append('text').attr('class','lbl '+(d.t==='cap'?'cap':'el')).attr('text-anchor','middle').attr('dy',rad(d)+12).attr('opacity',d.t==='cap'?1:0).text(d.n.length>22?d.n.slice(0,21)+'…':d.n)});
+    en.on('click',(e,d)=>{e.stopPropagation();selectNode(d)}).on('mousemove',(e,d)=>{const at=d.t==='cap'?'قدرة · المستوى '+d.lvl:TYPES[d.t].n+' · مرتبط بالمستوى '+d.at;const deg=(adj[d.id]||new Set()).size;showTip(`<b>${esc(d.n)}</b><br>${at}<br>${deg} ارتباط`,e.clientX,e.clientY)}).on('mouseleave',hideTip);
+    en.transition().duration(dur(500)).attr('opacity',1);
+    sim.nodes(nodes);sim.force('link').links(links);sim.alpha(.7).restart();
+  }
+  sim.on('tick',()=>{gl.selectAll('line').attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);gn.selectAll('g.node').attr('transform',d=>`translate(${d.x},${d.y})`)});
+  function selectNode(d){selected=d;const nb=adj[d.id]||new Set();gn.selectAll('g.node').classed('dim',n=>d&&n!==d&&!nb.has(n.id));gl.selectAll('line').classed('dim',l=>d&&l.source!==d&&l.target!==d);gn.selectAll('g.node').filter(n=>n===d).raise();if(opts.onSelect)opts.onSelect(d,[...nb].map(id=>G.nodes.find(n=>n.id===id)))}
+  svg.on('click',()=>{selected=null;gn.selectAll('g.node').classed('dim',false);gl.selectAll('line').classed('dim',false);if(opts.onSelect)opts.onSelect(null,[])});
+  render();
+  return {
+    G,adj,svg,gn,gl,sim,
+    setVis(types){vis.clear();types.forEach(t=>vis.add(t));render()},
+    toggle(t){if(vis.has(t))vis.delete(t);else vis.add(t);render();return vis.has(t)},
+    has(t){return vis.has(t)},
+    selectId(id){const d=G.nodes.find(n=>n.id===id);if(d)selectNode(d)},
+    clear(){gn.selectAll('g.node').classed('dim',false).classed('hit',false).each(function(d){const g=d3.select(this);if(d.t==='cap')g.select('circle').attr('fill',d.lvl===0?C.cap:d.lvl===1?'#2A8C6E':'#1F5A48').attr('stroke',C.capInk);else g.select('path').attr('fill',d.t==='comm'?'none':color(d)).attr('stroke',color(d));g.select('.lbl.el').attr('opacity',0)});gl.selectAll('line').classed('dim',false).classed('wave',false)},
+    wave(hits,onHop){
+      /* hits: Map(id -> action) على قدرات المستوى 2 */
+      const hop={},act={},queue=[];hits.forEach((a,id)=>{hop[id]=0;act[id]=a;queue.push(id)});
+      while(queue.length){const id=queue.shift();(adj[id]||[]).forEach(n=>{if(hop[n]===undefined){hop[n]=hop[id]+1;act[n]=act[id];queue.push(n)}})}
+      const maxHop=Math.max(0,...Object.values(hop));
+      gn.selectAll('g.node').classed('dim',d=>hop[d.id]===undefined);gl.selectAll('line').classed('dim',l=>hop[l.source.id]===undefined||hop[l.target.id]===undefined);
+      for(let h=0;h<=maxHop;h++){
+        setTimeout(()=>{
+          const ns=gn.selectAll('g.node').filter(d=>hop[d.id]===h);
+          ns.classed('hit',true).each(function(d){const g=d3.select(this);const col=ACT_COLOR[act[d.id]];g.style('color',col);g.select('circle').transition().duration(dur(350)).attr('fill',col).attr('stroke',col);g.select('path').transition().duration(dur(350)).attr('fill',d.t==='comm'?'none':col).attr('stroke',col);g.insert('circle','text').attr('r',rad(d)+2).attr('fill','none').attr('stroke',col).attr('class','pulse').transition().delay(dur(1300)).remove()});
+          gl.selectAll('line').filter(l=>hop[l.source.id]===h-1&&hop[l.target.id]===h||hop[l.target.id]===h-1&&hop[l.source.id]===h).classed('wave',true);
+          const reached=G.nodes.filter(n=>hop[n.id]!==undefined&&hop[n.id]<=h);
+          if(onHop)onHop(h,reached,act,maxHop);
+        },dur(h*650));
+      }
+      return maxHop;
+    }
+  };
 }
 
-/* ---------- اللجان ---------- */
-$('#commL0').innerHTML=M.l0.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('');
-$('#commL0').value='L0-09';
-function fillCommL1(){const l0=M.l0.find(x=>x.id===$('#commL0').value);$('#commL1').innerHTML=`<option value="">كامل القدرة الرئيسية</option>`+l0.l1.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('')}
-function renderComm(){
-  const l0=M.l0.find(x=>x.id===$('#commL0').value);const l1id=$('#commL1').value;const scope=l1id?[M.l1.find(x=>x.id===l1id)]:l0.l1;
-  const units=[...new Set(scope.map(x=>x.unit).filter(Boolean))];
-  const related=[...new Set(M.l1.filter(x=>x.l0!==l0&&x.l2.some(y=>y.sys.some(s=>scope.some(z=>z.l2.some(q=>q.sys.includes(s)))))).map(x=>x.unit).filter(Boolean))].slice(0,3);
-  $('#commTitle').textContent='التشكيل المقترح: لجنة '+(l1id?scope[0].n:l0.n);
-  $('#commMembers').innerHTML=`<div class="m chair">${esc(l0.gd)}<small>رئيس اللجنة · الإدارة العامة المالكة</small></div>`+units.map(u=>`<div class="m">${esc(u.n)}<small>عضو · مالك ${u.l1.filter(x=>scope.includes(x)).length} قدرة في النطاق</small></div>`).join('')+related.map(u=>`<div class="m">${esc(u.n)}<small>عضو مدعو · تشارك النظام التقني</small></div>`).join('')+`<div class="m">الشؤون القانونية<small>مستشار · بحكم السياسة</small></div>`;
-  $('#commCaps').innerHTML=scope.map(x=>`<div class="row"><div><div class="n">${esc(x.n)}</div><div class="s">${x.unit?esc(x.unit.n):'بلا مالك'} · ${x.l2.length} قدرة تفصيلية</div></div><span class="chip grey">${x.id}</span></div>`).join('');
-}
-$('#commL0').addEventListener('change',()=>{fillCommL1();renderComm()});$('#commL1').addEventListener('change',renderComm);
+/* ---------- الفصول ---------- */
+const scene=$('#scene'),hdTools=$('#hdTools');
+const ACTS=[];
+const el=(html)=>{const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild};
 
-/* ---------- التقارير ---------- */
-function renderReports(){
-  const gov=M.l2.filter(x=>x.perm.approver==='معالي المحافظ').length;
-  const dep=M.l2.filter(x=>x.perm.approver==='معالي نائب المحافظ').length;
-  const noProc=M.units.filter(u=>u.l1.some(x=>!x.proc));
-  const sysCount={};M.l2.forEach(x=>x.sys.forEach(s=>sysCount[s]=(sysCount[s]||0)+1));
-  const multi=Object.values(sysCount).filter(v=>v>1).length;
-  $('#repKpis').innerHTML=[[gov,'صلاحية اعتماد بيد معالي المحافظ'],[dep,'صلاحية اعتماد بيد معالي نائب المحافظ'],[noProc.length,'وحدة إدارية تملك قدرة بلا إجراء'],[multi,'نظام تقني يخدم أكثر من قدرة']].map(k=>`<div class="kpi"><div class="v">${fmt(k[0])}</div><div class="l">${k[1]}</div></div>`).join('');
-  const lv=a=>a==='معالي المحافظ'?'المحافظ':a==='معالي نائب المحافظ'?'نائب المحافظ':a.startsWith('وكيل')?'وكلاء المحافظ':a.startsWith('مدير عام')?'المديرون العامون':'مديرو الإدارات';
-  const dist={};M.l2.forEach(x=>{const k=lv(x.perm.approver);dist[k]=(dist[k]||0)+1});
-  const order=['المحافظ','نائب المحافظ','وكلاء المحافظ','المديرون العامون','مديرو الإدارات'];const mx=Math.max(...Object.values(dist));
-  $('#repBar').innerHTML=order.map(k=>`<div class="r"><span class="lbl">${k}</span><div class="track"><i style="width:${((dist[k]||0)/mx*100).toFixed(0)}%"></i></div><span class="v">${dist[k]||0}</span></div>`).join('');
-  $('#repTbl tbody').innerHTML=noProc.slice(0,8).flatMap(u=>u.l1.filter(x=>!x.proc).map(x=>`<tr><td>${esc(u.n)}</td><td>${esc(x.n)}</td><td>${esc(x.l0.n)}</td></tr>`)).join('')+(noProc.length>8?`<tr><td colspan="3" style="color:var(--muted)">و${noProc.length-8} وحدات أخرى</td></tr>`:'');
-}
+/* 0 الافتتاح */
+ACTS.push({id:'title',eyebrow:'الافتتاح',title:'',lead:'',steps:1,
+  mount(root){
+    root.innerHTML=`<div class="title-act"><div>
+      <span class="eyebrow">هيكلية الأعمال في البنك المركزي</span>
+      <h2 style="margin-top:14px">خريطة واحدة تربط مهام النظام بكل ما يجري في طبقة التشغيل</h2>
+      <p class="lead">من المهام المنصوص عليها في نظام البنك المركزي السعودي، إلى قدرات مؤسسية بثلاثة مستويات، إلى كل نظام وصلاحية وإجراء وسياسة ووحدة تعمل تحتها. عرض حيّ: كل ما تراه قابل للنقر والسحب والتكبير.</p>
+      <div class="cta"><button class="btn primary" id="startBtn">ابدأ العرض</button><span>أو اضغط مفتاح المسافة</span></div></div>
+      <div class="counters">
+        <div class="counter"><div class="v" data-k="l0">0</div><div class="l">قدرة رئيسية · المستوى 0</div></div>
+        <div class="counter"><div class="v" data-k="l1">0</div><div class="l">قدرة فرعية · المستوى 1</div></div>
+        <div class="counter"><div class="v" data-k="l2">0</div><div class="l">قدرة تفصيلية · المستوى 2</div></div>
+        <div class="counter"><div class="v gold" data-k="el">0</div><div class="l">ارتباط بعناصر طبقة التشغيل</div></div>
+      </div></div>`;
+    root.querySelector('#startBtn').addEventListener('click',next);
+    const vals={l0:M.l0.length,l1:M.l1.length,l2:M.l2.length,el:SUM.elements};
+    root.querySelectorAll('.counter .v').forEach((e,i)=>setTimeout(()=>countUp(e,vals[e.dataset.k],1400),i*180));
+  },setStep(){}});
 
-/* ---------- التنقل ---------- */
-const links=[...document.querySelectorAll('#nav a')];
-if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+en.target.id))}})},{rootMargin:'-40% 0px -55% 0px'});document.querySelectorAll('section[id]').forEach(s=>io.observe(s))}
+/* 1 من النظام إلى القدرات */
+ACTS.push({id:'law',eyebrow:'الفصل 1 · من أين تأتي القدرات؟',title:'مهام النظام تتحول إلى قدرات، ثم تُستكمل بقدرات مساندة',lead:'كل مهمة نص عليها نظام البنك المركزي تُترجم إلى قدرة رئيسية. ثم تُضاف القدرات التي لا ينص عليها النظام لكن البنك لا يعمل بدونها.',steps:3,
+  mount(root){
+    root.innerHTML=`<div class="split"><div class="viz" id="lawViz"></div><div class="panel" id="lawPanel"><h3>ما الذي يحدث هنا؟</h3><p class="sub" id="lawTxt"></p><hr><div class="stats"><div class="stat"><div class="v" id="lawA">0</div><div class="l">مهمة نظامية</div></div><div class="stat"><div class="v" id="lawB">0</div><div class="l">قدرة مستمدة منها</div></div><div class="stat"><div class="v" id="lawC">0</div><div class="l">قدرة مساندة</div></div><div class="stat"><div class="v" id="lawD">0</div><div class="l">إجمالي المستوى 0</div></div></div></div></div>`;
+    const box=root.querySelector('#lawViz');const W=box.clientWidth||800,H=box.clientHeight||540;
+    const law=M.l0.filter(x=>x.task),sup=M.l0.filter(x=>!x.task);
+    const svg=d3.select(box).append('svg').attr('viewBox',[0,0,W,H]).attr('class','law-svg');
+    const colW=Math.min(300,(W-120)/2),rh=Math.max(22,Math.min(34,(H-70)/law.length)),rowH=rh-4;
+    const xTask=W-colW-14,xCap=14;const top=44;
+    svg.append('text').attr('class','hdr').attr('x',xTask+colW).attr('y',26).attr('text-anchor','end').text('مهام نظام البنك المركزي السعودي');
+    svg.append('text').attr('class','hdr').attr('x',xCap).attr('y',26).attr('text-anchor','start').text('قدرات المستوى 0');
+    const tasks=svg.append('g').selectAll('g').data(law).join('g').attr('class','task fade-svg').attr('transform',(d,i)=>`translate(${xTask},${top+i*rh})`).attr('opacity',0);
+    tasks.append('rect').attr('width',colW).attr('height',rowH).attr('rx',6);
+    tasks.append('text').attr('x',colW-10).attr('y',rowH/2+4).attr('text-anchor','end').text(d=>d.task.length>34?d.task.slice(0,33)+'…':d.task);
+    tasks.append('text').attr('class','art').attr('x',10).attr('y',rowH/2+4).attr('text-anchor','start').text('مهمة');
+    const flows=svg.append('g').selectAll('path').data(law).join('path').attr('class','flow').attr('d',(d,i)=>{const y=top+i*rh+rowH/2;return `M${xTask},${y} C${xTask-60},${y} ${xCap+colW+60},${y} ${xCap+colW},${y}`}).attr('stroke-dasharray',function(){const L=this.getTotalLength();return L+' '+L}).attr('stroke-dashoffset',function(){return this.getTotalLength()});
+    const caps=svg.append('g').selectAll('g').data(law).join('g').attr('class','capn').attr('transform',(d,i)=>`translate(${xCap},${top+i*rh})`).attr('opacity',0);
+    caps.append('rect').attr('width',colW).attr('height',rowH).attr('rx',6);
+    caps.append('text').attr('x',colW-10).attr('y',rowH/2+4).attr('text-anchor','end').text(d=>d.n.length>30?d.n.slice(0,29)+'…':d.n);
+    const supY=top+law.length*rh+18;const supW=Math.min(190,(W-14*2-8*(sup.length-1))/sup.length);
+    const sups=svg.append('g').selectAll('g').data(sup).join('g').attr('class','capn sup').attr('transform',(d,i)=>`translate(${W-14-supW-i*(supW+8)},${supY+22})`).attr('opacity',0);
+    sups.append('rect').attr('width',supW).attr('height',46).attr('rx',6);
+    sups.append('text').attr('x',supW/2).attr('y',20).attr('text-anchor','middle').attr('font-size',11).each(function(d){const l=wrap(d.n,20).slice(0,2);tspans(d3.select(this),l,supW/2,13);if(l.length===1)d3.select(this).attr('y',28)});
+    const supHdr=svg.append('text').attr('class','hdr').attr('x',W-14).attr('y',supY+12).attr('text-anchor','end').attr('opacity',0).text('قدرات مؤسسية مساندة لا ينص عليها النظام');
+    this.h={tasks,flows,caps,sups,supHdr,law,sup,root};
+  },
+  setStep(s,instant){
+    const h=this.h,d=instant?0:1;const txt=$('#lawTxt');
+    if(s>=0){h.tasks.transition().duration(dur(400*d)).delay((x,i)=>dur(i*60*d)).attr('opacity',1);countUp($('#lawA'),h.law.length,900*d);txt.textContent='نبدأ من النص: هذه المهام التي كلّف النظام البنك المركزي بها.'}
+    if(s>=1){h.flows.transition().duration(dur(700*d)).delay((x,i)=>dur(i*60*d)).attr('stroke-dashoffset',0);h.caps.transition().duration(dur(400*d)).delay((x,i)=>dur(300*d+i*60*d)).attr('opacity',1);countUp($('#lawB'),h.law.length,900*d);txt.textContent='كل مهمة تُترجم إلى قدرة رئيسية في المستوى 0. القدرة هي "ما يستطيع البنك فعله" بصرف النظر عمّن يفعله أو بأي نظام.'}
+    else{h.flows.attr('stroke-dashoffset',function(){return this.getTotalLength()});h.caps.attr('opacity',0);$('#lawB').textContent='0';$('#lawB').dataset.v=0}
+    if(s>=2){h.supHdr.transition().duration(dur(300*d)).attr('opacity',1);h.sups.transition().duration(dur(400*d)).delay((x,i)=>dur(i*90*d)).attr('opacity',1);countUp($('#lawC'),h.sup.length,900*d);countUp($('#lawD'),M.l0.length,900*d);txt.textContent='ثم نضيف القدرات التي لا ينص عليها النظام: الحوكمة والاستراتيجية، المالية والمشتريات، الموارد البشرية، التقنية، القانونية، والخدمات المساندة. بهذا تكتمل الخريطة وتغطي البنك كله.'}
+    else{h.supHdr.attr('opacity',0);h.sups.attr('opacity',0);['lawC','lawD'].forEach(k=>{$('#'+k).textContent='0';$('#'+k).dataset.v=0})}
+  }});
 
-/* ---------- تشغيل ---------- */
-renderMap();renderHier();renderRadial();syncL2Select();renderConst();renderImpact();renderGaps();renderHeat();renderPrio();renderTargets();fillCommL1();renderComm();renderReports();
+/* 2 الشمولية والهرمية */
+ACTS.push({id:'sun',eyebrow:'الفصل 2 · الشمولية والهرمية',title:'البنك كله في رسم واحد: ثلاثة مستويات قابلة للتكبير',lead:'الحلقة الداخلية المستوى 0، ثم المستوى 1، ثم المستوى 2. اضغط أي قدرة لتكبيرها، واضغط المركز للرجوع. الأخضر مستمد من النظام والذهبي مساند.',steps:3,
+  mount(root){
+    root.innerHTML=`<div class="split"><div class="viz" id="sunViz"><div class="overlay top"><span class="legend"><span><i style="background:${C.cap}"></i> مستمدة من النظام</span><span><i style="background:${C.gold}"></i> مساندة</span></span></div></div><div class="panel" id="sunPanel"><h3 id="sunName">البنك المركزي</h3><p class="sub" id="sunSub">اضغط أي قطاع لاستعراضه</p><div class="stats" id="sunStats"></div><hr><div id="sunDetail" class="list"></div></div></div>`;
+    const self=this;
+    this.sb=makeSunburst(root.querySelector('#sunViz'),{maxDepth:1,onSelect:(r)=>self.show(r)});
+    this.show(null);
+  },
+  show(r){
+    const name=$('#sunName'),sub=$('#sunSub'),st=$('#sunStats'),det=$('#sunDetail');if(!name)return;
+    if(!r){name.textContent='البنك المركزي';sub.textContent='اضغط أي قطاع لاستعراضه';st.innerHTML=[[M.l0.length,'قدرة رئيسية'],[M.l1.length,'قدرة فرعية'],[M.l2.length,'قدرة تفصيلية'],[SUM.units,'وحدة إدارية مالكة']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');det.innerHTML='';return}
+    name.textContent=r.n;
+    if(r.lvl===0){sub.textContent=r.task?'مستمدة من مهمة نظامية: '+r.task:'قدرة مؤسسية مساندة';st.innerHTML=[[r.l1.length,'قدرة فرعية'],[r.l1.reduce((a,x)=>a+x.l2.length,0),'قدرة تفصيلية'],[ownerUnitCount(r),'وحدة مالكة'],[elementsUnder(r),'عنصر تشغيلي مرتبط']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');det.innerHTML=r.l1.map(x=>`<div class="row"><div><div class="n">${esc(x.n)}</div><div class="s">${x.unit?esc(x.unit.n):'بلا مالك'}</div></div><span class="chip">${x.l2.length} تفصيلية</span></div>`).join('')}
+    else if(r.lvl===1){sub.textContent='ضمن '+r.l0.n;st.innerHTML=[[r.l2.length,'قدرة تفصيلية'],[r.proc?r.proc.auto+'%':'—','أتمتة الإجراء'],[r.l2.reduce((a,x)=>a+x.sys.length,0),'ارتباط بأنظمة'],[r.l2.length,'صلاحية']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');det.innerHTML=`<div class="chips">${r.unit?`<span class="chip org">${esc(r.unit.n)}</span>`:'<span class="chip crit">بلا مالك</span>'}${r.proc?`<span class="chip ops">${esc(r.proc.n)}</span>`:'<span class="chip crit">بلا إجراء</span>'}${r.policy?`<span class="chip gov">${esc(r.policy.n)}</span>`:''}${r.reg?`<span class="chip gov">${esc(r.reg.n)}</span>`:''}</div>`+r.l2.map(x=>`<div class="row"><div class="n">${esc(x.n)}</div><span class="chip">${x.sys.length} نظام</span></div>`).join('')}
+    else{sub.textContent=r.l1.n+' › '+r.l1.l0.n;st.innerHTML=[[r.sys.length,'نظام تقني'],[r.svc?1:0,'خدمة'],[1,'صلاحية'],[r.l1.proc?1:0,'إجراء (عبر المستوى 1)']].map(k=>`<div class="stat"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');det.innerHTML=`<div class="chips">${r.sys.map(s=>`<span class="chip tech">${esc(s)}</span>`).join('')}<span class="chip org">${esc(r.perm.n)}</span>${r.svc?`<span class="chip ops">${esc(r.svc)}</span>`:''}</div><div class="kv"><dt>المعتمد</dt><dd>${esc(r.perm.approver)}</dd><dt>المسؤول</dt><dd>${esc(r.perm.resp)}</dd></div>`}
+  },
+  setStep(s,instant){const lead=$('#hdLead');this.sb.setMaxDepth(s+1,instant?0:600);lead.textContent=['المستوى 0: تسع عشرة قدرة رئيسية تغطي البنك كله. الأخضر مستمد من النظام والذهبي مساند.','المستوى 1: كل قدرة رئيسية تتفرّع إلى واحدة أو أكثر من القدرات الفرعية.','المستوى 2: أدق مستوى، وهو الذي تُربط به معظم عناصر طبقة التشغيل. اضغط أي قطاع للتكبير والمركز للرجوع.'][s]}});
+
+/* 3 الارتباطات */
+ACTS.push({id:'graph',eyebrow:'الفصل 3 · الارتباطات',title:'القدرات وطبقة التشغيل شبكة واحدة حيّة',lead:'شجرة القدرات في الوسط، وحولها عناصر طبقة التشغيل. اسحب العقد، كبّر بعجلة الفأرة، واضغط أي عقدة لترى ما يرتبط بها. لاحظ العناصر المشتركة بين أكثر من قدرة.',steps:3,
+  mount(root){
+    root.innerHTML=`<div class="split"><div class="viz" id="gViz"><div class="overlay top" id="gTypes"></div><div class="overlay bl legend" id="gLegend"></div></div><div class="panel" id="gPanel"><h3 id="gName">اختر عقدة</h3><p class="sub" id="gSub">اضغط قدرة أو عنصرًا في الشبكة</p><div id="gDetail" class="list"></div></div></div>`;
+    hdTools.innerHTML=`<select class="sel" id="gL0">${M.l0.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('')}</select>`;
+    const self=this;const sel=hdTools.querySelector('#gL0');sel.value=this.l0id||'L0-08';
+    this.l0id=sel.value;
+    const build=()=>{const box=root.querySelector('#gViz');box.querySelectorAll('svg').forEach(x=>x.remove());const l0=M.l0.find(x=>x.id===self.l0id);self.g=makeGraph(box,[l0],{vis:[],onSelect:(d,nb)=>self.show(d,nb)});self.renderTypes();self.setStep(self.curStep||0,true)};
+    sel.addEventListener('change',()=>{self.l0id=sel.value;build()});
+    root.querySelector('#gLegend').innerHTML=`<span><i style="background:${C.cap}"></i> قدرة</span><span><i class="sq" style="background:${C.tech}"></i> تقنية</span><span><i class="sq" style="background:${C.org}"></i> تنظيم إداري</span><span><i class="sq" style="background:${C.ops}"></i> تشغيل</span><span><i class="sq" style="background:${C.gov}"></i> حوكمة</span>`;
+    build();
+  },
+  renderTypes(){const self=this;const box=$('#gTypes');if(!box)return;box.innerHTML=Object.keys(TYPES).map(t=>`<button class="btn small" data-t="${t}" aria-pressed="${self.g.has(t)}"><i style="width:8px;height:8px;border-radius:2px;background:${GC[TYPES[t].g]};display:inline-block"></i>${TYPES[t].n}</button>`).join('');box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{const on=self.g.toggle(b.dataset.t);b.setAttribute('aria-pressed',on)}))},
+  show(d,nb){const name=$('#gName'),sub=$('#gSub'),det=$('#gDetail');if(!name)return;
+    if(!d){name.textContent='اختر عقدة';sub.textContent='اضغط قدرة أو عنصرًا في الشبكة';det.innerHTML='';return}
+    name.textContent=d.n;
+    if(d.t==='cap'){sub.textContent='قدرة · المستوى '+d.lvl+(d.lvl>0?' · ضمن '+(d.lvl===1?d.ref.l0.n:d.ref.l1.n):'');const els=nb.filter(n=>n.t!=='cap'),caps=nb.filter(n=>n.t==='cap');det.innerHTML=`<div class="stats"><div class="stat"><div class="v">${els.length}</div><div class="l">عنصر تشغيلي مرتبط مباشرة</div></div><div class="stat"><div class="v">${caps.length}</div><div class="l">قدرة مجاورة في الشجرة</div></div></div>`+els.map(n=>`<div class="row"><div><div class="n">${esc(n.n)}</div><div class="s">${TYPES[n.t].n} · مرتبط بالمستوى ${n.at}</div></div><span class="chip ${TYPES[n.t].g}">${TYPES[n.t].n}</span></div>`).join('')}
+    else{const caps=nb.filter(n=>n.t==='cap');sub.textContent=TYPES[d.t].n+' · مرتبط بالمستوى '+d.at+(caps.length>1?' · يخدم '+caps.length+' قدرات':'');let extra='';if(d.t==='perm'){extra=`<div class="kv"><dt>معتمد</dt><dd>${esc(d.ref.approver)}</dd><dt>مسؤول</dt><dd>${esc(d.ref.resp)}</dd><dt>مستشار</dt><dd>${esc(d.ref.adv)}</dd><dt>موصي</dt><dd>${esc(d.ref.rec)}</dd><dt>مطلع</dt><dd>${esc(d.ref.inf)}</dd></div>`}if(d.t==='proc'){extra=`<div class="kv"><dt>مؤشر الجودة</dt><dd>${d.ref.kq}%</dd><dt>مؤشر الوقت</dt><dd>${d.ref.kt} يوم</dd><dt>نسبة الأتمتة</dt><dd>${d.ref.auto}%</dd></div>`}if(d.t==='unit'){extra=`<div class="kv"><dt>الإدارة العامة</dt><dd>${esc(d.ref.gd)}</dd><dt>دليل المهام</dt><dd>${d.ref.manual?'معتمد':'غير معتمد'}</dd></div>`}
+      det.innerHTML=extra+`<p class="sub">القدرات التي يرتبط بها هذا العنصر (يُربط بأدق قدرة تغطيه):</p>`+caps.map(n=>`<div class="row"><div class="n">${esc(n.n)}</div><span class="chip cap">المستوى ${n.lvl}</span></div>`).join('')}
+  },
+  setStep(s,instant){this.curStep=s;const lead=$('#hdLead');const g=this.g;if(!g)return;
+    if(s===0){g.setVis([]);lead.textContent='الخطوة 1: شجرة القدرات وحدها. المستوى 0 في المركز، ثم المستوى 1، ثم المستوى 2 في الأطراف.'}
+    if(s===1){g.setVis(['sys','perm','svc']);lead.textContent='الخطوة 2: عناصر المستوى 2 تلتصق بأدق قدرة: الأنظمة والصلاحيات والخدمات. لاحظ النظام الواحد يخدم أكثر من قدرة.'}
+    if(s===2){g.setVis(Object.keys(TYPES));lead.textContent='الخطوة 3: عناصر المستوى 1 و0: الإجراءات والوحدات المالكة والسياسات والأدوات التنظيمية واللجان. هذه هي شبكة البنك الفعلية. اضغط أي عقدة.'}
+    this.renderTypes();
+  },
+  unmount(){if(this.g)this.g.sim.stop();hdTools.innerHTML=''}});
+
+/* 4 دراسة الأثر */
+ACTS.push({id:'impact',eyebrow:'الفصل 4 · دراسة الأثر',title:'مبادرة جديدة: شاهد الأثر ينتشر من القدرة إلى كل عنصر',lead:'اختر مبادرة واضغط "تشغيل المحاكاة". تُضاء القدرات المتأثرة أولًا، ثم ينتقل الأثر عبر الارتباطات إلى الأنظمة والصلاحيات والإجراءات والسياسات والوحدات، مع العدّ الحيّ.',steps:2,
+  mount(root){
+    root.innerHTML=`<div class="split wide"><div class="viz" id="iViz"><div class="overlay top legend" id="iLegend"></div></div><div class="panel"><div class="stats"><div class="stat"><div class="v" id="iCaps">0</div><div class="l">قدرة متأثرة</div></div><div class="stat"><div class="v" id="iEls">0</div><div class="l">عنصر تشغيلي متأثر</div></div></div><p class="sub" id="iDesc"></p><hr><div class="list" id="iList"></div></div></div>`;
+    hdTools.innerHTML=`<select class="sel" id="iInit">${INITS.map((x,i)=>`<option value="${i}">${esc(x.n)}</option>`).join('')}</select><button class="btn primary" id="iRun">تشغيل المحاكاة</button>`;
+    root.querySelector('#iLegend').innerHTML=Object.entries(ACT_COLOR).map(([k,v])=>`<span><i style="background:${v}"></i> ${k}</span>`).join('');
+    const self=this;const sel=hdTools.querySelector('#iInit');sel.value=this.ii||0;
+    const build=()=>{self.ii=+sel.value;const init=INITS[self.ii];$('#iDesc').textContent=init.d;const l0s=[...new Set(init.hits.map(h=>M.l0[h[0]]))];const box=root.querySelector('#iViz');box.querySelectorAll('svg').forEach(x=>x.remove());self.g=makeGraph(box,l0s,{vis:Object.keys(TYPES)});$('#iList').innerHTML='';['iCaps','iEls'].forEach(k=>{$('#'+k).textContent='0';$('#'+k).dataset.v=0});self.ran=false};
+    sel.addEventListener('change',build);hdTools.querySelector('#iRun').addEventListener('click',()=>self.run());
+    build();
+  },
+  run(){
+    const self=this,init=INITS[this.ii];if(!this.g)return;this.g.clear();
+    const hits=new Map();init.hits.forEach(h=>{const l1=M.l0[h[0]].l1[h[1]];if(h[2]===null)l1.l2.forEach(l2=>hits.set(l2.id,h[3]));else hits.set(l1.l2[h[2]].id,h[3])});
+    this.ran=true;
+    this.g.wave(hits,(h,reached,act,maxHop)=>{
+      const caps=reached.filter(n=>n.t==='cap'),els=reached.filter(n=>n.t!=='cap');
+      countUp($('#iCaps'),caps.length,500);countUp($('#iEls'),els.length,500);
+      const byT={};els.forEach(n=>{(byT[n.t]=byT[n.t]||[]).push(n)});
+      const acts={};reached.forEach(n=>{acts[act[n.id]]=(acts[act[n.id]]||0)+1});
+      $('#iList').innerHTML=`<div class="chips">${Object.entries(acts).map(([a,c])=>`<span class="chip" style="border:1px solid ${ACT_COLOR[a]};color:${ACT_COLOR[a]};background:transparent">${a} · ${c}</span>`).join('')}</div>`+Object.keys(TYPES).filter(t=>byT[t]).map(t=>`<div class="row"><div><div class="n">${TYPES[t].n}</div><div class="s">${byT[t].slice(0,4).map(n=>esc(n.n)).join(' · ')}${byT[t].length>4?' · و'+(byT[t].length-4)+' أخرى':''}</div></div><span class="chip ${TYPES[t].g}">${byT[t].length}</span></div>`).join('')+(h===maxHop?`<p class="sub">اكتملت المحاكاة: هذه هي قائمة المراجعة الكاملة للمبادرة، مستخرجة من الخريطة لا من الاجتهاد.</p>`:'');
+    });
+  },
+  setStep(s,instant){const lead=$('#hdLead');if(s===0){lead.textContent='الخطوة 1: هذه القدرات الرئيسية التي تمسّها المبادرة، بكل شبكتها التشغيلية. لا شيء مُضاء بعد.';if(this.g&&this.ran){this.g.clear();this.ran=false}}if(s===1){lead.textContent='الخطوة 2: المحاكاة تنطلق من قدرات المستوى 2 المتأثرة وتنتشر عبر الارتباطات. اللون يعبّر عن نوع التغيير: إضافة، تعديل، حذف، تحسين.';if(!instant||!this.ran)setTimeout(()=>this.run(),dur(200))}},
+  unmount(){if(this.g)this.g.sim.stop();hdTools.innerHTML=''}});
+
+/* 5 الفجوات والخريطة الحرارية */
+ACTS.push({id:'gaps',eyebrow:'الفصل 5 · الفجوات والخريطة الحرارية',title:'مقياس واحد على البنك كله دفعة واحدة',lead:'الرسم نفسه، لكن اللون الآن يحمل معنى: نسبة الأتمتة، أو الأولوية، أو الفجوات. الخلايا المخططة قدرات بلا إجراء عمل أصلًا.',steps:3,
+  mount(root){
+    root.innerHTML=`<div class="split"><div class="viz" id="hViz"><div class="overlay top" id="hLegend"></div></div><div class="panel"><h3 id="hTitle"></h3><p class="sub" id="hSub"></p><div id="hCtl" class="chips"></div><hr><div class="list" id="hList"></div></div></div>`;
+    hdTools.innerHTML=`<button class="btn" data-m="auto" aria-pressed="true">الأتمتة</button><button class="btn" data-m="prio" aria-pressed="false">الأولوية</button><button class="btn" data-m="gap" aria-pressed="false">الفجوات</button>`;
+    const self=this;this.gapSet=new Set(['proc']);
+    this.sb=makeSunburst(root.querySelector('#hViz'),{maxDepth:3,mode:'auto',gapSet:this.gapSet,onSelect(){}});
+    hdTools.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>self.setMode(b.dataset.m)));
+  },
+  setMode(m){
+    this.mode=m;hdTools.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));this.sb.setMode(m);
+    const lg=$('#hLegend'),t=$('#hTitle'),s=$('#hSub'),ctl=$('#hCtl'),list=$('#hList');ctl.innerHTML='';
+    if(m==='auto'){lg.innerHTML=`<span class="legend"><span>أقل أتمتة</span>${SEQ.map(c=>`<i style="width:16px;height:10px;border-radius:2px;background:${c};display:inline-block"></i>`).join('')}<span>أعلى</span><span style="margin-inline-start:10px"><i style="width:16px;height:10px;display:inline-block;background:repeating-linear-gradient(135deg,#1B2F29 0 3px,#35504A 3px 5px)"></i> بلا إجراء</span></span>`;t.textContent='نسبة أتمتة إجراءات العمل';const v=M.l1.filter(x=>x.proc);const avg=v.reduce((a,x)=>a+x.proc.auto,0)/v.length;s.textContent='متوسط الأتمتة '+Math.round(avg)+'% عبر '+v.length+' إجراء. القدرة الرئيسية تأخذ متوسط إجراءات فروعها.';const low=[...M.l0].map(l0=>({l0,v:l0heat(l0)})).filter(x=>x.v!==null).sort((a,b)=>a.v-b.v).slice(0,5);list.innerHTML='<p class="sub">الأقل أتمتة:</p>'+low.map(x=>`<div class="row"><div class="n">${esc(x.l0.n)}</div><span class="chip warn">${Math.round(x.v)}%</span></div>`).join('')}
+    if(m==='prio'){lg.innerHTML=`<span class="legend"><span><i style="background:${C.crit}"></i> عالية</span><span><i style="background:${C.warn}"></i> متوسطة</span><span><i style="background:${C.muted}"></i> منخفضة</span></span>`;t.textContent='الأولوية الموروثة';s.textContent='الأولوية تُحسب على المستوى 0 بالمعايير الافتراضية، وترثها كل القدرات والعناصر تحتها. يُعدّل الوزن في الفصل التالي.';const rows=M.l0.map(l0=>({l0,sc:prioScore(l0)})).sort((a,b)=>b.sc-a.sc).slice(0,6);list.innerHTML=rows.map(x=>`<div class="row"><div><div class="n">${esc(x.l0.n)}</div><div class="s">${elementsUnder(x.l0)} عنصر يرث الأولوية</div></div><span class="chip" style="border:1px solid ${tier(x.sc)[1]};color:${tier(x.sc)[1]};background:transparent">${tier(x.sc)[0]} ${x.sc.toFixed(1)}</span></div>`).join('')}
+    if(m==='gap'){lg.innerHTML=`<span class="legend"><span><i style="background:${C.crit}"></i> فجوة</span><span><i style="background:#22362E"></i> مغطاة</span></span>`;t.textContent='تحليل الفجوات';const self=this;ctl.innerHTML=Object.keys(GAPN).map(k=>`<button class="btn small" data-g="${k}" aria-pressed="${self.gapSet.has(k)}">${GAPN[k]}</button>`).join('');ctl.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.g;if(self.gapSet.has(k))self.gapSet.delete(k);else self.gapSet.add(k);b.setAttribute('aria-pressed',self.gapSet.has(k));self.sb.setGaps(self.gapSet);self.gapStats()}));this.gapStats()}
+  },
+  gapStats(){const gs=this.gapSet;const flagged=M.l1.filter(x=>gapsOf(x).some(k=>gs.has(k)));$('#hSub').textContent=flagged.length+' من '+M.l1.length+' قدرة فرعية فيها فجوة من النوع المختار.';const by=M.l0.map(l0=>({l0,c:l0.l1.filter(x=>flagged.includes(x)).length})).filter(x=>x.c).sort((a,b)=>b.c-a.c);$('#hList').innerHTML=by.map(x=>`<div class="row"><div class="n">${esc(x.l0.n)}</div><span class="chip crit">${x.c} من ${x.l0.l1.length}</span></div>`).join('')},
+  setStep(s){this.setMode(['auto','prio','gap'][s]);$('#hdLead').textContent=['الخطوة 1: نسبة أتمتة إجراء العمل على كل قدرة فرعية. بنظرة واحدة تعرف أين البنك يدوي وأين رقمي.','الخطوة 2: الأولوية. تُحسب مرة على القدرة الرئيسية وترثها كل الفروع والعناصر.','الخطوة 3: الفجوات. فعّل نوع الفجوة لترى القدرات التي لا يغطيها إجراء أو سياسة أو أداة تنظيمية أو نظام أو مالك.'][s]},
+  unmount(){hdTools.innerHTML=''}});
+
+/* 6 الأولويات والمستهدفات */
+ACTS.push({id:'prio',eyebrow:'الفصل 6 · التخطيط والأولويات والمستهدفات',title:'معايير على القدرة، فترثها كل عناصرها. وعدد القدرات يحدد المستهدفات',lead:'حرّك الأوزان وشاهد الترتيب يُعاد حيًا، مع عدد العناصر التي ترث الأولوية. وفي الأسفل: المستهدفات مشتقة مباشرة من عدد القدرات.',steps:2,
+  mount(root){
+    root.innerHTML=`<div class="split wide"><div class="viz" id="pViz"></div><div class="panel"><h3>أوزان المعايير</h3><div class="sliders">${[['reg','الارتباط بمهمة نظامية'],['risk','مستوى المخاطر'],['vis','الارتباط بالاستراتيجية ورؤية 2030'],['ext','الأثر على العملاء والقطاع']].map(k=>`<div class="sl"><label for="w-${k[0]}">${k[1]}</label><span class="v" id="w-${k[0]}-v">${PW[k[0]]}</span><input type="range" id="w-${k[0]}" min="0" max="5" value="${PW[k[0]]}" style="grid-column:1/3"></div>`).join('')}</div><div class="stats"><div class="stat"><div class="v" id="pHi">0</div><div class="l">قدرة رئيسية بأولوية عالية</div></div><div class="stat"><div class="v" id="pEls">0</div><div class="l">عنصر تشغيلي يرث الأولوية العالية</div></div></div><hr><h3 id="tgTitle" class="fade">المستهدفات المشتقة</h3><div class="gauges fade" id="gauges"></div></div></div>`;
+    const box=root.querySelector('#pViz');const W=box.clientWidth||700,H=box.clientHeight||520;
+    const svg=d3.select(box).append('svg').attr('viewBox',[0,0,W,H]).attr('class','bars');
+    const mL=60,mR=240,rowH=Math.min(26,(H-40)/M.l0.length);const x=d3.scaleLinear().domain([0,5]).range([0,-(W-mL-mR)]);
+    const g=svg.append('g').attr('transform',`translate(${W-mR},24)`);
+    g.append('g').attr('class','axis').attr('transform',`translate(0,${M.l0.length*rowH})`).call(d3.axisBottom(x).ticks(5).tickSize(-M.l0.length*rowH)).call(a=>a.select('.domain').remove()).call(a=>a.selectAll('line').attr('stroke-opacity',.5));
+    this.h={svg,g,x,rowH,W,mL,mR};const self=this;
+    ['reg','risk','vis','ext'].forEach(k=>root.querySelector('#w-'+k).addEventListener('input',()=>self.update()));
+    this.update(true);
+    const gauges=root.querySelector('#gauges');const supL1=M.l1.filter(x=>x.l0.sup);
+    this.targets=[['السياسات','سياسة لكل قدرة مستوى 0',M.l0.filter(x=>x.policy).length,M.l0.length],['إجراءات العمل','إجراء لكل قدرة مستوى 1',M.l1.filter(x=>x.proc).length,M.l1.length],['الأدوات التنظيمية','أداة لكل قدرة رقابية مستوى 1',supL1.filter(x=>x.reg).length,supL1.length],['أدلة المهام','دليل لكل وحدة مالكة',M.units.filter(x=>x.manual).length,M.units.length],['التغطية التقنية','نظام لكل قدرة مستوى 2',M.l2.filter(x=>x.sys.length).length,M.l2.length]];
+    gauges.innerHTML=this.targets.map((t,i)=>`<div class="gauge"><svg viewBox="0 0 120 74" id="gg${i}"></svg><div class="l"><b>${t[0]}</b><br>${t[1]}<br><span class="num">${t[2]} من ${t[3]} · الفجوة ${t[3]-t[2]}</span></div></div>`).join('');
+  },
+  update(instant){
+    const w={};['reg','risk','vis','ext'].forEach(k=>{w[k]=+$('#w-'+k).value;$('#w-'+k+'-v').textContent=w[k]});
+    const rows=M.l0.map(l0=>({l0,sc:prioScore(l0,w),els:elementsUnder(l0)})).sort((a,b)=>b.sc-a.sc);
+    const {g,x,rowH,W,mL,mR}=this.h;const t=g.transition().duration(dur(instant?0:600));
+    const r=g.selectAll('g.r').data(rows,d=>d.l0.id);
+    const en=r.enter().append('g').attr('class','r').attr('transform',(d,i)=>`translate(0,${i*rowH})`);
+    en.append('rect').attr('height',rowH-6).attr('y',3).attr('rx',3).attr('width',0).attr('x',0);
+    en.append('text').attr('class','lbl').attr('x',8).attr('y',rowH/2+4).attr('text-anchor','start').text(d=>d.l0.n.length>28?d.l0.n.slice(0,27)+'…':d.l0.n);
+    en.append('text').attr('class','v').attr('y',rowH/2+4).attr('text-anchor','end');
+    const all=en.merge(r);
+    all.transition(t).attr('transform',(d,i)=>`translate(0,${i*rowH})`);
+    all.select('rect').transition(t).attr('x',d=>x(d.sc)).attr('width',d=>-x(d.sc)).attr('fill',d=>tier(d.sc)[1]);
+    all.select('text.v').transition(t).attr('x',d=>x(d.sc)-6).text(d=>d.sc.toFixed(1)+' · '+d.els+' عنصر');
+    const hi=rows.filter(d=>d.sc>=3.8);countUp($('#pHi'),hi.length,400);countUp($('#pEls'),hi.reduce((a,d)=>a+d.els,0),500);
+  },
+  setStep(s,instant){const lead=$('#hdLead');const fades=[$('#tgTitle'),$('#gauges')];
+    if(s===0){fades.forEach(f=>f.classList.remove('in'));lead.textContent='الخطوة 1: أربعة معايير بأوزان. غيّر وزنًا فيُعاد ترتيب القدرات حيًا، وكل عنصر تحت القدرة يرث أولويتها.'}
+    if(s===1){fades.forEach(f=>f.classList.add('in'));lead.textContent='الخطوة 2: المستهدفات. 19 قدرة رئيسية تعني 19 سياسة، و'+M.l1.length+' قدرة فرعية تعني '+M.l1.length+' إجراء عمل. الفجوة رقم واضح ومسار لإغلاقها.';
+      this.targets.forEach((t,i)=>{const svg=d3.select('#gg'+i);svg.selectAll('*').remove();const arc=d3.arc().innerRadius(42).outerRadius(52).startAngle(-Math.PI/2).cornerRadius(3);const gg=svg.append('g').attr('transform','translate(60,62)');gg.append('path').attr('d',arc({endAngle:Math.PI/2})).attr('fill','#25392F');const p=gg.append('path').attr('fill',t[2]/t[3]<.7?C.warn:C.cap);const txt=gg.append('text').attr('y',-4).attr('text-anchor','middle').attr('font-size',18);const end=Math.PI*(t[2]/t[3])-Math.PI/2;p.transition().duration(dur(instant?0:900)).attrTween('d',()=>{const i=d3.interpolate(-Math.PI/2,end);return k=>arc({endAngle:i(k)})});txt.transition().duration(dur(instant?0:900)).tween('t',()=>{const i=d3.interpolate(0,Math.round(t[2]/t[3]*100));return k=>txt.text(Math.round(i(k))+'%')})})}
+  }});
+
+/* 7 اللجان */
+ACTS.push({id:'comm',eyebrow:'الفصل 7 · تشكيل اللجان',title:'من يجب أن يجلس على الطاولة؟ الخريطة تجيب',lead:'اربط اللجنة بقدرة، فتظهر الوحدات المالكة للقدرات تحتها على الطاولة مباشرة، مع الوحدات التي تشاركها الأنظمة كأعضاء مدعوين.',steps:1,
+  mount(root){
+    root.innerHTML=`<div class="split"><div class="viz" id="cViz"></div><div class="panel"><h3 id="cTitle"></h3><p class="sub" id="cSub"></p><div class="list" id="cList"></div></div></div>`;
+    hdTools.innerHTML=`<select class="sel" id="cL0">${M.l0.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('')}</select><select class="sel" id="cL1"></select>`;
+    const self=this;const s0=hdTools.querySelector('#cL0'),s1=hdTools.querySelector('#cL1');s0.value=this.l0id||'L0-09';
+    const fill1=()=>{const l0=M.l0.find(x=>x.id===s0.value);s1.innerHTML=`<option value="">كامل القدرة الرئيسية</option>`+l0.l1.map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join('')};
+    fill1();s0.addEventListener('change',()=>{self.l0id=s0.value;fill1();self.draw()});s1.addEventListener('change',()=>self.draw());
+    const box=root.querySelector('#cViz');const W=box.clientWidth||700,H=box.clientHeight||520;
+    this.svg=d3.select(box).append('svg').attr('viewBox',[0,0,W,H]).attr('class','table-svg');this.W=W;this.H=H;
+    this.svg.append('ellipse').attr('cx',W/2).attr('cy',H/2).attr('rx',Math.min(W*.3,260)).attr('ry',Math.min(H*.22,120)).attr('fill','#142420').attr('stroke','#35504A');
+    this.tt=this.svg.append('text').attr('x',W/2).attr('y',H/2-6).attr('text-anchor','middle').attr('font-size',13).attr('font-weight',700);
+    this.ts=this.svg.append('text').attr('x',W/2).attr('y',H/2+14).attr('text-anchor','middle').attr('font-size',11).attr('fill','#7F9389');
+    this.seats=this.svg.append('g');
+    this.draw();
+  },
+  draw(){
+    const l0=M.l0.find(x=>x.id===hdTools.querySelector('#cL0').value);const l1id=hdTools.querySelector('#cL1').value;const scope=l1id?[M.l1.find(x=>x.id===l1id)]:l0.l1;
+    const units=[...new Set(scope.map(x=>x.unit).filter(Boolean))];
+    const sysSet=new Set(scope.flatMap(x=>x.l2.flatMap(y=>y.sys)));
+    const guests=[...new Set(M.l1.filter(x=>x.l0!==l0&&x.unit&&x.l2.some(y=>y.sys.some(s=>sysSet.has(s)))).map(x=>x.unit))].slice(0,3);
+    const members=[{n:l0.gd,role:'رئيس اللجنة · الإدارة العامة المالكة',k:'chair'}].concat(units.map(u=>({n:u.n,role:'عضو · مالك '+u.l1.filter(x=>scope.includes(x)).length+' قدرة في النطاق',k:'member'}))).concat(guests.map(u=>({n:u.n,role:'مدعو · يشارك النظام التقني',k:'guest'}))).concat([{n:'الشؤون القانونية',role:'مستشار · بحكم السياسة',k:'guest'}]);
+    const {W,H}=this;const rx=Math.min(W*.3,260)+70,ry=Math.min(H*.22,120)+62;
+    this.tt.text('لجنة '+(l1id?scope[0].n:l0.n));this.ts.text(members.length+' مقعدًا · '+scope.length+' قدرة في النطاق');
+    const sw=150,sh=54;
+    const s=this.seats.selectAll('g.seat').data(members,d=>d.n);
+    s.exit().transition().duration(dur(300)).attr('opacity',0).remove();
+    const en=s.enter().append('g').attr('class',d=>'seat '+d.k).attr('opacity',0).attr('transform',`translate(${W/2-sw/2},${H/2-sh/2})`);
+    en.append('rect').attr('width',sw).attr('height',sh).attr('rx',8);
+    en.append('text').attr('x',sw/2).attr('text-anchor','middle').attr('font-weight',600).each(function(d){const l=wrap(d.n,24).slice(0,2);d3.select(this).attr('y',l.length>1?15:22);tspans(d3.select(this),l,sw/2,13)});
+    en.append('text').attr('class','role').attr('x',sw/2).attr('y',sh-8).attr('text-anchor','middle').text(d=>d.role.length>34?d.role.slice(0,33)+'…':d.role);
+    en.merge(s).attr('class',d=>'seat '+d.k).transition().duration(dur(700)).delay((d,i)=>dur(i*70)).attr('opacity',1).attr('transform',(d,i)=>{const a=-Math.PI/2+i*(2*Math.PI/members.length);return `translate(${W/2+Math.cos(a)*rx-sw/2},${H/2+Math.sin(a)*ry-sh/2})`});
+    $('#cTitle').textContent='التشكيل المقترح';$('#cSub').textContent='الأعضاء هم الوحدات المالكة للقدرات في النطاق. المدعوون وحدات من قدرات أخرى تشارك النظام التقني نفسه.';
+    $('#cList').innerHTML=scope.map(x=>`<div class="row"><div><div class="n">${esc(x.n)}</div><div class="s">${x.unit?esc(x.unit.n):'بلا مالك'} · ${x.l2.length} قدرة تفصيلية</div></div><span class="chip">${x.id}</span></div>`).join('');
+  },
+  setStep(){},unmount(){hdTools.innerHTML=''}});
+
+/* 8 الاستعلامات */
+const QUERIES=[
+ {q:'كم صلاحية اعتماد بيد معالي المحافظ؟',sub:'صلاحية ← المعتمد',run(){const dist={};M.l2.forEach(x=>{const a=x.perm.approver;const k=a==='معالي المحافظ'?'المحافظ':a==='معالي نائب المحافظ'?'نائب المحافظ':a.startsWith('وكيل')?'الوكلاء':a.startsWith('مدير عام')?'المديرون العامون':'مديرو الإدارات';dist[k]=(dist[k]||0)+1});return {big:dist['المحافظ']||0,unit:'صلاحية',how:'المسار: <b>قدرة المستوى 2</b> ← <b>صلاحية</b> ← <b>المعتمد = معالي المحافظ</b>. التوزيع الكامل حسب المستوى الوظيفي:',bars:['المحافظ','نائب المحافظ','الوكلاء','المديرون العامون','مديرو الإدارات'].map(k=>({l:k,v:dist[k]||0}))}}},
+ {q:'كم إدارة تملك قدرة بلا إجراء عمل موثق؟',sub:'وحدة ← قدرة مستوى 1 ← إجراء',run(){const u=M.units.filter(x=>x.l1.some(y=>!y.proc));const by={};u.forEach(x=>x.l1.filter(y=>!y.proc).forEach(y=>{by[y.l0.n]=(by[y.l0.n]||0)+1}));return {big:u.length,unit:'وحدة',how:'المسار: <b>وحدة إدارية</b> ← <b>القدرات التي تملكها</b> ← <b>لا إجراء مرتبط</b>. حسب القدرة الرئيسية:',bars:Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,7).map(([l,v])=>({l,v}))}}},
+ {q:'أي نظام تقني يخدم أكبر عدد من القدرات؟',sub:'نظام ← قدرات المستوى 2',run(){const c={};M.l2.forEach(x=>x.sys.forEach(s=>c[s]=(c[s]||0)+1));const rows=Object.entries(c).sort((a,b)=>b[1]-a[1]);return {big:rows[0][1],unit:'قدرة يخدمها '+rows[0][0],how:'المسار: <b>نظام تقني</b> ← <b>عدد قدرات المستوى 2 المرتبطة</b>. أي تغيير في هذا النظام يمس كل هذه القدرات:',bars:rows.slice(0,7).map(([l,v])=>({l,v}))}}},
+ {q:'كم قدرة رقابية بلا أداة تنظيمية؟',sub:'قدرة رقابية مستوى 1 ← أداة تنظيمية',run(){const s=M.l1.filter(x=>x.l0.sup);const g=s.filter(x=>!x.reg);const by={};g.forEach(x=>by[x.l0.n]=(by[x.l0.n]||0)+1);return {big:g.length,unit:'من '+s.length+' قدرة رقابية',how:'المسار: <b>القدرات الرئيسية ذات الطابع الرقابي</b> ← <b>فروعها</b> ← <b>لا قواعد أو تعليمات مرتبطة</b>:',bars:Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([l,v])=>({l,v}))}}},
+ {q:'كم قدرة تفصيلية تعمل بلا نظام تقني؟',sub:'قدرة مستوى 2 ← نظام',run(){const g=M.l2.filter(x=>!x.sys.length);const by={};g.forEach(x=>by[x.l1.l0.n]=(by[x.l1.l0.n]||0)+1);return {big:g.length,unit:'من '+M.l2.length+' قدرة تفصيلية',how:'المسار: <b>قدرة المستوى 2</b> ← <b>لا نظام مرتبط</b>. هذه خريطة الأتمتة المطلوبة:',bars:Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,7).map(([l,v])=>({l,v}))}}},
+ {q:'ما نسبة أتمتة القدرات المستمدة من النظام مقابل المساندة؟',sub:'إجراء ← نسبة الأتمتة',run(){const a=M.l1.filter(x=>x.l0.task&&x.proc),b=M.l1.filter(x=>!x.l0.task&&x.proc);const av=r=>Math.round(r.reduce((s,x)=>s+x.proc.auto,0)/r.length);return {big:av(a),unit:'% للقدرات المستمدة من النظام',how:'المسار: <b>القدرة الرئيسية (مصدرها)</b> ← <b>إجراءات فروعها</b> ← <b>متوسط الأتمتة</b>:',bars:[{l:'مستمدة من النظام',v:av(a)},{l:'مساندة',v:av(b)}]}}},
+ {q:'أي وكيل محافظ تحته أكبر عدد من الصلاحيات؟',sub:'صلاحية ← المعتمد = وكيل',run(){const c={};M.l2.forEach(x=>{if(x.perm.approver.startsWith('وكيل'))c[x.perm.approver]=(c[x.perm.approver]||0)+1});const rows=Object.entries(c).sort((a,b)=>b[1]-a[1]);return {big:rows[0][1],unit:'صلاحية · '+rows[0][0],how:'المسار: <b>صلاحية</b> ← <b>المعتمد</b> مجمّعة حسب الوكيل:',bars:rows.map(([l,v])=>({l:l.replace('وكيل المحافظ ',''),v}))}}},
+ {q:'كم لجنة تغطي أكثر من ثلاث قدرات فرعية؟',sub:'لجنة ← القدرة ← فروعها',run(){const c=M.l0.filter(x=>x.committee&&x.l1.length>3);return {big:c.length,unit:'لجنة',how:'المسار: <b>لجنة</b> ← <b>القدرة المرتبطة</b> ← <b>عدد فروعها</b>. كل واحدة يجب أن تضم مالكي هذه الفروع:',bars:c.map(x=>({l:x.committee.n.replace('لجنة ',''),v:x.l1.length}))}}}
+];
+ACTS.push({id:'query',eyebrow:'الفصل 8 · الاستعلامات',title:'أسئلة كانت تحتاج أسابيع من الجمع، تُجاب الآن من الخريطة',lead:'كل سؤال هو مسار على الشبكة نفسها: من العنصر إلى القدرة أو العكس. اختر سؤالًا.',steps:1,
+  mount(root){
+    root.innerHTML=`<div class="split wide"><div class="qgrid" id="qGrid" style="align-content:start;overflow:auto">${QUERIES.map((q,i)=>`<button class="q" data-i="${i}"><span>${esc(q.q)}</span><small>${esc(q.sub)}</small></button>`).join('')}</div><div class="panel answer"><div><div class="big" id="qBig">—</div><div class="sub" id="qUnit"></div><p class="how" id="qHow" style="margin-top:8px"></p></div><div class="viz" id="qViz" style="min-height:220px"></div></div></div>`;
+    const self=this;root.querySelectorAll('.q').forEach(b=>b.addEventListener('click',()=>self.ask(+b.dataset.i)));this.ask(0);
+  },
+  ask(i){
+    document.querySelectorAll('.q').forEach(b=>b.classList.toggle('on',+b.dataset.i===i));
+    const r=QUERIES[i].run();const big=$('#qBig');big.dataset.v=0;countUp(big,r.big,900);$('#qUnit').textContent=r.unit;$('#qHow').innerHTML=r.how;
+    const box=$('#qViz');box.innerHTML='';const W=box.clientWidth||340,H=Math.max(160,r.bars.length*30+20);
+    const svg=d3.select(box).append('svg').attr('viewBox',[0,0,W,H]).attr('class','bars').style('height','auto');
+    const mL=Math.min(170,W*.42);const x=d3.scaleLinear().domain([0,d3.max(r.bars,d=>d.v)||1]).range([0,W-mL-56]);
+    const g=svg.append('g').attr('transform',`translate(${W-mL-8},10)`);
+    const rows=g.selectAll('g').data(r.bars).join('g').attr('transform',(d,i)=>`translate(0,${i*30})`);
+    rows.append('text').attr('class','lbl').attr('x',8).attr('y',15).attr('text-anchor','start').text(d=>d.l.length>24?d.l.slice(0,23)+'…':d.l);
+    rows.append('rect').attr('x',0).attr('y',3).attr('height',18).attr('rx',3).attr('fill',C.cap).attr('width',0).transition().duration(dur(800)).attr('x',d=>-x(d.v)).attr('width',d=>x(d.v));
+    rows.append('text').attr('class','v').attr('y',15).attr('text-anchor','end').attr('x',d=>-x(d.v)-5).attr('opacity',0).text(d=>d.v).transition().delay(dur(500)).attr('opacity',1);
+  },setStep(){}});
+
+/* 9 الخلاصة */
+ACTS.push({id:'close',eyebrow:'الخلاصة',title:'ماذا يعني هذا لقيادة البنك؟',lead:'',steps:3,
+  mount(root){root.innerHTML=`<div class="close"><div class="cards">
+    <div class="c"><div class="k">1</div><h3>قرار مبني على خريطة</h3><p>أي مبادرة أو لجنة أو سياسة تبدأ من القدرة، فتظهر كل تبعاتها التشغيلية قبل اتخاذ القرار لا بعده. رأيناه في محاكاة الأثر: ${INITS.length} مبادرات، كل واحدة تعطي قائمة مراجعة كاملة في ثوانٍ.</p></div>
+    <div class="c"><div class="k">2</div><h3>مستهدفات قابلة للقياس</h3><p>${M.l0.length} قدرة رئيسية تعني ${M.l0.length} سياسة، و${M.l1.length} قدرة فرعية تعني ${M.l1.length} إجراء عمل. الفجوة رقم، والإغلاق مسار محدد بالاسم والمالك.</p></div>
+    <div class="c"><div class="k">3</div><h3>لغة واحدة للبنك</h3><p>الوحدات والأنظمة والصلاحيات والخدمات واللجان تُوصف بالمرجع نفسه، فيتحدث الجميع عن الشيء نفسه بالاسم نفسه، وتُجاب أسئلة القيادة من مصدر واحد.</p></div>
+    </div><div class="panel" style="align-self:end"><h3>المطلوب من معالي النائب</h3><p class="sub">اعتماد المنهجية (الشمولية، الهرمية، الارتباطات) كمرجع رسمي لهيكلية الأعمال، وتكليف الوحدات بربط عناصرها التشغيلية بالقدرات وفق قاعدة أدق مستوى، لتصبح الخريطة مصدر الحقيقة الواحد للتخطيط والحوكمة.</p></div></div>`;
+    this.cards=[...root.querySelectorAll('.c')]},
+  setStep(s){this.cards.forEach((c,i)=>c.classList.toggle('in',i<=s))}});
+
+/* ---------- محرك العرض ---------- */
+let cur=0,step=0;
+const actsEl=$('#acts');
+function renderRail(){actsEl.innerHTML=ACTS.map((a,i)=>`<button class="${i===cur?'on':i<cur?'done':''}" data-i="${i}"><b>${i}</b><span>${a.id==='title'?'الافتتاح':a.eyebrow.replace(/^الفصل \d+ · /,'')}</span></button>`).join('');actsEl.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>go(+b.dataset.i,0)))}
+function renderCtl(){const a=ACTS[cur];$('#steps').innerHTML=Array.from({length:a.steps},(_,i)=>`<i class="${i===step?'on':i<step?'past':''}"></i>`).join('');$('#progTxt').textContent=(cur+1)+' / '+ACTS.length;$('#progBar').style.width=((cur+ (step+1)/a.steps)/ACTS.length*100)+'%';$('#btnPrev').disabled=cur===0&&step===0;$('#btnNext').textContent=cur===ACTS.length-1&&step===a.steps-1?'النهاية':'التالي'}
+function setHead(a){$('#hdEyebrow').textContent=a.eyebrow;$('#hdTitle').textContent=a.title;$('#hdLead').textContent=a.lead;$('#hdTitle').parentElement.style.display=a.id==='title'?'none':''}
+function go(i,s){if(ACTS[cur].unmount)ACTS[cur].unmount();hdTools.innerHTML='';cur=i;step=s||0;const a=ACTS[i];scene.innerHTML='';setHead(a);a.mount(scene);a.setStep(step,true);renderRail();renderCtl();try{localStorage.setItem('cap-map-pos',cur+':'+step)}catch(e){}}
+function next(){const a=ACTS[cur];if(step<a.steps-1){step++;a.setStep(step,false);renderCtl();try{localStorage.setItem('cap-map-pos',cur+':'+step)}catch(e){}}else if(cur<ACTS.length-1)go(cur+1,0)}
+function prev(){if(step>0){go(cur,step-1)}else if(cur>0)go(cur-1,ACTS[cur-1].steps-1)}
+$('#btnNext').addEventListener('click',next);$('#btnPrev').addEventListener('click',prev);
+$('#btnFull').addEventListener('click',()=>{const d=document.documentElement;try{if(document.fullscreenElement)document.exitFullscreen();else d.requestFullscreen&&d.requestFullscreen()}catch(e){}});
+document.addEventListener('keydown',e=>{const t=e.target.tagName;if(t==='SELECT'||t==='INPUT'||t==='TEXTAREA')return;if(e.key===' '||e.key==='ArrowLeft'||e.key==='PageDown'||e.key==='ArrowDown'||e.key==='Enter'){e.preventDefault();next()}else if(e.key==='ArrowRight'||e.key==='PageUp'||e.key==='ArrowUp'){e.preventDefault();prev()}else if(e.key==='f'||e.key==='F'){$('#btnFull').click()}else if(e.key==='Home'){go(0,0)}});
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>go(cur,step),250)});
+let start=[0,0];try{const p=localStorage.getItem('cap-map-pos');if(p){const [a,b]=p.split(':').map(Number);if(a>=0&&a<ACTS.length)start=[a,Math.min(b,ACTS[a].steps-1)]}}catch(e){}
+go(start[0],start[1]);
+
 })();
 </script>
 </body></html>
