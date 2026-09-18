@@ -49,6 +49,65 @@ A static Next.js PWA combining a portfolio tracker with a live Saudi/Gulf gold p
 
 > ⚠️ أرقام المصنعية تقديرية ومبنية على أسعار منشورة من محلات ومواقع سعودية، وتختلف من محل لآخر. الأرقام غير المؤكدة معلَّمة كتقديرات في `src/lib/gold/rate-card.ts`. للأحكام الضريبية الرسمية ارجع لهيئة الزكاة والضريبة والجمارك.
 
+## تطبيق أندرويد (APK)
+
+التطبيق مغلّف بـ [Capacitor](https://capacitorjs.com/) كتطبيق أندرويد أصلي: كل الواجهة
+مضمّنة داخل الـ APK وتشتغل بدون إنترنت، والشبكة تُستخدم فقط لجلب سعر الذهب اللحظي.
+التطبيق يفتح مباشرة على حاسبة الذهب.
+
+| | |
+| --- | --- |
+| اسم التطبيق | حاسبة الذهب |
+| معرّف الحزمة | `com.khalidaseri.goldcalculator` |
+| أقل إصدار مدعوم | Android 6.0 (API 23) |
+| الحجم | ~4.5 ميجابايت |
+
+### البناء محلياً
+
+يتطلب JDK 21 و Android SDK (platform 35 + build-tools 35).
+
+```bash
+npm ci
+npm run android:apk       # APK للتجربة → android/app/build/outputs/apk/debug/
+npm run android:release   # APK موقّع للتوزيع (يحتاج مفتاح، انظر أدناه)
+npm run android:icons     # إعادة توليد الأيقونات من assets/icon.svg
+```
+
+`BUILD_TARGET=native` يلغي `basePath` لأن Capacitor يخدم الملفات من جذر السيرفر
+المحلي، بينما نسخة الويب تحتاجه لأنها تُنشر تحت مسار فرعي في GitHub Pages.
+
+### البناء عبر GitHub Actions
+
+شغّل workflow **Build Android APK** من تبويب Actions، ونزّل الـ APK من قسم
+Artifacts. دفع وسم يبدأ بـ `v` (مثل `v1.0.0`) يرفع الـ APK كملف في الإصدار.
+
+### التوقيع للتوزيع
+
+الـ APK الافتراضي موقّع بمفتاح التصحيح (debug) — يثبّت ويشتغل عادي للاستخدام
+الشخصي، لكنه غير مناسب للنشر ولا يسمح بالتحديث فوق نسخة موقّعة بمفتاح آخر.
+لمفتاح خاص بك:
+
+```bash
+keytool -genkeypair -v -keystore android/app/release.jks \
+  -alias goldcalc -keyalg RSA -keysize 4096 -validity 10000
+```
+
+ثم أنشئ `android/keystore.properties` (مُستثنى من git):
+
+```properties
+storeFile=release.jks
+storePassword=<كلمة السر>
+keyAlias=goldcalc
+keyPassword=<كلمة السر>
+```
+
+للبناء عبر CI، أضف الأسرار التالية في إعدادات المستودع:
+`ANDROID_KEYSTORE_BASE64` (ناتج `base64 -w0 android/app/release.jks`)،
+`ANDROID_KEYSTORE_PASSWORD`، `ANDROID_KEY_ALIAS`، `ANDROID_KEY_PASSWORD`.
+
+> احتفظ بملف المفتاح ونسخة احتياطية منه. فقدانه يعني أنك لن تقدر تحدّث التطبيق
+> فوق النسخة المثبّتة، وستحتاج المستخدمين يحذفونها ويثبّتون من جديد.
+
 ## البنية — Structure
 
 ```
@@ -61,6 +120,9 @@ src/lib/gold/
   storage.ts       تفضيلات المستخدم والعروض المحفوظة (localStorage)
 src/components/gold/   واجهة عربية RTL
 src/app/gold/          الصفحات
+android/               مشروع أندرويد (Capacitor)
+assets/                مصدر أيقونة التطبيق
+scripts/generate-android-icons.js   توليد أيقونات أندرويد
 ```
 
 ## التشغيل — Development

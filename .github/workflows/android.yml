@@ -1,0 +1,87 @@
+name: Build Android APK
+
+# Produces an installable APK without needing a local Android toolchain.
+# Run it from the Actions tab ("Run workflow"), then download the APK from the
+# run's Artifacts section.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      # Guard the release: a broken calculation must not reach a phone.
+      - name: Run pricing engine tests
+        run: npm test
+
+      - name: Build web assets and sync to Android
+        run: npm run android:sync
+
+      # Signing is optional. Set all four secrets to get a release-signed APK
+      # that can be updated in place; without them the job still produces a
+      # debug-signed APK that installs fine for personal use.
+      - name: Configure release signing
+        id: signing
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+          cat > android/keystore.properties <<PROPS
+          storeFile=release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          PROPS
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble release APK
+        if: steps.signing.outputs.signed == 'true'
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Assemble debug APK
+        if: steps.signing.outputs.signed != 'true'
+        run: cd android && ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p dist
+          find android/app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gold-calculator-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      # Tag pushes also publish the APK as a downloadable release asset.
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
