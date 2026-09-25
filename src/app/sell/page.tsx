@@ -3,13 +3,13 @@ import GoldNav from '@/components/gold/GoldNav'
 import SellCalculator from '@/components/gold/SellCalculator'
 
 export const metadata: Metadata = {
-  title: 'حاسبة الذهب | بيع',
+  title: 'بيع',
   description: 'احسب كم راح تستلم لو بعت ذهبك اليوم',
 }
 
 export default function GoldSellPage() {
   return (
-    <div dir="rtl" className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-extrabold text-gray-900">بيع الذهب</h1>
         <p className="mt-1 text-xs text-gray-500">

@@ -6,10 +6,10 @@ import { BookOpen, Calculator, Scale, TrendingDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
-  { href: '/gold', label: 'الشراء', icon: Calculator },
-  { href: '/gold/sell', label: 'البيع', icon: TrendingDown },
-  { href: '/gold/compare', label: 'المقارنة', icon: Scale },
-  { href: '/gold/guide', label: 'نصائح', icon: BookOpen },
+  { href: '/', label: 'الشراء', icon: Calculator },
+  { href: '/sell', label: 'البيع', icon: TrendingDown },
+  { href: '/compare', label: 'المقارنة', icon: Scale },
+  { href: '/guide', label: 'نصائح', icon: BookOpen },
 ]
 
 export default function GoldNav() {

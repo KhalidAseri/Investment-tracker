@@ -1,19 +1,22 @@
-'use client'
+import type { Metadata } from 'next'
+import BuyCalculator from '@/components/gold/BuyCalculator'
+import GoldNav from '@/components/gold/GoldNav'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+export const metadata: Metadata = {
+  description: 'احسب سعر الذهب بالمصنعية والضريبة قبل ما تشتري',
+}
 
-/**
- * Entry redirect. The Android build opens straight on the gold calculator —
- * that is what the app is for on a phone, standing in a shop. The web build
- * keeps landing on the portfolio dashboard.
- */
-const HOME = process.env.NEXT_PUBLIC_BUILD_TARGET === 'native' ? '/gold' : '/dashboard'
-
-export default function Home() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace(HOME)
-  }, [router])
-  return null
+export default function GoldBuyPage() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      <div>
+        <h1 className="text-xl font-extrabold text-gray-900">حاسبة الذهب</h1>
+        <p className="mt-1 text-xs text-gray-500">
+          اعرف السعر العادل قبل ما تدخل المحل — بالمصنعية والضريبة وسعر إعادة البيع.
+        </p>
+      </div>
+      <GoldNav />
+      <BuyCalculator />
+    </div>
+  )
 }

@@ -1,27 +1,29 @@
 {
-  "name": "متتبع الاستثمارات | Investment Tracker",
-  "short_name": "استثماراتي",
-  "description": "تتبع جميع استثماراتك في مكان واحد",
-  "start_url": "/dashboard",
+  "name": "حاسبة الذهب",
+  "short_name": "الذهب",
+  "description": "احسب سعر الذهب بالمصنعية والضريبة قبل ما تشتري، واعرف كم تستلم لو بعت",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f9fafb",
-  "theme_color": "#2563eb",
+  "theme_color": "#d97706",
   "orientation": "any",
-  "dir": "auto",
+  "dir": "rtl",
   "lang": "ar",
   "categories": [
     "finance",
-    "business"
+    "shopping",
+    "utilities"
   ],
   "icons": [
     {
-      "src": "/icons/icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
@@ -30,28 +32,28 @@
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "حاسبة الذهب",
-      "short_name": "الذهب",
-      "url": "/gold",
+      "name": "حاسبة الشراء",
+      "short_name": "شراء",
+      "url": "./",
       "description": "احسب سعر الذهب بالمصنعية والضريبة"
     },
     {
-      "name": "لوحة التحكم",
-      "short_name": "Dashboard",
-      "url": "/dashboard",
-      "description": "عرض ملخص المحفظة"
+      "name": "حاسبة البيع",
+      "short_name": "بيع",
+      "url": "./sell/",
+      "description": "كم راح تستلم لو بعت اليوم"
     },
     {
-      "name": "الحسابات",
-      "short_name": "Accounts",
-      "url": "/accounts",
-      "description": "إدارة الحسابات"
+      "name": "مقارنة العروض",
+      "short_name": "مقارنة",
+      "url": "./compare/",
+      "description": "قارن عروض المحلات بالمصنعية للجرام"
     },
     {
-      "name": "التوزيعات",
-      "short_name": "Dividends",
-      "url": "/dividends",
-      "description": "تتبع التوزيعات"
+      "name": "نصائح الشراء",
+      "short_name": "نصائح",
+      "url": "./guide/",
+      "description": "نصائح عشان تحصل على أفضل صفقة"
     }
   ]
 }

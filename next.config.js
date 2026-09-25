@@ -8,16 +8,18 @@
  *                       A `basePath` there would break every asset URL.
  */
 const isNative = process.env.BUILD_TARGET === 'native'
+const basePath = isNative ? '' : '/Investment-tracker'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  ...(isNative ? {} : { basePath: '/Investment-tracker' }),
+  ...(basePath ? { basePath } : {}),
   images: { unoptimized: true },
   trailingSlash: true,
   env: {
-    // Lets the app know which shell it is running in at runtime.
-    NEXT_PUBLIC_BUILD_TARGET: isNative ? 'native' : 'web',
+    // Next does not rewrite basePath into `metadata.manifest` or `metadata.icons`,
+    // so the layout prefixes those URLs itself and needs the value at runtime.
+    NEXT_PUBLIC_BASE_PATH: basePath,
   },
 }
 

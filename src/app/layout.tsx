@@ -1,23 +1,28 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import { LocaleProvider } from '@/components/shared/LocaleContext'
-import AppShell from '@/components/layout/AppShell'
+
+// Next does not apply `basePath` to metadata URLs, so they are prefixed here.
+// Empty in the Android build, where Capacitor serves from the server root.
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
 export const metadata: Metadata = {
-  title: 'متتبع الاستثمارات | Investment Tracker',
-  description: 'تتبع جميع استثماراتك في مكان واحد',
-  manifest: '/manifest.json',
+  title: {
+    default: 'حاسبة الذهب',
+    template: '%s | حاسبة الذهب',
+  },
+  description: 'احسب سعر الذهب بالمصنعية والضريبة قبل ما تشتري، واعرف كم تستلم لو بعت.',
+  manifest: `${BASE}/manifest.json`,
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'استثماراتي',
+    title: 'حاسبة الذهب',
   },
   formatDetection: {
     telephone: false,
   },
   icons: {
-    icon: '/icons/icon.svg',
-    apple: '/icons/icon.svg',
+    icon: `${BASE}/icons/icon.svg`,
+    apple: `${BASE}/icons/icon.svg`,
   },
 }
 
@@ -26,7 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#2563eb',
+  themeColor: '#d97706',
 }
 
 export default function RootLayout({
@@ -35,15 +40,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" dir="ltr">
+    <html lang="ar" dir="rtl">
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+        <link rel="apple-touch-icon" href={`${BASE}/icons/icon.svg`} />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body>
-        <LocaleProvider>
-          <AppShell>{children}</AppShell>
-        </LocaleProvider>
+        <main className="min-h-screen p-4 pb-10 lg:p-6">{children}</main>
       </body>
     </html>
   )

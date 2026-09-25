@@ -5,7 +5,7 @@ import { KARATS } from '@/lib/gold/constants'
 import { ORIGINS, PIECE_TYPES } from '@/lib/gold/rate-card'
 
 export const metadata: Metadata = {
-  title: 'حاسبة الذهب | نصائح الشراء',
+  title: 'نصائح الشراء',
   description: 'نصائح عملية عشان تحصل على أفضل صفقة ذهب',
 }
 
@@ -32,7 +32,7 @@ export default function GoldGuidePage() {
   )
 
   return (
-    <div dir="rtl" className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-extrabold text-gray-900">نصائح الشراء</h1>
         <p className="mt-1 text-xs text-gray-500">

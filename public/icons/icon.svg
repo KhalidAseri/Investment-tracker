@@ -1,12 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#2563eb"/>
-  <g transform="translate(256,256)">
-    <!-- Upward trend arrow -->
-    <path d="M-120,80 L-40,0 L40,-80 L120,-40" stroke="white" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <polygon points="120,-40 120,-100 60,-40" fill="white"/>
-    <!-- Base line -->
-    <line x1="-140" y1="120" x2="140" y2="120" stroke="rgba(255,255,255,0.4)" stroke-width="8" stroke-linecap="round"/>
-    <!-- Dollar sign -->
-    <text x="-145" y="-60" font-family="Arial,sans-serif" font-weight="bold" font-size="80" fill="rgba(255,255,255,0.3)">$</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="0.5" stop-color="#d97706"/>
+      <stop offset="1" stop-color="#a16207"/>
+    </linearGradient>
+    <linearGradient id="barTop" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fde68a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Stacked ingots: reads as "gold" even at 48px -->
+  <g transform="translate(256,271)">
+    <path d="M-150,40 L-118,-14 L118,-14 L150,40 Z" fill="#fef3c7"/>
+    <path d="M-118,-14 L118,-14 L150,40 L-150,40 Z" fill="none"/>
+    <path d="M-96,-30 L-66,-82 L66,-82 L96,-30 Z" fill="url(#barTop)"/>
+    <path d="M-150,40 L150,40 L150,52 L-150,52 Z" fill="#92400e" opacity="0.25"/>
+    <path d="M-96,-30 L96,-30 L96,-20 L-96,-20 Z" fill="#92400e" opacity="0.18"/>
   </g>
 </svg>
