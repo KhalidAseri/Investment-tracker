@@ -33,10 +33,13 @@ export default function FairnessMeter({
   differencePercent,
   verdict,
   className,
+  tone = 'onSurface',
 }: {
   differencePercent: number
   verdict: FairnessVerdict
   className?: string
+  /** `onColor` when the meter sits on a saturated panel and needs light ink. */
+  tone?: 'onSurface' | 'onColor'
 }) {
   const reduced = useReducedMotion()
 
@@ -71,31 +74,40 @@ export default function FairnessMeter({
         </div>
 
         {/* The needle. */}
-        <motion.div
-          style={{ insetInlineStart: inset }}
-          className="absolute -top-1.5"
-        >
+        <motion.div style={{ insetInlineStart: inset }} className="absolute -top-1.5">
           <motion.div
             initial={{ scale: 0, rotate: -30 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-            className="-ms-2.5 h-5 w-5 rounded-full border-[3px] border-gray-900 bg-white shadow-md"
+            className={cn(
+              '-ms-2.5 h-5 w-5 rounded-full border-[3px] bg-white shadow-md',
+              tone === 'onColor' ? 'border-white/80' : 'border-gray-900'
+            )}
           />
         </motion.div>
       </div>
 
       <div className="mt-3 flex justify-between text-[10px] font-bold">
-        {ZONES.map((zone) => (
-          <span
-            key={zone.verdict}
-            className={cn(
-              'transition-colors',
-              verdict === zone.verdict ? 'text-gray-900' : 'text-gray-400'
-            )}
-          >
-            {zone.label}
-          </span>
-        ))}
+        {ZONES.map((zone) => {
+          const active = verdict === zone.verdict
+          return (
+            <span
+              key={zone.verdict}
+              className={cn(
+                'transition-colors',
+                tone === 'onColor'
+                  ? active
+                    ? 'text-white'
+                    : 'text-white/50'
+                  : active
+                    ? 'text-gray-900'
+                    : 'text-gray-400'
+              )}
+            >
+              {zone.label}
+            </span>
+          )
+        })}
       </div>
     </div>
   )

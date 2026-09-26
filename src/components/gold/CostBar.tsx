@@ -25,8 +25,12 @@ export interface CostSlice {
  * read a single number — and it is the same picture whether the piece costs
  * 900 or 9,000.
  *
- * Segments animate their width, so changing to a heavier-workmanship piece
- * shows the craftsmanship block growing rather than simply reprinting.
+ * Part-to-whole with three named classes, so the colours carry identity:
+ * gold `#d97706`, workmanship `#7c3aed`, tax `#0891b2`. That trio was checked
+ * with a contrast validator rather than picked by eye — the amber-and-orange
+ * pair it replaced sat at ΔE 4.2 for *normal* vision, which is to say nobody
+ * could tell the metal from the making. Segments are separated by a surface
+ * gap and every one is direct-labelled, so identity never rests on hue alone.
  */
 export default function CostBar({
   slices,
@@ -43,11 +47,17 @@ export default function CostBar({
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-gray-100">
-        {visible.map((slice) => (
+      <div className="flex h-4 w-full gap-0.5">
+        {visible.map((slice, i) => (
           <motion.div
             key={slice.key}
-            className={cn('h-full', slice.bar)}
+            className={cn(
+              'h-full',
+              slice.bar,
+              // Rounded ends on the outer edges only, so the run reads as one bar.
+              i === 0 && 'rounded-s-md',
+              i === visible.length - 1 && 'rounded-e-md'
+            )}
             initial={{ width: 0 }}
             animate={{ width: `${(slice.amount / total) * 100}%` }}
             transition={SPRING_SOFT}
@@ -63,12 +73,19 @@ export default function CostBar({
             <span className="text-[11px] font-bold tabular-nums text-gray-900">
               {Math.round((slice.amount / total) * 100)}%
             </span>
-            <span className="text-[10px] tabular-nums text-gray-400">
+            <bdi className="text-[10px] tabular-nums text-gray-400">
               {formatMoneyShort(slice.amount, currency)}
-            </span>
+            </bdi>
           </div>
         ))}
       </div>
     </div>
   )
 }
+
+/** The validated categorical trio, so callers can't drift from it. */
+export const COST_COLORS = {
+  gold: { bar: 'bg-[#d97706]', dot: 'bg-[#d97706]' },
+  making: { bar: 'bg-[#7c3aed]', dot: 'bg-[#7c3aed]' },
+  vat: { bar: 'bg-[#0891b2]', dot: 'bg-[#0891b2]' },
+} as const

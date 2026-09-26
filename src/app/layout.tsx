@@ -48,7 +48,9 @@ export default function RootLayout({
       </head>
       <body>
         <main className="min-h-screen p-4 pb-24 lg:p-6">
-          <div className="mx-auto max-w-2xl space-y-4">
+          {/* Wider once there is room for the dashboard and the form side by side;
+              a 2xl column split in two leaves neither enough for a headline figure. */}
+          <div className="mx-auto max-w-2xl space-y-4 lg:max-w-5xl">
             {/* The nav lives in the layout, not in each page: kept mounted
                 across navigation, its active pill slides from tab to tab
                 instead of blinking out and reappearing somewhere else. */}

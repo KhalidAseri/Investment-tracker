@@ -3,15 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { BookOpen, Calculator, Scale, TrendingDown } from 'lucide-react'
+import { BookOpen, Calculator, MapPin } from 'lucide-react'
 import { tapFeedback } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { SPRING, TAP } from './motion'
 
+// Three destinations, not four: buying and selling are one screen with a
+// switch, because you are only ever doing one of them.
 const TABS = [
-  { href: '/', label: 'الشراء', icon: Calculator },
-  { href: '/sell', label: 'البيع', icon: TrendingDown },
-  { href: '/compare', label: 'المقارنة', icon: Scale },
+  { href: '/', label: 'الحاسبة', icon: Calculator },
+  { href: '/tour', label: 'جولتي', icon: MapPin },
   { href: '/guide', label: 'نصائح', icon: BookOpen },
 ]
 
