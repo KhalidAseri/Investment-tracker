@@ -2,119 +2,114 @@
 
 import { useId, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { KARATS } from '@/lib/gold/constants'
 import { tapFeedback } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
-import { collapse, SPRING, TAP } from './motion'
+import type { Karat, PieceType, PieceTypeId } from '@/lib/gold/types'
+import { SPRING, TAP } from './motion'
 import PieceIcon from './PieceIcon'
-import type { PieceType, PieceTypeId } from '@/lib/gold/types'
 
-/** Label + hint wrapper so every input in the calculator lines up the same way. */
+/*
+ * Every picker in this file lays its options out in a grid that fits the
+ * screen. None of them scrolls sideways.
+ *
+ * They used to: the karat picker was a strip wider than the phone, and so were
+ * the weight presets. On a real Android WebView that cost three things — the
+ * options past the edge were hidden and nothing said they existed, the
+ * scroll container clipped the selected option's ring and border, and in
+ * right-to-left layout the strip sometimes opened scrolled to its far end,
+ * leaving an empty band where the presets should have been. A grid that fits
+ * has none of those failure modes: every option is on screen, whole.
+ */
+
+/** Label over a control, with an optional note under it. */
 export function Field({
   label,
   hint,
+  aside,
   children,
   className,
 }: {
   label: string
   hint?: React.ReactNode
+  /** Right-aligned extra at the label's end — a toggle, a unit. */
+  aside?: React.ReactNode
   children: React.ReactNode
   className?: string
 }) {
   return (
-    <div className={cn('space-y-2', className)}>
-      <label className="block text-sm font-bold text-gray-800">{label}</label>
+    <div className={cn('space-y-2.5', className)}>
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-[13px] font-bold text-gray-800">{label}</label>
+        {aside}
+      </div>
       {children}
-      {/* The hint changes as the selection changes, so it cross-fades rather
-          than snapping — otherwise it reads as a flicker under the control. */}
-      <AnimatePresence mode="wait" initial={false}>
-        {hint && (
-          <motion.p
-            key={String(hint)}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.18 }}
-            className="text-xs leading-relaxed text-gray-500"
-          >
-            {hint}
-          </motion.p>
-        )}
-      </AnimatePresence>
+      {hint && <p className="text-[11px] leading-relaxed text-gray-500">{hint}</p>}
     </div>
   )
 }
 
-export interface SegmentOption<T extends string | number> {
-  value: T
-  label: string
-  sublabel?: string
-}
-
 /**
- * Horizontal pill picker.
+ * The seven karats as one row of equal cells.
  *
- * The selected state is a single element that slides between options
- * (`layoutId`) rather than a colour that blinks on and off. That movement is
- * what tells the eye *which* option it came from — with seven karats in a row,
- * a static highlight leaves the user hunting for what just changed.
+ * The word "عيار" is left out of each cell because the field's own label
+ * already says it; that is what lets all seven fit a 360-pixel phone at a
+ * comfortable touch size, instead of four fitting and three being scrolled
+ * out of sight.
  */
-export function Segmented<T extends string | number>({
-  options,
+export function KaratGrid({
   value,
   onChange,
-  size = 'md',
 }: {
-  options: SegmentOption<T>[]
-  value: T
-  onChange: (value: T) => void
-  size?: 'sm' | 'md'
+  value: Karat
+  onChange: (karat: Karat) => void
 }) {
-  // Scopes the sliding pill to this picker, so two Segmenteds on one screen
-  // don't animate into each other.
   const groupId = useId()
 
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
-      {options.map((opt) => {
-        const active = opt.value === value
+    <div className="grid grid-cols-7 gap-1.5" role="radiogroup" aria-label="العيار">
+      {KARATS.map((k) => {
+        const active = k.karat === value
         return (
           <motion.button
-            key={String(opt.value)}
+            key={k.karat}
             type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`عيار ${k.karat}، دمغة ${k.stamp}`}
             whileTap={TAP}
             onClick={() => {
               if (!active) tapFeedback('light')
-              onChange(opt.value)
+              onChange(k.karat)
             }}
-            aria-pressed={active}
-            className={cn(
-              'relative flex shrink-0 flex-col items-center justify-center rounded-xl font-semibold touch-manipulation',
-              size === 'sm' ? 'min-w-[74px] px-3 py-2 text-xs' : 'min-w-[86px] px-4 py-2.5 text-sm',
-              active ? 'text-amber-950' : 'text-gray-600'
-            )}
+            className="relative flex h-14 flex-col items-center justify-center rounded-xl touch-manipulation"
           >
-            {active && (
+            {active ? (
               <motion.span
-                layoutId={`segment-${groupId}`}
+                layoutId={`karat-${groupId}`}
                 transition={SPRING}
-                className="absolute inset-0 rounded-xl bg-gradient-to-b from-amber-100 to-amber-200 ring-2 ring-amber-500"
+                className="absolute inset-0 rounded-xl bg-amber-500 shadow-md shadow-amber-500/30"
               />
-            )}
-            {!active && (
+            ) : (
               <span className="absolute inset-0 rounded-xl border border-gray-200 bg-white" />
             )}
-            <span className="relative">{opt.label}</span>
-            {opt.sublabel && (
-              <span
-                className={cn(
-                  'relative mt-0.5 text-[10px] font-medium',
-                  active ? 'text-amber-800' : 'text-gray-400'
-                )}
-              >
-                {opt.sublabel}
-              </span>
-            )}
+            <span
+              className={cn(
+                'relative text-base font-extrabold leading-none',
+                active ? 'text-white' : 'text-gray-800'
+              )}
+            >
+              {k.karat}
+            </span>
+            <span
+              className={cn(
+                'relative mt-1 text-[9px] font-semibold leading-none tabular-nums',
+                active ? 'text-amber-50' : 'text-gray-400'
+              )}
+            >
+              {k.stamp}
+            </span>
           </motion.button>
         )
       })}
@@ -123,12 +118,11 @@ export function Segmented<T extends string | number>({
 }
 
 /**
- * Piece picker as a visual grid.
+ * Piece picker as a grid of silhouettes, four across.
  *
- * This replaced a fourteen-item dropdown. A dropdown hides every option but one
- * and gives no sense of which pieces are cheap to make — the thing the shopper
- * is actually deciding. Laid out as shapes with their making charge on the
- * face, the trade-off is visible before a single tap.
+ * Each tile carries its own making charge, so the trade-off the shopper is
+ * actually weighing — a مرتعشة costs three times the workmanship of a دبلة —
+ * is visible before a single tap.
  */
 export function PieceGrid({
   pieces,
@@ -139,50 +133,61 @@ export function PieceGrid({
   pieces: PieceType[]
   value: PieceTypeId
   onChange: (value: PieceTypeId) => void
-  /** Short making-charge tag rendered under each piece, e.g. "٢٥ ر.س/جم". */
+  /** Short making-charge tag rendered under each piece, e.g. "22/جم". */
   costLabel: (piece: PieceType) => string
 }) {
   const groupId = useId()
 
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+    <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="نوع القطعة">
       {pieces.map((piece) => {
         const active = piece.id === value
         return (
           <motion.button
             key={piece.id}
             type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={piece.labelAr}
             whileTap={TAP}
             onClick={() => {
               if (!active) tapFeedback('light')
               onChange(piece.id)
             }}
-            aria-pressed={active}
-            className={cn(
-              'relative flex flex-col items-center gap-1 rounded-2xl px-1.5 py-3 text-center touch-manipulation',
-              active ? 'text-amber-950' : 'text-gray-600'
-            )}
+            className="relative flex flex-col items-center gap-1 rounded-xl px-1 pb-2 pt-2.5 text-center touch-manipulation"
           >
-            {active && (
+            {active ? (
               <motion.span
                 layoutId={`piece-${groupId}`}
                 transition={SPRING}
-                className="absolute inset-0 rounded-2xl bg-gradient-to-b from-amber-100 to-amber-200 ring-2 ring-amber-500"
+                className="absolute inset-0 rounded-xl bg-amber-50 ring-2 ring-inset ring-amber-500"
               />
-            )}
-            {!active && (
-              <span className="absolute inset-0 rounded-2xl border border-gray-200 bg-white" />
+            ) : (
+              <span className="absolute inset-0 rounded-xl border border-gray-200 bg-white" />
             )}
 
-            <PieceIcon
-              piece={piece.id}
-              className={cn('relative h-7 w-7', active ? 'text-amber-700' : 'text-gray-400')}
-            />
-            <span className="relative text-[11px] font-bold leading-tight">{piece.labelAr}</span>
+            <motion.span
+              className="relative"
+              animate={active ? { scale: [1, 1.18, 1], rotate: [0, -8, 0] } : { scale: 1, rotate: 0 }}
+              transition={{ duration: 0.35 }}
+            >
+              <PieceIcon
+                piece={piece.id}
+                className={cn('h-6 w-6', active ? 'text-amber-600' : 'text-gray-400')}
+              />
+            </motion.span>
+            <span
+              className={cn(
+                'relative text-[11px] font-bold leading-tight',
+                active ? 'text-amber-900' : 'text-gray-700'
+              )}
+            >
+              {piece.shortLabelAr ?? piece.labelAr}
+            </span>
             <bdi
               className={cn(
-                'relative text-[9.5px] font-medium tabular-nums',
-                active ? 'text-amber-800' : 'text-gray-400'
+                'relative text-[9.5px] font-semibold tabular-nums leading-none',
+                active ? 'text-amber-700' : 'text-gray-400'
               )}
             >
               {costLabel(piece)}
@@ -199,19 +204,22 @@ export function Select<T extends string>({
   options,
   value,
   onChange,
+  label,
 }: {
   options: { value: T; label: string }[]
   value: T
   onChange: (value: T) => void
+  label?: string
 }) {
   return (
     <select
       value={value}
+      aria-label={label}
       onChange={(e) => {
         tapFeedback('light')
         onChange(e.target.value as T)
       }}
-      className="w-full rounded-xl border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500"
+      className="h-12 w-full rounded-xl border-gray-200 bg-white text-sm font-bold text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500"
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
@@ -223,143 +231,56 @@ export function Select<T extends string>({
 }
 
 /**
- * Numeric input with steppers and optional one-tap presets.
+ * A money amount, typed.
  *
- * Holding its own draft string matters: without it, clearing the box or typing
- * "12." snaps the value back mid-keystroke and the field fights the user.
+ * These used to have − and + buttons that stepped by 50 or 100. Nobody gets
+ * from 0 to 5,450 riyals by tapping plus fifty-four times, so the steppers
+ * were two big targets that did nothing useful while crowding the field. What
+ * a price field needs is a large number, the numeric keyboard, and a unit.
  */
-export function NumberInput({
+export function MoneyInput({
   value,
   onChange,
-  step = 1,
-  min = 0,
-  max,
-  suffix,
-  placeholder,
-  inputMode = 'decimal',
-  presets,
+  unit,
+  placeholder = '0',
+  label,
 }: {
-  value: number | null
+  value: number
   onChange: (value: number) => void
-  step?: number
-  min?: number
-  max?: number
-  suffix?: string
+  unit?: string
   placeholder?: string
-  inputMode?: 'decimal' | 'numeric'
-  /** Common values offered as chips, e.g. typical gram weights. */
-  presets?: number[]
+  label?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
-
-  const clamp = (n: number) => {
-    let out = n
-    if (min !== undefined) out = Math.max(min, out)
-    if (max !== undefined) out = Math.min(max, out)
-    // Kill float dust from repeated 0.1 steps.
-    return Math.round(out * 1000) / 1000
-  }
-
-  const bump = (delta: number) => {
-    tapFeedback('light')
-    setDraft(null)
-    onChange(clamp((value ?? 0) + delta))
-  }
-
-  const shown = draft ?? (value === null || Number.isNaN(value) ? '' : String(value))
+  const shown = draft ?? (value > 0 ? String(value) : '')
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-stretch gap-2">
-        {/* Numbers read left-to-right even here, so the stepper keeps the
-            universal order: − on the left, + on the right. Under dir="rtl"
-            that means the plus button comes first in the markup. */}
-        <motion.button
-          type="button"
-          whileTap={TAP}
-          onClick={() => bump(step)}
-          aria-label="زيادة"
-          className="w-12 shrink-0 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 active:bg-gray-100 touch-manipulation"
-        >
-          +
-        </motion.button>
-
-        <div className="relative flex-1">
-          <input
-            type="text"
-            inputMode={inputMode}
-            value={shown}
-            placeholder={placeholder}
-            onChange={(e) => {
-              const raw = e.target.value.replace(/[^\d.]/g, '')
-              setDraft(raw)
-              const parsed = Number(raw)
-              onChange(raw === '' || Number.isNaN(parsed) ? 0 : parsed)
-            }}
-            onBlur={(e) => {
-              setDraft(null)
-              const parsed = Number(e.target.value.replace(/[^\d.]/g, ''))
-              onChange(Number.isNaN(parsed) ? min ?? 0 : clamp(parsed))
-            }}
-            className={cn(
-              'w-full rounded-xl border-gray-200 py-2.5 text-center text-lg font-extrabold tabular-nums text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500',
-              suffix && 'pe-12'
-            )}
-          />
-          {suffix && (
-            <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs font-semibold text-gray-400">
-              {suffix}
-            </span>
-          )}
-        </div>
-
-        <motion.button
-          type="button"
-          whileTap={TAP}
-          onClick={() => bump(-step)}
-          aria-label="إنقاص"
-          className="w-12 shrink-0 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 active:bg-gray-100 touch-manipulation"
-        >
-          −
-        </motion.button>
-
-      </div>
-
-      {presets && presets.length > 0 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 scrollbar-none">
-          {presets.map((preset) => {
-            const active = value === preset
-            return (
-              <motion.button
-                key={preset}
-                type="button"
-                whileTap={TAP}
-                onClick={() => {
-                  tapFeedback('light')
-                  setDraft(null)
-                  onChange(preset)
-                }}
-                className={cn(
-                  'shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold tabular-nums transition-colors touch-manipulation',
-                  active
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-600 active:bg-gray-200'
-                )}
-              >
-                <bdi>
-                  {preset}
-                  {suffix ? ` ${suffix}` : ''}
-                </bdi>
-              </motion.button>
-            )
-          })}
-        </div>
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={label}
+        value={shown}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^\d.]/g, '')
+          setDraft(raw)
+          const parsed = Number(raw)
+          onChange(raw === '' || Number.isNaN(parsed) ? 0 : parsed)
+        }}
+        onBlur={() => setDraft(null)}
+        className="h-14 w-full rounded-xl border-gray-200 pe-14 ps-4 text-start text-2xl font-extrabold tabular-nums text-gray-900 shadow-sm placeholder:text-gray-300 focus:border-amber-500 focus:ring-amber-500"
+      />
+      {unit && (
+        <span className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-sm font-bold text-gray-400">
+          {unit}
+        </span>
       )}
     </div>
   )
 }
 
-/** Checkbox styled as a switch-ish chip, used for the VAT toggles. */
+/** A small switch-like chip for yes/no settings. */
 export function ToggleChip({
   checked,
   onChange,
@@ -380,27 +301,25 @@ export function ToggleChip({
         onChange(!checked)
       }}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors touch-manipulation',
-        checked
-          ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-400'
-          : 'bg-gray-100 text-gray-500 ring-1 ring-transparent'
+        'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-colors touch-manipulation',
+        checked ? 'bg-amber-100 text-amber-900' : 'bg-gray-100 text-gray-500'
       )}
     >
       <span
         className={cn(
-          'flex h-4 w-4 items-center justify-center rounded-md transition-colors',
+          'flex h-4 w-4 items-center justify-center rounded transition-colors',
           checked ? 'bg-amber-600 text-white' : 'bg-white ring-1 ring-gray-300'
         )}
       >
         <AnimatePresence initial={false}>
           {checked && (
             <motion.span
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              transition={{ duration: 0.12 }}
             >
-              <Check className="h-3 w-3" strokeWidth={3.5} />
+              <Check className="h-3 w-3" strokeWidth={4} />
             </motion.span>
           )}
         </AnimatePresence>
@@ -410,98 +329,55 @@ export function ToggleChip({
   )
 }
 
-/** One line of the price breakdown: label on one side, money on the other. */
-export function BreakdownRow({
-  label,
+/** Two or three mutually exclusive options as equal halves of one control. */
+export function SegmentSwitch<T extends string>({
+  options,
   value,
-  hint,
-  emphasis = 'normal',
+  onChange,
 }: {
-  label: string
-  /** Pre-formatted, or an <AnimatedNumber> when the figure should count. */
-  value: React.ReactNode
-  hint?: string
-  emphasis?: 'normal' | 'muted' | 'strong' | 'total'
+  options: { value: T; label: string; icon?: React.ComponentType<{ className?: string }> }[]
+  value: T
+  onChange: (value: T) => void
 }) {
+  const groupId = useId()
+
   return (
     <div
-      className={cn(
-        'flex items-start justify-between gap-3 py-2.5',
-        emphasis === 'total' && 'mt-1 border-t-2 border-amber-200 pt-3'
-      )}
+      className="grid gap-1 rounded-2xl bg-gray-200/70 p-1"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      role="tablist"
     >
-      <div className="min-w-0">
-        <p
-          className={cn(
-            'text-sm',
-            emphasis === 'muted' && 'text-gray-500',
-            emphasis === 'normal' && 'text-gray-600',
-            (emphasis === 'strong' || emphasis === 'total') && 'font-bold text-gray-900'
-          )}
-        >
-          {label}
-        </p>
-        {hint && <p className="mt-0.5 text-[11px] leading-relaxed text-gray-400">{hint}</p>}
-      </div>
-      {/* <bdi> so a figure, its sign and its currency keep their own
-          left-to-right order inside the surrounding Arabic text — without it
-          "− 88.19 ر.س" is reordered into nonsense. */}
-      <bdi
-        className={cn(
-          'shrink-0 tabular-nums',
-          emphasis === 'muted' && 'text-sm text-gray-500',
-          emphasis === 'normal' && 'text-sm font-semibold text-gray-900',
-          emphasis === 'strong' && 'text-base font-bold text-gray-900',
-          emphasis === 'total' && 'text-xl font-extrabold text-amber-700'
-        )}
-      >
-        {value}
-      </bdi>
-    </div>
-  )
-}
-
-/** Disclosure that actually animates its height open and shut. */
-export function Disclosure({
-  title,
-  children,
-  defaultOpen = false,
-}: {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-
-  return (
-    <div>
-      <button
-        onClick={() => {
-          tapFeedback('light')
-          setOpen((v) => !v)
-        }}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between text-start"
-      >
-        <span className="text-sm font-bold text-gray-900">{title}</span>
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={SPRING}>
-          <ChevronDown className="h-4 w-4 text-gray-400" />
-        </motion.span>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            variants={collapse}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            className="overflow-hidden"
+      {options.map((opt) => {
+        const active = opt.value === value
+        const Icon = opt.icon
+        return (
+          <motion.button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            whileTap={TAP}
+            onClick={() => {
+              if (!active) tapFeedback('medium')
+              onChange(opt.value)
+            }}
+            className={cn(
+              'relative flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-extrabold touch-manipulation',
+              active ? 'text-gray-900' : 'text-gray-500'
+            )}
           >
-            <div className="pt-4">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {active && (
+              <motion.span
+                layoutId={`switch-${groupId}`}
+                transition={SPRING}
+                className="absolute inset-0 rounded-xl bg-white shadow-sm"
+              />
+            )}
+            {Icon && <Icon className="relative h-4 w-4" />}
+            <span className="relative">{opt.label}</span>
+          </motion.button>
+        )
+      })}
     </div>
   )
 }

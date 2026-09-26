@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   analyzeQuote,
+  buyRange,
   computeBuy,
   computeSell,
   isZeroRatedInvestmentGold,
   priceBoard,
   pricePerGram,
   reverseEngineerQuote,
+  sellRange,
 } from '../calculator'
 import { GRAMS_PER_TROY_OUNCE, getCurrency } from '../constants'
-import { DEFAULT_RATE_CARD } from '../rate-card'
+import { BUYBACK_TYPICAL, DEFAULT_RATE_CARD } from '../rate-card'
 import type { BuyInput, MarketSnapshot, RateCard } from '../types'
 
 // A fixed market so every expected number below can be worked out by hand.
@@ -350,5 +352,90 @@ describe('currency handling', () => {
     const sar = computeBuy(baseInput, market, rateCard).makingPerGram
     const inAed = computeBuy(baseInput, aedMarket, rateCard).makingPerGram
     expect(inAed).toBeCloseTo((sar / 3.75) * aed.pegPerUsd, 6)
+  })
+})
+
+describe('buy range (the per-gram dashboard)', () => {
+  it('orders the three workmanship bands low < typical < high', () => {
+    const r = buyRange(baseInput, market, rateCard)
+    expect(r.perGram.low).toBeLessThan(r.perGram.typical)
+    expect(r.perGram.typical).toBeLessThan(r.perGram.high)
+    expect(r.makingPerGram.low).toBeLessThan(r.makingPerGram.high)
+  })
+
+  it('reports the typical all-in gram as the piece total over its weight', () => {
+    const r = buyRange(baseInput, market, rateCard)
+    expect(r.perGram.typical).toBeCloseTo(r.typical.totalWithVat / baseInput.weightGrams, 6)
+  })
+
+  it('splits the typical gram into metal + making + VAT exactly', () => {
+    const r = buyRange(baseInput, market, rateCard)
+    expect(r.metalPerGram + r.makingPerGram.typical + r.vatPerGram).toBeCloseTo(
+      r.perGram.typical,
+      6
+    )
+  })
+
+  it('divides by every piece when there is more than one', () => {
+    const one = buyRange(baseInput, market, rateCard)
+    const three = buyRange({ ...baseInput, quantity: 3 }, market, rateCard)
+    expect(three.perGram.typical).toBeCloseTo(one.perGram.typical, 6)
+    expect(three.typical.totalWithVat).toBeCloseTo(one.typical.totalWithVat * 3, 6)
+  })
+
+  it('still prices a gram before any weight has been entered', () => {
+    const r = buyRange({ ...baseInput, weightGrams: 0 }, market, rateCard)
+    expect(r.perGram.typical).toBeGreaterThan(r.metalPerGram)
+    expect(Number.isFinite(r.perGram.typical)).toBe(true)
+    // …while the piece totals stay honest at zero.
+    expect(r.typical.totalWithVat).toBe(0)
+  })
+
+  it('prices the metal at the karat price, not the pure-gold price', () => {
+    const r = buyRange(baseInput, market, rateCard)
+    expect(r.metalPerGram).toBeCloseTo(pricePerGram(market, 21), 6)
+  })
+
+  it('puts the resale band under the metal price, inside the typical buy-back band', () => {
+    const r = buyRange(baseInput, market, rateCard)
+    expect(r.resalePerGram.low).toBeCloseTo(r.metalPerGram * BUYBACK_TYPICAL.low, 6)
+    expect(r.resalePerGram.high).toBeCloseTo(r.metalPerGram * BUYBACK_TYPICAL.high, 6)
+    expect(r.resalePerGram.high).toBeLessThan(r.metalPerGram)
+  })
+})
+
+describe('sell range', () => {
+  it('pays 98%–99.5% of the metal value per gram', () => {
+    const r = sellRange({ karat: 21, weightGrams: 10, originalPurchasePrice: null }, market)
+    const metal = pricePerGram(market, 21)
+    expect(r.metalPerGram).toBeCloseTo(metal, 6)
+    expect(r.perGram.low).toBeCloseTo(metal * 0.98, 6)
+    expect(r.perGram.high).toBeCloseTo(metal * 0.995, 6)
+    expect(r.perGram.low).toBeLessThan(r.perGram.typical)
+    expect(r.perGram.typical).toBeLessThan(r.perGram.high)
+  })
+
+  it('scales the whole-piece range by weight', () => {
+    const r = sellRange({ karat: 21, weightGrams: 30, originalPurchasePrice: null }, market)
+    expect(r.total.low).toBeCloseTo(r.perGram.low * 30, 6)
+    expect(r.total.high).toBeCloseTo(r.perGram.high * 30, 6)
+  })
+
+  it('has no profit or loss until the original price is known', () => {
+    expect(sellRange({ karat: 21, weightGrams: 10, originalPurchasePrice: null }, market).profitLoss).toBeNull()
+    expect(sellRange({ karat: 21, weightGrams: 10, originalPurchasePrice: 0 }, market).profitLoss).toBeNull()
+  })
+
+  it('measures profit or loss across the band against what was paid', () => {
+    const r = sellRange({ karat: 21, weightGrams: 10, originalPurchasePrice: 3000 }, market)
+    expect(r.profitLoss).not.toBeNull()
+    expect(r.profitLoss!.low).toBeCloseTo(r.total.low - 3000, 6)
+    expect(r.profitLoss!.high).toBeCloseTo(r.total.high - 3000, 6)
+  })
+
+  it('never goes negative for zero weight', () => {
+    const r = sellRange({ karat: 21, weightGrams: 0, originalPurchasePrice: null }, market)
+    expect(r.total.low).toBe(0)
+    expect(r.total.high).toBe(0)
   })
 })

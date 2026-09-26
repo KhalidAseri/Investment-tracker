@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import GoldNav from '@/components/gold/GoldNav'
+import BottomNav from '@/components/gold/BottomNav'
 
 // Next does not apply `basePath` to metadata URLs, so they are prefixed here.
 // Empty in the Android build, where Capacitor serves from the server root.
@@ -32,7 +32,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#d97706',
+  // Lets the page extend under notches and system bars so the
+  // env(safe-area-inset-*) paddings have real values to work with.
+  viewportFit: 'cover',
+  themeColor: '#f9fafb',
 }
 
 export default function RootLayout({
@@ -47,17 +50,17 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body>
-        <main className="min-h-screen p-4 pb-24 lg:p-6">
-          {/* Wider once there is room for the dashboard and the form side by side;
-              a 2xl column split in two leaves neither enough for a headline figure. */}
-          <div className="mx-auto max-w-2xl space-y-4 lg:max-w-5xl">
-            {/* The nav lives in the layout, not in each page: kept mounted
-                across navigation, its active pill slides from tab to tab
-                instead of blinking out and reappearing somewhere else. */}
-            <GoldNav />
-            {children}
-          </div>
+        {/* Top padding clears the status bar on iOS and in browsers that report
+            a safe area; on Android the native shell insets the whole WebView
+            instead (see capacitor.config.ts), so this resolves to the base
+            padding there. Bottom padding leaves room for the navigation bar. */}
+        <main
+          className="min-h-screen px-4 pb-28 lg:px-6"
+          style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+        >
+          <div className="mx-auto max-w-2xl space-y-4 lg:max-w-5xl">{children}</div>
         </main>
+        <BottomNav />
       </body>
     </html>
   )

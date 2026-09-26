@@ -1,19 +1,12 @@
 import type { Metadata } from 'next'
 import Calculator from '@/components/gold/Calculator'
-import PageHeader from '@/components/gold/PageHeader'
 
 export const metadata: Metadata = {
-  description: 'احسب سعر الذهب بالمصنعية والضريبة قبل ما تشتري، واعرف كم تستلم لو بعت',
+  description: 'سعر جرام الذهب العادل بالمصنعية والضريبة، وهل سعر المحل منطقي، وكم تستلم لو بعت',
 }
 
+// No page title here: the gold card at the top of the calculator is the
+// header, and a heading above it only pushed the price further down.
 export default function CalculatorPage() {
-  return (
-    <>
-      <PageHeader
-        title="حاسبة الذهب"
-        subtitle="اعرف السعر العادل قبل ما تدخل المحل — بالمصنعية والضريبة وسعر إعادة البيع."
-      />
-      <Calculator />
-    </>
-  )
+  return <Calculator />
 }

@@ -1,12 +1,10 @@
-import type { BuyInput, CurrencyCode, RateCard, SavedOffer } from './types'
-import { DEFAULT_RATE_CARD } from './rate-card'
+import type { BuyInput, CurrencyCode, SavedOffer } from './types'
 import { DEFAULT_CURRENCY } from './constants'
 
 // The app is a static export with no backend, so everything the user
 // personalises lives in localStorage on their own device.
 
 const KEYS = {
-  rateCard: 'gold_rate_card',
   offers: 'gold_saved_offers',
   prefs: 'gold_prefs',
 } as const
@@ -49,21 +47,6 @@ function write(key: string, value: unknown): void {
   }
 }
 
-// ---- Rate card (the user's shop assumptions) ----
-
-export function getRateCard(): RateCard {
-  return read<RateCard>(KEYS.rateCard, DEFAULT_RATE_CARD)
-}
-
-export function saveRateCard(card: RateCard): void {
-  write(KEYS.rateCard, card)
-}
-
-export function resetRateCard(): RateCard {
-  write(KEYS.rateCard, DEFAULT_RATE_CARD)
-  return DEFAULT_RATE_CARD
-}
-
 // ---- Preferences ----
 
 export function getPrefs(): GoldPrefs {
@@ -93,16 +76,32 @@ export function getOffers(): SavedOffer[] {
   }
 }
 
+/**
+ * Fired on `window` whenever the saved offers change, so a part of the screen
+ * that shows them — the count on the tour tab — can update without the two
+ * having to share state. `storage` events only reach *other* tabs, which is
+ * why this is needed at all.
+ */
+export const OFFERS_CHANGED = 'gold:offers-changed'
+
+function announceOffers() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(OFFERS_CHANGED))
+}
+
 export function saveOffer(offer: Omit<SavedOffer, 'id' | 'createdAt'>): SavedOffer {
   const full: SavedOffer = { ...offer, id: genId(), createdAt: new Date().toISOString() }
   write(KEYS.offers, [full, ...getOffers()])
+  announceOffers()
   return full
 }
 
 export function deleteOffer(id: string): void {
   write(KEYS.offers, getOffers().filter((o) => o.id !== id))
+  announceOffers()
 }
 
 export function clearOffers(): void {
   write(KEYS.offers, [])
+  announceOffers()
 }

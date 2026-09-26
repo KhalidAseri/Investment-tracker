@@ -5,6 +5,7 @@ import {
 } from './constants'
 import {
   BUYBACK_BEST_FACTOR,
+  BUYBACK_TYPICAL,
   BUYBACK_WORST_FACTOR,
   getBullionFeePercent,
   getMakingChargeSarPerGram,
@@ -232,6 +233,134 @@ const VERDICT_THRESHOLDS: { max: number; verdict: FairnessVerdict }[] = [
  * single number is what makes two shops comparable, and it's what to negotiate
  * on.
  */
+/** A figure the market doesn't pin to one value: where it usually falls. */
+export interface Range {
+  low: number
+  typical: number
+  high: number
+}
+
+export interface BuyRange {
+  low: BuyBreakdown
+  typical: BuyBreakdown
+  high: BuyBreakdown
+  /** One gram of metal at this karat, before any workmanship or tax. */
+  metalPerGram: number
+  /** Workmanship per gram across the three bands. */
+  makingPerGram: Range
+  /** VAT per gram at the typical band. */
+  vatPerGram: number
+  /** All-in price of one gram, VAT included, across the three bands. */
+  perGram: Range
+  /** What a shop would pay per gram if you sold it straight back. */
+  resalePerGram: Range
+}
+
+/**
+ * The buy price as a range, per gram and for the piece.
+ *
+ * The workmanship a shop charges varies more between shops than anything else
+ * in the price, and the buyer can't know in advance which end a given shop
+ * sits at. So instead of asking them to pick a band, this prices all three and
+ * lets the screen say "usually between X and Y" — the honest answer.
+ *
+ * Per-gram figures don't depend on weight, with one exception: bars and coins
+ * are priced by weight tier. A piece with no weight entered yet is priced as a
+ * single gram, so the dashboard has something to show before the user has
+ * typed anything.
+ */
+export function buyRange(input: BuyInput, market: MarketSnapshot, rateCard: RateCard): BuyRange {
+  const low = computeBuy(input, market, rateCard, 'low')
+  const typical = computeBuy(input, market, rateCard, 'typical')
+  const high = computeBuy(input, market, rateCard, 'high')
+
+  const hasWeight = (input.weightGrams || 0) > 0
+  const unitInput: BuyInput = hasWeight ? input : { ...input, weightGrams: 1 }
+  const unit = hasWeight
+    ? { low, typical, high }
+    : {
+        low: computeBuy(unitInput, market, rateCard, 'low'),
+        typical: computeBuy(unitInput, market, rateCard, 'typical'),
+        high: computeBuy(unitInput, market, rateCard, 'high'),
+      }
+
+  const grams = unitInput.weightGrams * Math.max(1, Math.floor(unitInput.quantity || 1))
+  const per = (value: number) => value / grams
+
+  const metalPerGram = unit.typical.pricePerGramKarat
+
+  return {
+    low,
+    typical,
+    high,
+    metalPerGram,
+    makingPerGram: {
+      low: unit.low.makingPerGram,
+      typical: unit.typical.makingPerGram,
+      high: unit.high.makingPerGram,
+    },
+    vatPerGram: per(unit.typical.vat),
+    perGram: {
+      low: per(unit.low.totalWithVat),
+      typical: per(unit.typical.totalWithVat),
+      high: per(unit.high.totalWithVat),
+    },
+    resalePerGram: {
+      low: metalPerGram * BUYBACK_TYPICAL.low,
+      typical: metalPerGram * ((BUYBACK_TYPICAL.low + BUYBACK_TYPICAL.high) / 2),
+      high: metalPerGram * BUYBACK_TYPICAL.high,
+    },
+  }
+}
+
+export interface SellRange {
+  /** One gram of metal at this karat, at the market price. */
+  metalPerGram: number
+  /** What a shop usually pays you for each gram. */
+  perGram: Range
+  /** What a shop usually pays you for the whole piece. */
+  total: Range
+  /** Against what you paid, when that is known. */
+  profitLoss: Range | null
+}
+
+/**
+ * What selling is likely to pay, as the band shops usually offer.
+ *
+ * Replaces a single payout computed from a buy-back percentage the seller had
+ * to type in. They never know that percentage, so the screen now states the
+ * range a typical shop lands in — 98% to 99.5% of metal value — and lets them
+ * judge an offer against it.
+ */
+export function sellRange(input: SellInput, market: MarketSnapshot): SellRange {
+  const weightGrams = Math.max(0, input.weightGrams || 0)
+  const metalPerGram = pricePerGramPure(market) * getPurity(input.karat)
+
+  const typicalFactor = (BUYBACK_TYPICAL.low + BUYBACK_TYPICAL.high) / 2
+  const perGram: Range = {
+    low: metalPerGram * BUYBACK_TYPICAL.low,
+    typical: metalPerGram * typicalFactor,
+    high: metalPerGram * BUYBACK_TYPICAL.high,
+  }
+  const total: Range = {
+    low: perGram.low * weightGrams,
+    typical: perGram.typical * weightGrams,
+    high: perGram.high * weightGrams,
+  }
+
+  const original = input.originalPurchasePrice
+  const profitLoss =
+    original !== null && original !== undefined && original > 0
+      ? {
+          low: total.low - original,
+          typical: total.typical - original,
+          high: total.high - original,
+        }
+      : null
+
+  return { metalPerGram, perGram, total, profitLoss }
+}
+
 export function analyzeQuote(
   input: BuyInput,
   market: MarketSnapshot,

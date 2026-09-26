@@ -74,31 +74,23 @@ export default function Verdict({
         transition={{ type: 'spring', stiffness: 380, damping: 26 }}
         className={cn('p-4 text-white', action.panel)}
       >
-        <div className="flex items-center gap-2.5">
+        {/* Verdict, then where on the scale, then what to ask for. The target
+            price used to share the first row with the verdict, and at 360px
+            the longest verdict wrapped and its explanation ran into it. */}
+        <div className="flex items-center gap-3">
           <motion.span
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 500, damping: 18, delay: 0.04 }}
-            className="rounded-xl bg-black/15 p-2"
+            className="shrink-0 rounded-xl bg-black/15 p-2"
           >
             <action.icon className="h-5 w-5" />
           </motion.span>
           <div className="min-w-0">
             <p className="text-lg font-extrabold leading-tight">{action.verb}</p>
-            <p className={cn('text-[11px] font-semibold', action.ink)}>{action.line}</p>
-          </div>
-          <div className="ms-auto shrink-0 text-end">
-            <p className={cn('text-[10px] font-semibold', action.ink)}>
-              {fairness.verdict === 'great' || fairness.verdict === 'fair'
-                ? 'السعر العادل'
-                : 'اطلب هذا السعر'}
+            <p className={cn('mt-0.5 text-[11px] font-semibold leading-snug', action.ink)}>
+              {action.line}
             </p>
-            <bdi className="block text-base font-extrabold">
-              <AnimatedNumber
-                value={fairness.suggestedTarget}
-                format={(v) => formatMoneyShort(v, currency)}
-              />
-            </bdi>
           </div>
         </div>
 
@@ -108,6 +100,20 @@ export default function Verdict({
             verdict={fairness.verdict}
             tone="onColor"
           />
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className={cn('text-xs font-bold', action.ink)}>
+            {fairness.verdict === 'great' || fairness.verdict === 'fair'
+              ? 'السعر العادل'
+              : 'اطلب هذا السعر'}
+          </span>
+          <bdi className="text-xl font-extrabold">
+            <AnimatedNumber
+              value={fairness.suggestedTarget}
+              format={(v) => formatMoneyShort(v, currency)}
+            />
+          </bdi>
         </div>
       </motion.div>
     </AnimatePresence>

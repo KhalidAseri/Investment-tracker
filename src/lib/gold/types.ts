@@ -70,6 +70,8 @@ export interface KaratInfo {
 export interface PieceType {
   id: PieceTypeId
   labelAr: string
+  /** A shorter name for tight spaces such as the piece picker's tiles. */
+  shortLabelAr?: string
   labelEn: string
   /** Common alternative names shoppers use, for search. */
   aliasesAr: string[]

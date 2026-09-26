@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the web app's page background (Tailwind gray-50), so the strip
+         behind the status and navigation bars reads as part of the app. -->
+    <color name="app_background">#F9FAFB</color>
+</resources>

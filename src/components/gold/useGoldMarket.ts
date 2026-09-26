@@ -46,14 +46,22 @@ export function useGoldMarket(): GoldMarketState {
 
   const load = useCallback(
     async (code: CurrencyCode, force: boolean) => {
-      const [nextSpot, nextFx] = await Promise.all([fetchSpot(force), fetchFx(code, force)])
-      setFx(nextFx)
-      if (nextSpot) {
-        setSpot(nextSpot)
-        setFailed(false)
-      } else {
-        setFailed(true)
-      }
+      // The exchange rate and the spot price are applied as each arrives, not
+      // together. Awaiting both meant a pegged currency — which needs no
+      // network at all — waited on the spot request, and with a weak signal
+      // that request takes up to two full timeouts to give up. The cached or
+      // manually entered price sat unused behind a skeleton the whole time.
+      await Promise.all([
+        fetchFx(code, force).then(setFx),
+        fetchSpot(force).then((nextSpot) => {
+          if (nextSpot) {
+            setSpot(nextSpot)
+            setFailed(false)
+          } else {
+            setFailed(true)
+          }
+        }),
+      ])
     },
     []
   )

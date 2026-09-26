@@ -190,7 +190,7 @@ export default function ShopTour() {
                   whileTap={TAP}
                   onClick={() => handleDelete(offer.id)}
                   aria-label="حذف المحل من الجولة"
-                  className="shrink-0 rounded-lg p-1.5 text-gray-400 active:bg-gray-100"
+                  className="-me-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 active:bg-gray-100"
                 >
                   <Trash2 className="h-4 w-4" />
                 </motion.button>

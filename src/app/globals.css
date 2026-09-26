@@ -41,16 +41,27 @@
     animation: gold-sheen 5.5s ease-in-out infinite;
   }
 
-  /* The weight slider. Styled by hand because the native control is too thin
-     to drag confidently with a thumb, and its default accent ignores the
-     app's gold. */
+  /* The weight slider.
+
+     The input itself is a full 44px tall and transparent, and the thin
+     visible track is drawn inside it. Styling the input as the 8px track —
+     as this used to — made its touch area 8px tall: the thumb looked
+     grabbable, but a finger landing a few pixels off it hit nothing. */
   .weight-range {
-    @apply h-2 w-full cursor-pointer appearance-none rounded-full bg-gray-200;
+    @apply h-11 w-full cursor-pointer appearance-none bg-transparent;
     touch-action: none;
   }
 
+  .weight-range::-webkit-slider-runnable-track {
+    @apply h-2 rounded-full bg-gray-200;
+  }
+
+  .weight-range::-moz-range-track {
+    @apply h-2 rounded-full bg-gray-200;
+  }
+
   .weight-range::-webkit-slider-thumb {
-    @apply h-7 w-7 appearance-none rounded-full border-[3px] border-white bg-amber-600;
+    @apply -mt-2.5 h-7 w-7 appearance-none rounded-full border-[3px] border-white bg-amber-600;
     box-shadow: 0 2px 8px rgb(217 119 6 / 45%);
   }
 
@@ -59,15 +70,14 @@
     box-shadow: 0 2px 8px rgb(217 119 6 / 45%);
   }
 
-  /* Horizontal pill pickers scroll but shouldn't show a bar on desktop */
-  .scrollbar-none {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+  .weight-range:focus-visible {
+    outline: none;
   }
 
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
+  .weight-range:focus-visible::-webkit-slider-thumb {
+    @apply ring-4 ring-amber-300;
   }
+
 }
 
 /* Custom scrollbar - desktop only */

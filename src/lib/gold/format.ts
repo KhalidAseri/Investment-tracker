@@ -47,7 +47,7 @@ export function formatSignedPercent(value: number, decimals = 1): string {
   return `${safe >= 0 ? '+' : ''}${safe.toFixed(decimals)}%`
 }
 
-/** "قبل ٣ دقائق" style freshness label for the live price badge. */
+/** "قبل 3 دقائق" style freshness label for the live price badge. */
 export function formatAgeAr(iso: string): string {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return 'غير معروف'

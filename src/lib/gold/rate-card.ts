@@ -56,6 +56,7 @@ export const PIECE_TYPES: PieceType[] = [
   {
     id: 'chain',
     labelAr: 'سلسال آلي',
+    shortLabelAr: 'سلسال',
     labelEn: 'Machine chain',
     aliasesAr: ['سلسلة', 'تشين'],
     baseMakingPerGram: { low: 15, typical: 22, high: 35 },
@@ -119,6 +120,7 @@ export const PIECE_TYPES: PieceType[] = [
   {
     id: 'necklace',
     labelAr: 'سلسال مجدول / مفرغ',
+    shortLabelAr: 'مجدول',
     labelEn: 'Complex necklace',
     aliasesAr: ['عقد', 'قلادة', 'كوليه'],
     baseMakingPerGram: { low: 30, typical: 45, high: 70 },
@@ -128,6 +130,7 @@ export const PIECE_TYPES: PieceType[] = [
   {
     id: 'set',
     labelAr: 'طقم كامل',
+    shortLabelAr: 'طقم',
     labelEn: 'Full set',
     aliasesAr: ['طقم عروس', 'شبكة'],
     baseMakingPerGram: { low: 35, typical: 55, high: 90 },
@@ -147,6 +150,7 @@ export const PIECE_TYPES: PieceType[] = [
   {
     id: 'coin',
     labelAr: 'جنيه / ليرة ذهب',
+    shortLabelAr: 'جنيه',
     labelEn: 'Gold coin',
     aliasesAr: ['عملة ذهبية', 'ريال ذهب'],
     baseMakingPerGram: { low: 0, typical: 0, high: 0 },
@@ -167,6 +171,7 @@ export const PIECE_TYPES: PieceType[] = [
   {
     id: 'scrap',
     labelAr: 'كسر (ذهب مستعمل)',
+    shortLabelAr: 'كسر',
     labelEn: 'Scrap gold',
     aliasesAr: ['ذهب قديم', 'خردة'],
     baseMakingPerGram: { low: 0, typical: 0, high: 0 },
@@ -364,3 +369,15 @@ export const DEFAULT_RATE_CARD: RateCard = {
 export const BUYBACK_BEST_FACTOR = 0.995
 /** Selling as scrap to an unfamiliar dealer, with no original invoice. */
 export const BUYBACK_WORST_FACTOR = 0.92
+
+/**
+ * What a shop usually pays when it buys gold back, as a fraction of the
+ * metal's market value: 2% under at the stingy end, 0.5% under at the
+ * generous end.
+ *
+ * The app shows this as a range rather than asking the seller to type a
+ * single percentage. Nobody walking in to sell knows the figure a given shop
+ * will use — asking for it only made them guess, and a guess presented as a
+ * precise number is worse than an honest band.
+ */
+export const BUYBACK_TYPICAL = { low: 0.98, high: BUYBACK_BEST_FACTOR } as const

@@ -60,13 +60,23 @@ export default function FairnessMeter({
     <div className={cn('select-none', className)}>
       <div className="relative">
         {/* Zones, laid out cheap → expensive; flex follows the RTL direction. */}
-        <div className="flex h-2.5 overflow-hidden rounded-full">
+        <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
           {ZONES.map((zone, i) => {
             const from = i === 0 ? MIN : ZONES[i - 1].to
             return (
               <div
                 key={zone.verdict}
-                className={cn(zone.bar, verdict === zone.verdict ? 'opacity-100' : 'opacity-35')}
+                className={cn(
+                  // On a coloured panel the faded zone colours mixed with the
+                  // panel into olive and brown, so there the inactive zones
+                  // become a quiet white track and only the verdict's zone
+                  // lights up. The labels underneath still name every zone.
+                  tone === 'onColor'
+                    ? verdict === zone.verdict
+                      ? 'bg-white'
+                      : 'bg-white/25'
+                    : cn(zone.bar, verdict === zone.verdict ? 'opacity-100' : 'opacity-35')
+                )}
                 style={{ width: `${((zone.to - from) / (MAX - MIN)) * 100}%` }}
               />
             )
@@ -81,7 +91,7 @@ export default function FairnessMeter({
             transition={{ type: 'spring', stiffness: 500, damping: 20 }}
             className={cn(
               '-ms-2.5 h-5 w-5 rounded-full border-[3px] bg-white shadow-md',
-              tone === 'onColor' ? 'border-white/80' : 'border-gray-900'
+              'border-gray-900'
             )}
           />
         </motion.div>

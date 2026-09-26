@@ -15,6 +15,13 @@ const config: CapacitorConfig = {
   },
   android: {
     backgroundColor: '#f9fafb',
+    // Android 15 (targetSdk 35) forces edge-to-edge: the WebView is drawn
+    // under the status bar and the gesture bar unless something insets it.
+    // Capacitor's default is to leave that alone, which put the app's top
+    // controls behind the clock and signal icons. 'auto' makes Capacitor
+    // apply the system-bar insets as margins on Android 15+, and do nothing
+    // on older versions, where the system never drew under the bars anyway.
+    adjustMarginsForEdgeToEdge: 'auto',
   },
 }
 

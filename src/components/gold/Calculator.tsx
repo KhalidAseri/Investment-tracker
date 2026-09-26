@@ -2,20 +2,38 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BadgeCheck, Store, TrendingDown } from 'lucide-react'
-import { analyzeQuote, computeBuy, computeSell } from '@/lib/gold/calculator'
+import { BadgeCheck, Info, MapPin, Store, TrendingDown, TrendingUp } from 'lucide-react'
+import { analyzeQuote, buyRange, sarToDisplay, sellRange } from '@/lib/gold/calculator'
 import { KARATS } from '@/lib/gold/constants'
-import { formatGrams, formatMoneyShort } from '@/lib/gold/format'
-import { getPieceType, type MakingBand } from '@/lib/gold/rate-card'
-import { getPrefs, getRateCard, saveOffer, savePrefs, saveRateCard } from '@/lib/gold/storage'
-import { successFeedback, tapFeedback } from '@/lib/haptics'
-import type { BuyInput, Karat, RateCard } from '@/lib/gold/types'
+import { formatGrams, formatMoney, formatPercent } from '@/lib/gold/format'
+import {
+  DEFAULT_RATE_CARD,
+  getBullionFeePercent,
+  getMakingChargeSarPerGram,
+  getOrigin,
+  getPieceType,
+  ORIGINS,
+  PIECE_TYPES,
+} from '@/lib/gold/rate-card'
+import { getPrefs, saveOffer, savePrefs } from '@/lib/gold/storage'
+import { successFeedback } from '@/lib/haptics'
+import type { BuyInput, Karat, OriginId, PieceType, PieceTypeId } from '@/lib/gold/types'
 import { cn } from '@/lib/utils'
-import BuyForm from './CalculatorForm'
-import { Field, NumberInput, Segmented } from './Controls'
-import { BuyDashboard, SellDashboard } from './Dashboard'
-import LivePriceBar from './LivePriceBar'
+import AnimatedNumber from './AnimatedNumber'
+import {
+  Field,
+  KaratGrid,
+  MoneyInput,
+  PieceGrid,
+  SegmentSwitch,
+  Select,
+  ToggleChip,
+} from './Controls'
+import GoldCard from './GoldCard'
+import MoneyRange from './MoneyRange'
 import { SPRING, TAP } from './motion'
+import TopBar from './TopBar'
+import Verdict from './Verdict'
 import WeightPicker from './WeightPicker'
 import { useGoldMarket } from './useGoldMarket'
 
@@ -28,21 +46,54 @@ const DEFAULT_INPUT: BuyInput = {
   quotedTotal: null,
 }
 
+/**
+ * Every assumption the calculator used to let the user override — a custom
+ * making charge, an extra shop margin, the buy-back percentage — has gone from
+ * the screen. Each was a question most people could not answer, and a wrong
+ * answer silently skewed every number. The market's usual values are used
+ * instead, and where the market genuinely varies the screen shows a range.
+ *
+ * The stored rate card is deliberately ignored for the same reason: someone who
+ * set 99% buy-back on an older version would otherwise carry an invisible
+ * setting they can no longer see or change.
+ */
+const RATE_CARD = DEFAULT_RATE_CARD
+
 type Mode = 'buy' | 'sell'
 
 /**
- * The calculator screen: a dashboard of what the numbers say, over the form
- * that produces them.
+ * Whether an element is on screen, following the element as it comes and goes.
  *
- * Buying and selling were separate destinations before. In a shop you are
- * plainly doing one or the other, and the inputs overlap almost entirely, so
- * it is a switch at the top rather than a place you navigate to — and the
- * karat and weight you already entered carry across when you flip it.
+ * framer-motion's `useInView` attaches its observer once, when the component
+ * mounts. The headline figure doesn't exist then — the card is still a loading
+ * skeleton — so the observer never attached, `inView` stayed false, and the
+ * top bar sat on screen over a perfectly visible headline. Taking the element
+ * itself (via a callback ref) means the observer attaches when it appears.
  *
- * On a phone the dashboard sits above the form and a slim bar pins the
- * headline figure to the bottom of the screen once you scroll down to edit.
- * Given the room, the two become columns and the dashboard stays put while
- * you work.
+ * Reports "on screen" while there is nothing to watch, so the bar can't flash
+ * up during loading.
+ */
+function useOnScreen(el: Element | null): boolean {
+  const [onScreen, setOnScreen] = useState(true)
+  useEffect(() => {
+    if (!el) {
+      setOnScreen(true)
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(entry.isIntersecting))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [el])
+  return onScreen
+}
+
+/**
+ * The calculator: a per-gram dashboard, then the piece.
+ *
+ * The screen is split along the line the numbers actually divide on. What a
+ * gram costs depends only on karat, piece type and origin, so those sit with
+ * the dashboard. Weight and the shop's price belong to one particular piece,
+ * so they sit together below, next to the verdict they produce.
  */
 export default function Calculator() {
   const marketState = useGoldMarket()
@@ -50,8 +101,6 @@ export default function Calculator() {
 
   const [mode, setMode] = useState<Mode>('buy')
   const [input, setInput] = useState<BuyInput>(DEFAULT_INPUT)
-  const [rateCard, setRateCard] = useState<RateCard>(getRateCard)
-  const [band, setBand] = useState<MakingBand>('typical')
   const [quoted, setQuoted] = useState(0)
   const [quotedIncludesVat, setQuotedIncludesVat] = useState(true)
   const [originalPrice, setOriginalPrice] = useState(0)
@@ -60,60 +109,56 @@ export default function Calculator() {
 
   useEffect(() => {
     const prefs = getPrefs()
-    if (prefs.lastBuyInput) setInput({ ...DEFAULT_INPUT, ...prefs.lastBuyInput })
-    setRateCard(getRateCard())
+    // Quantity is no longer offered, so an old saved value must not linger.
+    if (prefs.lastBuyInput) setInput({ ...DEFAULT_INPUT, ...prefs.lastBuyInput, quantity: 1 })
   }, [])
 
   const update = (patch: Partial<BuyInput>) => {
     setInput((prev) => {
-      const next = { ...prev, ...patch }
+      const next = { ...prev, ...patch, quantity: 1 }
       savePrefs({ lastBuyInput: next })
       return next
     })
   }
 
-  const updateRateCard = (patch: Partial<RateCard>) => {
-    setRateCard((prev) => {
-      const next = { ...prev, ...patch }
-      saveRateCard(next)
-      return next
-    })
-  }
-
   const piece = getPieceType(input.pieceType)
+  const origin = getOrigin(input.origin)
 
-  const breakdown = useMemo(
-    () => (market ? computeBuy(input, market, rateCard, band) : null),
-    [input, market, rateCard, band]
-  )
-
-  const fairness = useMemo(
-    () =>
-      market && quoted > 0 ? analyzeQuote(input, market, rateCard, quoted, quotedIncludesVat) : null,
-    [input, market, rateCard, quoted, quotedIncludesVat]
-  )
-
-  const sale = useMemo(
+  const buy = useMemo(() => (market ? buyRange(input, market, RATE_CARD) : null), [input, market])
+  const sell = useMemo(
     () =>
       market
-        ? computeSell(
+        ? sellRange(
             {
               karat: input.karat,
               weightGrams: input.weightGrams,
               originalPurchasePrice: originalPrice > 0 ? originalPrice : null,
             },
-            market,
-            rateCard
+            market
           )
         : null,
-    [input.karat, input.weightGrams, originalPrice, market, rateCard]
+    [input.karat, input.weightGrams, originalPrice, market]
+  )
+  const fairness = useMemo(
+    () =>
+      market && quoted > 0 && input.weightGrams > 0
+        ? analyzeQuote(input, market, RATE_CARD, quoted, quotedIncludesVat)
+        : null,
+    [input, market, quoted, quotedIncludesVat]
   )
 
-  const fairTotal = breakdown
-    ? rateCard.includeVat
-      ? breakdown.totalWithVat
-      : breakdown.totalWithoutVat
-    : 0
+  /** Making charge per gram for a piece, in the display currency, for the grid. */
+  const pieceCostLabel = (p: PieceType) => {
+    if (!market) return '—'
+    if (p.bullion) {
+      return `+${formatPercent(getBullionFeePercent(input.weightGrams || 1, 'typical') * 100, 1)}`
+    }
+    const perGram = sarToDisplay(
+      getMakingChargeSarPerGram(p.id, input.origin, input.karat, 'typical'),
+      market
+    )
+    return `${formatMoney(perGram, market.currency, { decimals: 0, withSymbol: false })}/جم`
+  }
 
   const handleSaveOffer = () => {
     if (!market || quoted <= 0) return
@@ -128,253 +173,358 @@ export default function Calculator() {
     successFeedback()
     setSavedFlash(true)
     setShopName('')
-    setTimeout(() => setSavedFlash(false), 2600)
+    setTimeout(() => setSavedFlash(false), 2400)
   }
 
-  const buyWeightLabel = formatGrams(input.weightGrams * input.quantity)
+  // The slim top bar takes over the moment the headline per-gram figure has
+  // scrolled out of sight — not when the whole card has, by which point the
+  // user would have been editing blind for half a screen.
+  const [heroEl, setHeroEl] = useState<HTMLElement | null>(null)
+  const heroInView = useOnScreen(heroEl)
+
+  const cur = market?.currency
+  const grams = input.weightGrams
 
   return (
     <div className="space-y-4">
-      {/* ===== Buying or selling ===== */}
-      <div className="flex rounded-2xl bg-gray-200/70 p-1">
-        {(
-          [
-            { value: 'buy', label: 'أشتري', icon: Store },
-            { value: 'sell', label: 'أبيع', icon: TrendingDown },
-          ] as const
-        ).map((opt) => {
-          const active = mode === opt.value
-          return (
-            <motion.button
-              key={opt.value}
-              whileTap={TAP}
-              onClick={() => {
-                tapFeedback('medium')
-                setMode(opt.value)
-              }}
-              className={cn(
-                'relative flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-extrabold touch-manipulation',
-                active ? 'text-gray-900' : 'text-gray-500'
-              )}
-            >
-              {active && (
-                <motion.span
-                  layoutId="mode-pill"
-                  transition={SPRING}
-                  className="absolute inset-0 rounded-xl bg-white shadow-sm"
-                />
-              )}
-              <opt.icon className="relative h-4 w-4" />
-              <span className="relative">{opt.label}</span>
-            </motion.button>
-          )
-        })}
-      </div>
+      {market && cur && (
+        <TopBar
+          show={!heroInView}
+          tone={mode === 'buy' ? 'gold' : 'green'}
+          label={
+            mode === 'buy'
+              ? `الجرام عيار ${input.karat} · ${piece.shortLabelAr ?? piece.labelAr}`
+              : `المحل يشتري جرام عيار ${input.karat}`
+          }
+          value={
+            mode === 'buy' && buy ? (
+              <AnimatedNumber value={buy.perGram.typical} format={(v) => formatMoney(v, cur)} />
+            ) : sell ? (
+              <MoneyRange low={sell.perGram.low} high={sell.perGram.high} currency={cur} />
+            ) : null
+          }
+        />
+      )}
 
-      <LivePriceBar state={marketState} karat={input.karat} />
+      <SegmentSwitch
+        options={[
+          { value: 'buy', label: 'أشتري', icon: Store },
+          { value: 'sell', label: 'أبيع', icon: TrendingDown },
+        ]}
+        value={mode}
+        onChange={setMode}
+      />
 
-      {/* `grid-cols-1` and `min-w-0` are load-bearing: a grid track left to size
-          itself takes the width of its widest child, and the karat strip and
-          piece grid are deliberately wider than the screen so they can scroll.
-          Without these the whole page grows to ~700px and scrolls sideways. */}
+      {/* `grid-cols-1` and `min-w-0` are load-bearing: a grid track left to
+          size itself takes the width of its widest child. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-        {/* ===== Dashboard ===== */}
-        <div className="min-w-0 lg:sticky lg:top-4">
+        <div className="min-w-0 space-y-4 lg:sticky lg:top-6">
+          <GoldCard
+            state={marketState}
+            mode={mode}
+            karat={input.karat}
+            context={
+              piece.bullion ? piece.labelAr : `${piece.shortLabelAr ?? piece.labelAr} · ${origin.labelAr}`
+            }
+            buy={buy}
+            sell={sell}
+            heroRef={setHeroEl}
+          />
+
+          {/* What sets the per-gram price. Kept beside the dashboard so the
+              cause and its effect are on screen together. */}
+          <section className="card space-y-5">
+            <Field label="العيار" hint={KARATS.find((k) => k.karat === input.karat)?.noteAr}>
+              <KaratGrid value={input.karat} onChange={(karat: Karat) => update({ karat })} />
+            </Field>
+
+            <AnimatePresence initial={false}>
+              {mode === 'buy' && (
+                <motion.div
+                  key="buy-controls"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={SPRING}
+                  className="space-y-5 overflow-hidden"
+                >
+                  <Field label="نوع القطعة" hint={piece.noteAr}>
+                    <PieceGrid
+                      pieces={PIECE_TYPES}
+                      value={input.pieceType}
+                      onChange={(pieceType: PieceTypeId) => update({ pieceType })}
+                      costLabel={pieceCostLabel}
+                    />
+                  </Field>
+
+                  {/* Bars and coins are priced on metal alone, so where they
+                      were made doesn't change anything — no point asking. */}
+                  {!piece.bullion && (
+                    <Field label="الدقة / المنشأ" hint={origin.noteAr}>
+                      <Select
+                        label="الدقة / المنشأ"
+                        options={ORIGINS.map((o) => ({ value: o.id, label: o.labelAr }))}
+                        value={input.origin}
+                        onChange={(originId) => update({ origin: originId as OriginId })}
+                      />
+                    </Field>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
+        </div>
+
+        {/* ===== The piece in your hand ===== */}
+        <div className="min-w-0">
           <AnimatePresence mode="wait" initial={false}>
-            {mode === 'buy' && breakdown && market ? (
-              <motion.div
-                key="buy-dash"
-                initial={{ x: 14 }}
+            {mode === 'buy' ? (
+              <motion.section
+                key="buy-piece"
+                initial={{ x: 16 }}
                 animate={{ x: 0 }}
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 transition={SPRING}
+                className="card space-y-5"
               >
-                <BuyDashboard
-                  breakdown={breakdown}
-                  fairness={fairness}
-                  currency={market.currency}
-                  karat={input.karat}
-                  weightLabel={buyWeightLabel}
-                  totalGrams={input.weightGrams * input.quantity}
-                  includeVat={rateCard.includeVat}
-                  onIncludeVatChange={(includeVat) => updateRateCard({ includeVat })}
-                  bullion={piece.bullion === true}
-                />
+                <h2 className="text-base font-extrabold text-gray-900">قطعتك</h2>
 
-                {/* Capture the shop while you are still standing in it. */}
-                <AnimatePresence>
-                  {fairness && (
-                    <motion.div
-                      initial={{ y: 10 }}
-                      animate={{ y: 0 }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-3 flex gap-2"
-                    >
-                      <input
-                        value={shopName}
-                        onChange={(e) => setShopName(e.target.value)}
-                        placeholder="اسم المحل"
-                        className="min-w-0 flex-1 rounded-xl border-gray-200 py-2.5 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                <Field label="الوزن">
+                  <WeightPicker value={grams} onChange={(weightGrams) => update({ weightGrams })} />
+                </Field>
+
+                {buy && cur && grams > 0 && (
+                  <div className="rounded-2xl bg-amber-50/70 p-4">
+                    <p className="text-[11px] font-bold text-amber-800">
+                      السعر العادل لقطعتك ({formatGrams(grams)})
+                    </p>
+                    <bdi className="mt-1 block text-[1.75rem] font-extrabold leading-tight text-gray-900">
+                      <AnimatedNumber
+                        value={buy.typical.totalWithVat}
+                        format={(v) => formatMoney(v, cur, { decimals: 0 })}
                       />
-                      <motion.button
-                        whileTap={TAP}
-                        onClick={handleSaveOffer}
-                        className={cn(
-                          'inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-bold text-white transition-colors',
-                          savedFlash ? 'bg-emerald-600' : 'bg-gray-900 active:bg-gray-700'
-                        )}
-                      >
-                        {savedFlash ? (
-                          <>
-                            <BadgeCheck className="h-4 w-4" /> انضاف
-                          </>
-                        ) : (
-                          <>
-                            <Store className="h-4 w-4" /> أضف للجولة
-                          </>
-                        )}
-                      </motion.button>
+                    </bdi>
+                    <p className="mt-1 text-[11px] font-semibold text-gray-500">
+                      عادةً بين{' '}
+                      <MoneyRange
+                        low={buy.low.totalWithVat}
+                        high={buy.high.totalWithVat}
+                        currency={cur}
+                        className="font-bold text-gray-700"
+                      />{' '}
+                      شامل الضريبة
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 border-t border-amber-200/70 pt-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500">لو بعتها اليوم</p>
+                        <MoneyRange
+                          low={buy.resalePerGram.low * grams}
+                          high={buy.resalePerGram.high * grams}
+                          currency={cur}
+                          className="text-sm font-extrabold text-emerald-700"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500">تخسر فوراً تقريباً</p>
+                        <bdi className="block text-sm font-extrabold text-orange-700">
+                          <AnimatedNumber
+                            value={Math.max(
+                              0,
+                              buy.typical.totalWithVat - buy.resalePerGram.typical * grams
+                            )}
+                            format={(v) => formatMoney(v, cur, { decimals: 0 })}
+                          />
+                        </bdi>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Field
+                  label="كم طلب المحل؟"
+                  aside={
+                    <ToggleChip
+                      checked={quotedIncludesVat}
+                      onChange={setQuotedIncludesVat}
+                      label="شامل الضريبة"
+                    />
+                  }
+                  hint={
+                    fairness
+                      ? undefined
+                      : 'اكتب السعر اللي قاله البائع ونقول لك تشتري أو تفاوض.'
+                  }
+                >
+                  <MoneyInput
+                    value={quoted}
+                    onChange={setQuoted}
+                    unit={cur?.symbolAr}
+                    label="السعر اللي طلبه المحل"
+                  />
+                </Field>
+
+                <AnimatePresence>
+                  {fairness && cur && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                      className="space-y-3"
+                    >
+                      <div className="overflow-hidden rounded-2xl">
+                        <Verdict fairness={fairness} currency={cur} />
+                      </div>
+
+                      <p className="flex gap-2 text-[11px] leading-relaxed text-gray-500">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <span>
+                          المصنعية اللي يحاسبك عليها فعلياً:{' '}
+                          <bdi className="font-bold text-gray-800">
+                            {formatMoney(fairness.impliedMakingPerGram, cur, { decimals: 0 })}
+                          </bdi>{' '}
+                          للجرام.
+                        </span>
+                      </p>
+
+                      <div className="flex gap-2">
+                        <input
+                          value={shopName}
+                          onChange={(e) => setShopName(e.target.value)}
+                          placeholder="اسم المحل"
+                          aria-label="اسم المحل"
+                          className="h-12 min-w-0 flex-1 rounded-xl border-gray-200 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                        />
+                        <motion.button
+                          whileTap={TAP}
+                          onClick={handleSaveOffer}
+                          className={cn(
+                            'inline-flex h-12 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-bold text-white transition-colors',
+                            savedFlash ? 'bg-emerald-600' : 'bg-gray-900 active:bg-gray-700'
+                          )}
+                        >
+                          <AnimatePresence mode="wait" initial={false}>
+                            <motion.span
+                              key={savedFlash ? 'saved' : 'idle'}
+                              initial={{ y: 8, opacity: 0 }}
+                              animate={{ y: 0, opacity: 1 }}
+                              exit={{ y: -8, opacity: 0 }}
+                              transition={{ duration: 0.15 }}
+                              className="flex items-center gap-1.5"
+                            >
+                              {savedFlash ? (
+                                <>
+                                  <BadgeCheck className="h-4 w-4" /> انضاف
+                                </>
+                              ) : (
+                                <>
+                                  <MapPin className="h-4 w-4" /> أضف للجولة
+                                </>
+                              )}
+                            </motion.span>
+                          </AnimatePresence>
+                        </motion.button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </motion.div>
-            ) : mode === 'sell' && sale && market ? (
-              <motion.div
-                key="sell-dash"
-                initial={{ x: -14 }}
+              </motion.section>
+            ) : (
+              <motion.section
+                key="sell-piece"
+                initial={{ x: -16 }}
                 animate={{ x: 0 }}
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 transition={SPRING}
+                className="card space-y-5"
               >
-                <SellDashboard
-                  sale={sale}
-                  currency={market.currency}
-                  karat={input.karat}
-                  weightLabel={formatGrams(input.weightGrams)}
-                />
-              </motion.div>
-            ) : (
-              <div className="card">
-                <div className="animate-pulse space-y-3">
-                  <div className="h-3 w-32 rounded bg-gray-200" />
-                  <div className="h-10 w-48 rounded bg-gray-200" />
-                  <div className="h-3 w-24 rounded bg-gray-200" />
-                </div>
-              </div>
+                <h2 className="text-base font-extrabold text-gray-900">قطعتك</h2>
+
+                <Field
+                  label="الوزن"
+                  hint="الفصوص والأحجار تُخصم من الوزن عند البيع ولا يُدفع لك مقابلها."
+                >
+                  <WeightPicker value={grams} onChange={(weightGrams) => update({ weightGrams })} />
+                </Field>
+
+                {sell && cur && grams > 0 && (
+                  <div className="rounded-2xl bg-emerald-50/80 p-4">
+                    <p className="text-[11px] font-bold text-emerald-800">
+                      تستلم لقطعتك ({formatGrams(grams)})
+                    </p>
+                    <p className="mt-1">
+                      <MoneyRange
+                        low={sell.total.low}
+                        high={sell.total.high}
+                        currency={cur}
+                        className="text-[1.75rem] font-extrabold leading-tight text-gray-900"
+                      />
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold text-gray-500">
+                      بسعر السوق كاملاً كانت تساوي{' '}
+                      <bdi>{formatMoney(sell.metalPerGram * grams, cur, { decimals: 0 })}</bdi>
+                    </p>
+                  </div>
+                )}
+
+                <Field
+                  label="كم اشتريتها؟"
+                  hint="اختياري — نحسب لك ربحك أو خسارتك."
+                >
+                  <MoneyInput
+                    value={originalPrice}
+                    onChange={setOriginalPrice}
+                    unit={cur?.symbolAr}
+                    label="سعر الشراء الأصلي"
+                  />
+                </Field>
+
+                <AnimatePresence>
+                  {sell?.profitLoss && cur && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                      className={cn(
+                        'rounded-2xl p-4 text-white',
+                        sell.profitLoss.typical >= 0 ? 'bg-emerald-600' : 'bg-red-600'
+                      )}
+                    >
+                      <p className="flex items-center gap-2 text-lg font-extrabold">
+                        <motion.span
+                          initial={{ scale: 0, rotate: -25 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                        >
+                          {sell.profitLoss.typical >= 0 ? (
+                            <TrendingUp className="h-5 w-5" />
+                          ) : (
+                            <TrendingDown className="h-5 w-5" />
+                          )}
+                        </motion.span>
+                        {sell.profitLoss.typical >= 0 ? 'ربح تقريباً' : 'خسارة تقريباً'}{' '}
+                        <bdi>
+                          <AnimatedNumber
+                            value={Math.abs(sell.profitLoss.typical)}
+                            format={(v) => formatMoney(v, cur, { decimals: 0 })}
+                          />
+                        </bdi>
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-white/85">
+                        {sell.profitLoss.typical >= 0
+                          ? 'ارتفاع سعر الذهب غطّى المصنعية والضريبة اللي دفعتها وقت الشراء.'
+                          : 'الفرق غالباً مصنعية وضريبة دفعتها وقت الشراء ولا تُسترجع عند البيع.'}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.section>
             )}
           </AnimatePresence>
         </div>
-
-        {/* ===== Form ===== */}
-        <div className="min-w-0">
-          {mode === 'buy' ? (
-            <BuyForm
-              input={input}
-              onInput={update}
-              band={band}
-              onBand={setBand}
-              rateCard={rateCard}
-              onRateCard={updateRateCard}
-              quoted={quoted}
-              onQuoted={setQuoted}
-              quotedIncludesVat={quotedIncludesVat}
-              onQuotedIncludesVat={setQuotedIncludesVat}
-              market={market}
-            />
-          ) : (
-            <div className="card space-y-5">
-              <Field
-                label="عيار الذهب اللي تبيعه"
-                hint="الرقم مدموغ داخل القطعة: 875 يعني عيار 21، و750 يعني عيار 18."
-              >
-                <Segmented
-                  options={KARATS.map((k) => ({
-                    value: k.karat,
-                    label: `عيار ${k.karat}`,
-                    sublabel: String(k.stamp),
-                  }))}
-                  value={input.karat}
-                  onChange={(karat) => update({ karat: karat as Karat })}
-                />
-              </Field>
-
-              <Field
-                label="الوزن"
-                hint="الفصوص والأحجار تُخصم من الوزن عند البيع ولا يُدفع لك مقابلها."
-              >
-                <WeightPicker
-                  value={input.weightGrams}
-                  onChange={(weightGrams) => update({ weightGrams })}
-                />
-              </Field>
-
-              <Field
-                label="كم اشتريتها؟ (اختياري)"
-                hint="اكتب المبلغ اللي دفعته وقت الشراء عشان نحسب ربحك أو خسارتك الفعلية."
-              >
-                <NumberInput
-                  value={originalPrice}
-                  onChange={setOriginalPrice}
-                  step={100}
-                  min={0}
-                  suffix={market?.currency.symbolAr}
-                  placeholder="0"
-                />
-              </Field>
-
-              <Field
-                label="نسبة ما يدفعه المحل من سعر السوق"
-                hint="المحلات تشتري بخصم 0.5%–2% عادةً. لو المحل عرض أقل، عدّل النسبة وشوف الفرق."
-              >
-                <NumberInput
-                  value={Math.round(rateCard.buybackFactor * 1000) / 10}
-                  onChange={(v) =>
-                    updateRateCard({ buybackFactor: Math.min(100, Math.max(0, v)) / 100 })
-                  }
-                  step={0.5}
-                  min={0}
-                  max={100}
-                  suffix="%"
-                />
-              </Field>
-            </div>
-          )}
-        </div>
       </div>
-
-      {/* ===== The headline, pinned while you edit ===== */}
-      {market && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-200 bg-white/95 px-4 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur lg:hidden">
-          <div
-            className="mx-auto flex max-w-2xl items-center justify-between gap-3"
-            style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
-          >
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold text-gray-500">
-                {mode === 'buy'
-                  ? rateCard.includeVat
-                    ? 'السعر العادل بالضريبة'
-                    : 'السعر العادل بدون ضريبة'
-                  : 'المتوقع أن تستلمه'}
-              </p>
-              <bdi className="block text-lg font-extrabold leading-tight text-gray-900">
-                {formatMoneyShort(
-                  mode === 'buy' ? fairTotal : (sale?.estimatedPayout ?? 0),
-                  market.currency
-                )}
-              </bdi>
-            </div>
-            {mode === 'buy' && breakdown && (
-              <div className="shrink-0 text-end">
-                <p className="text-[10px] font-bold text-orange-600">لو بعتها اليوم</p>
-                <bdi className="block text-sm font-bold text-orange-800">
-                  {formatMoneyShort(breakdown.instantResale, market.currency)}
-                </bdi>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
