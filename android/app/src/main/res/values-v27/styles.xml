@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark navigation-bar icons need API 27; below that the bar keeps its
+         default light icons over the app background. -->
+    <style name="AppTheme.NoActionBar" parent="Base.AppTheme.NoActionBar">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

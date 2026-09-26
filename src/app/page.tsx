@@ -1,10 +1,12 @@
-'use client'
+import type { Metadata } from 'next'
+import Calculator from '@/components/gold/Calculator'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+export const metadata: Metadata = {
+  description: 'سعر جرام الذهب العادل بالمصنعية والضريبة، وهل سعر المحل منطقي، وكم تستلم لو بعت',
+}
 
-export default function Home() {
-  const router = useRouter()
-  useEffect(() => { router.replace('/dashboard') }, [router])
-  return null
+// No page title here: the gold card at the top of the calculator is the
+// header, and a heading above it only pushed the price further down.
+export default function CalculatorPage() {
+  return <Calculator />
 }

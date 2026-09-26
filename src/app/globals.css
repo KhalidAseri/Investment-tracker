@@ -2,10 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --font-inter: 'Inter', sans-serif;
   --font-ibm-plex-arabic: 'IBM Plex Sans Arabic', sans-serif;
 }
 
@@ -20,60 +19,65 @@
 
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
-    overscroll-behavior-y: contain;
-  }
-
-  [dir="rtl"] body {
     font-family: var(--font-ibm-plex-arabic), sans-serif;
-  }
-
-  [dir="ltr"] body {
-    font-family: var(--font-inter), sans-serif;
-  }
-
-  /* Safe area for notched phones */
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior-y: contain;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6;
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5;
   }
 
-  .card-hover {
-    @apply card transition-shadow hover:shadow-md active:shadow-md;
+  /* The sheen crossing the live price header. Marks it as the one surface
+     whose number moves on its own. */
+  .gold-sheen {
+    background: linear-gradient(
+      100deg,
+      transparent 42%,
+      rgba(255, 255, 255, 0.22) 50%,
+      transparent 58%
+    );
+    animation: gold-sheen 5.5s ease-in-out infinite;
   }
 
-  .stat-value {
-    @apply text-xl sm:text-2xl font-bold text-gray-900;
+  /* The weight slider.
+
+     The input itself is a full 44px tall and transparent, and the thin
+     visible track is drawn inside it. Styling the input as the 8px track —
+     as this used to — made its touch area 8px tall: the thumb looked
+     grabbable, but a finger landing a few pixels off it hit nothing. */
+  .weight-range {
+    @apply h-11 w-full cursor-pointer appearance-none bg-transparent;
+    touch-action: none;
   }
 
-  .stat-label {
-    @apply text-sm font-medium text-gray-500;
+  .weight-range::-webkit-slider-runnable-track {
+    @apply h-2 rounded-full bg-gray-200;
   }
 
-  .badge-green {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+  .weight-range::-moz-range-track {
+    @apply h-2 rounded-full bg-gray-200;
   }
 
-  .badge-red {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800;
+  .weight-range::-webkit-slider-thumb {
+    @apply -mt-2.5 h-7 w-7 appearance-none rounded-full border-[3px] border-white bg-amber-600;
+    box-shadow: 0 2px 8px rgb(217 119 6 / 45%);
   }
 
-  .badge-blue {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800;
+  .weight-range::-moz-range-thumb {
+    @apply h-7 w-7 rounded-full border-[3px] border-white bg-amber-600;
+    box-shadow: 0 2px 8px rgb(217 119 6 / 45%);
   }
 
-  .badge-purple {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800;
+  .weight-range:focus-visible {
+    outline: none;
   }
 
-  /* Touch-friendly button base */
-  .btn-touch {
-    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  .weight-range:focus-visible::-webkit-slider-thumb {
+    @apply ring-4 ring-amber-300;
   }
+
 }
 
 /* Custom scrollbar - desktop only */
@@ -95,17 +99,39 @@
   }
 }
 
-/* Standalone PWA mode adjustments */
-@media (display-mode: standalone) {
-  body {
-    /* Prevent overscroll bouncing */
-    overscroll-behavior: none;
+@keyframes gold-sheen {
+  0%,
+  100% {
+    transform: translateX(-60%);
+  }
+  55% {
+    transform: translateX(60%);
   }
 }
 
-/* Pull-to-refresh prevention in PWA */
+/* Anyone who asked the OS for less motion gets it, including from the CSS
+   animations Framer Motion never sees. */
+@media (prefers-reduced-motion: reduce) {
+  .gold-sheen {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Standalone PWA mode adjustments */
 @media (display-mode: standalone) {
   html {
     overscroll-behavior-y: contain;
+  }
+
+  body {
+    overscroll-behavior: none;
   }
 }
