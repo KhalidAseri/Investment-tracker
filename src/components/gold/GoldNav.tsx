@@ -2,8 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { BookOpen, Calculator, Scale, TrendingDown } from 'lucide-react'
+import { tapFeedback } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
+import { SPRING, TAP } from './motion'
 
 const TABS = [
   { href: '/', label: 'الشراء', icon: Calculator },
@@ -18,24 +21,37 @@ export default function GoldNav() {
   const current = pathname.replace(/\/$/, '') || '/'
 
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
       {TABS.map((tab) => {
         const active = current === tab.href
         const Icon = tab.icon
         return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors touch-manipulation',
-              active
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-white text-gray-600 ring-1 ring-gray-200 active:bg-gray-50'
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {tab.label}
-          </Link>
+          <motion.div key={tab.href} whileTap={TAP} className="shrink-0">
+            <Link
+              href={tab.href}
+              onClick={() => tapFeedback('light')}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'relative inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold touch-manipulation',
+                active ? 'text-white' : 'text-gray-600'
+              )}
+            >
+              {/* One pill that slides between tabs, so the eye follows the move
+                  rather than hunting for what just turned amber. */}
+              {active && (
+                <motion.span
+                  layoutId="nav-pill"
+                  transition={SPRING}
+                  className="absolute inset-0 rounded-xl bg-amber-600 shadow-sm shadow-amber-600/30"
+                />
+              )}
+              {!active && (
+                <span className="absolute inset-0 rounded-xl bg-white ring-1 ring-gray-200" />
+              )}
+              <Icon className="relative h-4 w-4" />
+              <span className="relative">{tab.label}</span>
+            </Link>
+          </motion.div>
         )
       })}
     </div>

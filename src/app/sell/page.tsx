@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import GoldNav from '@/components/gold/GoldNav'
+import PageHeader from '@/components/gold/PageHeader'
 import SellCalculator from '@/components/gold/SellCalculator'
 
 export const metadata: Metadata = {
@@ -9,15 +9,12 @@ export const metadata: Metadata = {
 
 export default function GoldSellPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-extrabold text-gray-900">بيع الذهب</h1>
-        <p className="mt-1 text-xs text-gray-500">
-          كم راح يدفع لك المحل فعلياً لو بعت اليوم، وكم ربحت أو خسرت.
-        </p>
-      </div>
-      <GoldNav />
+    <>
+      <PageHeader
+        title="بيع الذهب"
+        subtitle="كم راح يدفع لك المحل فعلياً لو بعت اليوم، وكم ربحت أو خسرت."
+      />
       <SellCalculator />
-    </div>
+    </>
   )
 }

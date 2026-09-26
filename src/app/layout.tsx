@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import GoldNav from '@/components/gold/GoldNav'
 
 // Next does not apply `basePath` to metadata URLs, so they are prefixed here.
 // Empty in the Android build, where Capacitor serves from the server root.
@@ -46,7 +47,15 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body>
-        <main className="min-h-screen p-4 pb-10 lg:p-6">{children}</main>
+        <main className="min-h-screen p-4 pb-24 lg:p-6">
+          <div className="mx-auto max-w-2xl space-y-4">
+            {/* The nav lives in the layout, not in each page: kept mounted
+                across navigation, its active pill slides from tab to tab
+                instead of blinking out and reappearing somewhere else. */}
+            <GoldNav />
+            {children}
+          </div>
+        </main>
       </body>
     </html>
   )

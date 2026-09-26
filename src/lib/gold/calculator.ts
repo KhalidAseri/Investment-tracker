@@ -49,7 +49,12 @@ export function priceBoard(market: MarketSnapshot): { karat: Karat; perGram: num
 }
 
 /** Convert a SAR-denominated rate-card figure into the display currency. */
-function sarToDisplay(amountSar: number, market: MarketSnapshot): number {
+/**
+ * Converts a rate-card figure, which is quoted in SAR, into the display
+ * currency. Exported so the UI can label its piece picker with live
+ * making charges instead of raw Saudi riyals.
+ */
+export function sarToDisplay(amountSar: number, market: MarketSnapshot): number {
   return amountSar * (market.fx.perUsd / RATE_CARD_SAR_PER_USD)
 }
 

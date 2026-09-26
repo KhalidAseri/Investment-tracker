@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { AlertTriangle, CheckCircle2, Coins, Gem, Receipt } from 'lucide-react'
-import GoldNav from '@/components/gold/GoldNav'
+import PageHeader from '@/components/gold/PageHeader'
+import PieceIcon from '@/components/gold/PieceIcon'
+import Reveal from '@/components/gold/Reveal'
 import { KARATS } from '@/lib/gold/constants'
 import { ORIGINS, PIECE_TYPES } from '@/lib/gold/rate-card'
 
@@ -32,17 +34,14 @@ export default function GoldGuidePage() {
   )
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-extrabold text-gray-900">نصائح الشراء</h1>
-        <p className="mt-1 text-xs text-gray-500">
-          اللي تحتاج تعرفه قبل ما تدفع، عشان تطلع بأفضل صفقة.
-        </p>
-      </div>
-      <GoldNav />
+    <div className="space-y-4">
+      <PageHeader
+        title="نصائح الشراء"
+        subtitle="اللي تحتاج تعرفه قبل ما تدفع، عشان تطلع بأفضل صفقة."
+      />
 
       {/* The single rule that matters most */}
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <Reveal className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h2 className="flex items-center gap-2 text-sm font-bold text-amber-900">
           <Gem className="h-4 w-4" />
           القاعدة الذهبية
@@ -52,9 +51,9 @@ export default function GoldGuidePage() {
           الوحيد بين محل ومحل هو <strong className="font-bold">المصنعية</strong>. فلما تقارن، قارن
           المصنعية للجرام فقط، وكل شيء ثاني تفاصيل.
         </p>
-      </div>
+      </Reveal>
 
-      <div className="card">
+      <Reveal className="card">
         <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           ١٢ نصيحة عملية
@@ -69,10 +68,10 @@ export default function GoldGuidePage() {
             </li>
           ))}
         </ol>
-      </div>
+      </Reveal>
 
       {/* Piece types ranked by how much of your money is craftsmanship */}
-      <div className="card">
+      <Reveal className="card">
         <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
           <Coins className="h-4 w-4 text-amber-600" />
           ترتيب القطع من الأرخص مصنعيةً
@@ -86,9 +85,12 @@ export default function GoldGuidePage() {
               key={piece.id}
               className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5"
             >
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900">{piece.labelAr}</p>
-                <p className="mt-0.5 line-clamp-1 text-[11px] text-gray-500">{piece.noteAr}</p>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <PieceIcon piece={piece.id} className="h-6 w-6 shrink-0 text-amber-600" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{piece.labelAr}</p>
+                  <p className="mt-0.5 line-clamp-1 text-[11px] text-gray-500">{piece.noteAr}</p>
+                </div>
               </div>
               <p className="shrink-0 text-xs font-bold tabular-nums text-gray-700">
                 {piece.baseMakingPerGram.low}–{piece.baseMakingPerGram.high} ر.س
@@ -96,10 +98,10 @@ export default function GoldGuidePage() {
             </div>
           ))}
         </div>
-      </div>
+      </Reveal>
 
       {/* Origin cheat-sheet */}
-      <div className="card">
+      <Reveal className="card">
         <h2 className="text-base font-bold text-gray-900">الفرق بين الدقّات</h2>
         <div className="mt-3 space-y-2">
           {ORIGINS.map((origin) => (
@@ -114,10 +116,10 @@ export default function GoldGuidePage() {
             </div>
           ))}
         </div>
-      </div>
+      </Reveal>
 
       {/* Hallmark reference — useful standing in the shop */}
-      <div className="card">
+      <Reveal className="card">
         <h2 className="text-base font-bold text-gray-900">الدمغة والعيار</h2>
         <p className="mt-1 text-[11px] text-gray-500">
           الرقم المحفور داخل القطعة يوضح نسبة الذهب فيها.
@@ -131,10 +133,10 @@ export default function GoldGuidePage() {
             </div>
           ))}
         </div>
-      </div>
+      </Reveal>
 
       {/* VAT — the most commonly misunderstood part */}
-      <div className="card">
+      <Reveal className="card">
         <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
           <Receipt className="h-4 w-4 text-amber-600" />
           الضريبة على الذهب في السعودية
@@ -167,9 +169,9 @@ export default function GoldGuidePage() {
             <span>الضريبة اللي تدفعها كمستهلك لا تُسترد لك عند إعادة البيع.</span>
           </li>
         </ul>
-      </div>
+      </Reveal>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      <Reveal className="rounded-2xl border border-gray-200 bg-white p-4">
         <p className="flex gap-2 text-[11px] leading-relaxed text-gray-500">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
           <span>
@@ -179,7 +181,7 @@ export default function GoldGuidePage() {
             محلك.
           </span>
         </p>
-      </div>
+      </Reveal>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import BuyCalculator from '@/components/gold/BuyCalculator'
-import GoldNav from '@/components/gold/GoldNav'
+import PageHeader from '@/components/gold/PageHeader'
 
 export const metadata: Metadata = {
   description: 'احسب سعر الذهب بالمصنعية والضريبة قبل ما تشتري',
@@ -8,15 +8,12 @@ export const metadata: Metadata = {
 
 export default function GoldBuyPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-extrabold text-gray-900">حاسبة الذهب</h1>
-        <p className="mt-1 text-xs text-gray-500">
-          اعرف السعر العادل قبل ما تدخل المحل — بالمصنعية والضريبة وسعر إعادة البيع.
-        </p>
-      </div>
-      <GoldNav />
+    <>
+      <PageHeader
+        title="حاسبة الذهب"
+        subtitle="اعرف السعر العادل قبل ما تدخل المحل — بالمصنعية والضريبة وسعر إعادة البيع."
+      />
       <BuyCalculator />
-    </div>
+    </>
   )
 }

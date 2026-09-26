@@ -26,7 +26,19 @@
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6;
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5;
+  }
+
+  /* The sheen crossing the live price header. Marks it as the one surface
+     whose number moves on its own. */
+  .gold-sheen {
+    background: linear-gradient(
+      100deg,
+      transparent 42%,
+      rgba(255, 255, 255, 0.22) 50%,
+      transparent 58%
+    );
+    animation: gold-sheen 5.5s ease-in-out infinite;
   }
 
   /* Horizontal pill pickers scroll but shouldn't show a bar on desktop */
@@ -56,6 +68,32 @@
 
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-400;
+  }
+}
+
+@keyframes gold-sheen {
+  0%,
+  100% {
+    transform: translateX(-60%);
+  }
+  55% {
+    transform: translateX(60%);
+  }
+}
+
+/* Anyone who asked the OS for less motion gets it, including from the CSS
+   animations Framer Motion never sees. */
+@media (prefers-reduced-motion: reduce) {
+  .gold-sheen {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

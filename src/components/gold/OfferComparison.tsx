@@ -1,14 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Crown, Scale, Trash2 } from 'lucide-react'
 import { reverseEngineerQuote } from '@/lib/gold/calculator'
 import { getCurrency } from '@/lib/gold/constants'
 import { formatGrams, formatMoney, formatMoneyShort } from '@/lib/gold/format'
 import { getOrigin, getPieceType } from '@/lib/gold/rate-card'
 import { clearOffers, deleteOffer, getOffers } from '@/lib/gold/storage'
+import { tapFeedback } from '@/lib/haptics'
 import type { MarketSnapshot, SavedOffer } from '@/lib/gold/types'
 import { cn } from '@/lib/utils'
+import AnimatedNumber from './AnimatedNumber'
+import PieceIcon from './PieceIcon'
+import { cardIn, SPRING, stagger, TAP } from './motion'
 
 /**
  * Side-by-side view of the quotes the user captured while shopping.
@@ -17,6 +22,10 @@ import { cn } from '@/lib/utils'
  * and the spot price moves between shop visits. So every offer is reduced to the
  * one figure that *is* comparable: the making charge per gram implied by that
  * quote, measured against the spot price at the moment it was captured.
+ *
+ * Because the list is sorted by that figure, deleting an offer can change who
+ * wins. The cards reorder with a layout animation so the new winner is seen
+ * moving into first place rather than silently appearing there.
  */
 export default function OfferComparison() {
   const [offers, setOffers] = useState<SavedOffer[]>([])
@@ -26,6 +35,7 @@ export default function OfferComparison() {
   }, [])
 
   const handleDelete = useCallback((id: string) => {
+    tapFeedback('medium')
     deleteOffer(id)
     setOffers(getOffers())
   }, [])
@@ -54,112 +64,164 @@ export default function OfferComparison() {
       .sort((a, b) => a.makingPerGram - b.makingPerGram)
   }, [offers])
 
-  const best = rows[0]
+  // A negative implied making charge means the quote is below the raw metal
+  // value — the weight, karat or price was mistyped. Crowning such an offer
+  // would have the app recommend the very row it warns is impossible, so only
+  // plausible offers can win, and the spread is measured across those alone.
+  const plausible = rows.filter((row) => row.makingPerGram >= 0)
+  const best = plausible[0]
+  const worst = plausible[plausible.length - 1]
+  /** What shopping around is worth, per gram, in the user's own numbers. */
+  const spread =
+    plausible.length > 1 && best && worst ? worst.makingPerGram - best.makingPerGram : 0
 
   if (offers.length === 0) {
     return (
-      <div className="card text-center">
-        <Scale className="mx-auto h-10 w-10 text-gray-300" />
+      <motion.div
+        initial={{ scale: 0.97 }}
+        animate={{ scale: 1 }}
+        transition={SPRING}
+        className="card text-center"
+      >
+        <motion.div
+          animate={{ rotate: [0, -8, 8, -4, 0] }}
+          transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 3 }}
+          className="mx-auto w-fit"
+        >
+          <Scale className="h-12 w-12 text-gray-300" />
+        </motion.div>
         <h2 className="mt-3 text-base font-bold text-gray-900">ما فيه عروض محفوظة</h2>
         <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-gray-500">
           لما تكون في السوق وتسأل محل عن السعر، ارجع لصفحة الشراء، اكتب السعر اللي عرضه واسم المحل
           واضغط &quot;احفظ&quot;. بعدها قارن كل العروض هنا وتعرف أي محل فعلاً أرخص.
         </p>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className="space-y-3">
-      <div className="card bg-amber-50/50">
+    <motion.div variants={stagger()} initial="hidden" animate="show" className="space-y-3">
+      <motion.div variants={cardIn} className="card bg-amber-50/60">
         <p className="text-xs leading-relaxed text-gray-600">
           المقارنة بالمصنعية للجرام، لأن السعر الإجمالي وحده ما ينفع للمقارنة: الأوزان تختلف وسعر
           الذهب نفسه يتغير بين زيارة وزيارة. الأقل مصنعية هو الأرخص فعلياً.
         </p>
-      </div>
+        {spread > 0 && best && (
+          <p className="mt-2.5 border-t border-amber-200/70 pt-2.5 text-xs font-bold text-amber-900">
+            الفرق بين أرخص وأغلى محل عندك:{' '}
+            <AnimatedNumber
+              value={spread}
+              format={(v) => formatMoney(v, best.currency, { decimals: 0 })}
+              className="text-amber-950"
+            />{' '}
+            على كل جرام.
+          </p>
+        )}
+      </motion.div>
 
-      {rows.map(({ offer, currency, makingPerGram, goldValue, makingTotal }) => {
-        const isBest = offer.id === best?.offer.id && rows.length > 1
-        const piece = getPieceType(offer.input.pieceType)
-        const origin = getOrigin(offer.input.origin)
+      <AnimatePresence initial={false}>
+        {rows.map(({ offer, currency, makingPerGram, goldValue, makingTotal }) => {
+          const isBest = offer.id === best?.offer.id && plausible.length > 1
+          const piece = getPieceType(offer.input.pieceType)
+          const origin = getOrigin(offer.input.origin)
 
-        return (
-          <div
-            key={offer.id}
-            className={cn(
-              'card relative',
-              isBest && 'ring-2 ring-green-500 ring-offset-2'
-            )}
-          >
-            {isBest && (
-              <span className="absolute -top-2.5 start-4 inline-flex items-center gap-1 rounded-full bg-green-600 px-2.5 py-0.5 text-[10px] font-bold text-white">
-                <Crown className="h-3 w-3" />
-                الأفضل
-              </span>
-            )}
-
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-bold text-gray-900">{offer.shopName}</h3>
-                <p className="mt-0.5 text-[11px] text-gray-500">
-                  {piece.labelAr} · {origin.labelAr} · عيار {offer.input.karat} ·{' '}
-                  {formatGrams(offer.input.weightGrams * offer.input.quantity)}
-                </p>
-              </div>
-              <button
-                onClick={() => handleDelete(offer.id)}
-                aria-label="حذف العرض"
-                className="shrink-0 rounded-lg p-1.5 text-gray-400 active:bg-gray-100"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-gray-50 p-3">
-              <div>
-                <p className="text-[10px] font-medium text-gray-500">المصنعية/جم</p>
-                <p
-                  className={cn(
-                    'text-sm font-extrabold tabular-nums',
-                    isBest ? 'text-green-700' : 'text-gray-900'
-                  )}
+          return (
+            <motion.div
+              key={offer.id}
+              layout
+              variants={cardIn}
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+              transition={SPRING}
+              className={cn('card relative', isBest && 'ring-2 ring-emerald-500 ring-offset-2')}
+            >
+              {isBest && (
+                <motion.span
+                  initial={{ scale: 0, y: 6 }}
+                  animate={{ scale: 1, y: 0 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                  className="absolute -top-2.5 start-4 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-bold text-white"
                 >
-                  {formatMoney(makingPerGram, currency, { decimals: 0 })}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-medium text-gray-500">قيمة الذهب</p>
-                <p className="text-sm font-bold tabular-nums text-gray-700">
-                  {formatMoneyShort(goldValue, currency)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-medium text-gray-500">السعر المعروض</p>
-                <p className="text-sm font-bold tabular-nums text-gray-900">
-                  {formatMoneyShort(offer.quotedTotal, currency)}
-                </p>
-              </div>
-            </div>
+                  <Crown className="h-3 w-3" />
+                  الأفضل
+                </motion.span>
+              )}
 
-            {makingTotal < 0 && (
-              <p className="mt-2 text-[11px] leading-relaxed text-red-700">
-                السعر المعروض أقل من قيمة الذهب نفسه وقت الحفظ. راجع الوزن والعيار — أو تأكد إن
-                القطعة مدموغة فعلاً بهذا العيار.
-              </p>
-            )}
-          </div>
-        )
-      })}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <PieceIcon
+                    piece={offer.input.pieceType}
+                    className={cn('mt-0.5 h-6 w-6 shrink-0', isBest ? 'text-emerald-600' : 'text-gray-400')}
+                  />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-gray-900">{offer.shopName}</h3>
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      {piece.labelAr} · {origin.labelAr} · عيار {offer.input.karat} ·{' '}
+                      {formatGrams(offer.input.weightGrams * offer.input.quantity)}
+                    </p>
+                  </div>
+                </div>
+                <motion.button
+                  whileTap={TAP}
+                  onClick={() => handleDelete(offer.id)}
+                  aria-label="حذف العرض"
+                  className="shrink-0 rounded-lg p-1.5 text-gray-400 active:bg-gray-100"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </motion.button>
+              </div>
 
-      <button
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-gray-50 p-3">
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-500">المصنعية/جم</p>
+                  <bdi
+                    className={cn(
+                      'block text-sm font-extrabold',
+                      makingPerGram < 0 ? 'text-red-700' : isBest ? 'text-emerald-700' : 'text-gray-900'
+                    )}
+                  >
+                    <AnimatedNumber
+                      value={makingPerGram}
+                      format={(v) => formatMoney(v, currency, { decimals: 0 })}
+                    />
+                  </bdi>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-500">قيمة الذهب</p>
+                  <p className="text-sm font-bold tabular-nums text-gray-700">
+                    {formatMoneyShort(goldValue, currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-500">السعر المعروض</p>
+                  <p className="text-sm font-bold tabular-nums text-gray-900">
+                    {formatMoneyShort(offer.quotedTotal, currency)}
+                  </p>
+                </div>
+              </div>
+
+              {makingTotal < 0 && (
+                <p className="mt-2 text-[11px] leading-relaxed text-red-700">
+                  السعر المعروض أقل من قيمة الذهب نفسه وقت الحفظ. راجع الوزن والعيار — أو تأكد إن
+                  القطعة مدموغة فعلاً بهذا العيار.
+                </p>
+              )}
+            </motion.div>
+          )
+        })}
+      </AnimatePresence>
+
+      <motion.button
+        variants={cardIn}
+        whileTap={TAP}
         onClick={() => {
+          tapFeedback('heavy')
           clearOffers()
           setOffers([])
         }}
-        className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 active:bg-gray-50"
+        className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-bold text-gray-600 active:bg-gray-50"
       >
         حذف كل العروض
-      </button>
-    </div>
+      </motion.button>
+    </motion.div>
   )
 }

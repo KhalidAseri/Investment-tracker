@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import GoldNav from '@/components/gold/GoldNav'
 import OfferComparison from '@/components/gold/OfferComparison'
+import PageHeader from '@/components/gold/PageHeader'
 
 export const metadata: Metadata = {
   title: 'مقارنة العروض',
@@ -9,15 +9,12 @@ export const metadata: Metadata = {
 
 export default function GoldComparePage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-extrabold text-gray-900">مقارنة العروض</h1>
-        <p className="mt-1 text-xs text-gray-500">
-          كل العروض اللي حفظتها، مرتبة من الأرخص مصنعيةً للأغلى.
-        </p>
-      </div>
-      <GoldNav />
+    <>
+      <PageHeader
+        title="مقارنة العروض"
+        subtitle="كل العروض اللي حفظتها، مرتبة من الأرخص مصنعيةً للأغلى."
+      />
       <OfferComparison />
-    </div>
+    </>
   )
 }
