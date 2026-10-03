@@ -135,3 +135,17 @@
     overscroll-behavior: none;
   }
 }
+
+/* The "today" dot on the market chart breathes, so the eye finds the present. */
+@keyframes chart-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+.chart-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-ping { animation: none; opacity: 0; }
+}

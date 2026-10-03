@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpen, Calculator, MapPin } from 'lucide-react'
+import { BookOpen, Calculator, LineChart, MapPin } from 'lucide-react'
 import { getOffers, OFFERS_CHANGED } from '@/lib/gold/storage'
 import { tapFeedback } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { SPRING } from './motion'
 
 const TABS = [
   { href: '/', label: 'الحاسبة', icon: Calculator },
+  { href: '/market', label: 'السوق', icon: LineChart },
   { href: '/tour', label: 'جولتي', icon: MapPin },
   { href: '/guide', label: 'نصائح', icon: BookOpen },
 ] as const
@@ -52,7 +53,7 @@ export default function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200/80 bg-white/95 backdrop-blur-md"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="mx-auto grid h-16 max-w-md grid-cols-3 px-2">
+      <div className="mx-auto grid h-16 max-w-md grid-cols-4 px-2">
         {TABS.map((tab) => {
           const active = current === tab.href
           const Icon = tab.icon
