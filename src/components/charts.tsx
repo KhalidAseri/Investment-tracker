@@ -29,7 +29,9 @@ function niceStep(max: number, target = 4) {
 const millions = (v: number) => {
   if (v === 0) return '0'
   if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)} م`
-  return `${Math.round(v / 1000)} ألف`
+  if (v >= 10_000) return `${Math.round(v / 1000)} ألف`
+  if (v >= 1_000) return `${+(v / 1000).toFixed(1)} ألف`
+  return String(Math.round(v))
 }
 const pathOf = (pts: Array<[number, number]>) => pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join('')
 
@@ -251,7 +253,8 @@ export function ReturnChart({ series, title, height = 250 }: {
   const ticks: number[] = []
   for (let v = Math.ceil(minY / step) * step; v <= maxY; v += step) ticks.push(Number(v.toFixed(6)))
   const months = ['ينا', 'فبر', 'مار', 'أبر', 'ماي', 'يون', 'يول', 'أغس', 'سبت', 'أكت', 'نوف', 'ديس']
-  const nX = Math.max(2, Math.min(6, Math.floor((W - m.l - m.r) / 70)))
+  const days = new Set(all.map((p) => p.date)).size
+  const nX = Math.max(2, Math.min(6, days, Math.floor((W - m.l - m.r) / 70)))
   const xs = Array.from({ length: nX }, (_, i) => minX + ((maxX - minX) * i) / (nX - 1))
   const lab = (ms: number) => { const d = new Date(ms); return (maxX - minX) > 400 * 86400000 ? `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : `${d.getDate()} ${months[d.getMonth()]}` }
   return (

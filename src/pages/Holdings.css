@@ -1,0 +1,10 @@
+/* Full edit sheet of a holding (HoldingSheet) */
+.hs-seg .segmented { display: flex; width: 100%; }
+.input.hs-ro {
+  background: var(--sunken); border-color: transparent; color: var(--ink);
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; direction: ltr;
+}
+/* the unit sits at the left edge, like the suffix of an input */
+.input.hs-ro small { margin-right: auto; color: var(--muted); font-size: 13px; font-family: var(--font-ui); }
+.input.hs-value { font-weight: 600; }
+.btn.small.hs-inline-btn { align-self: flex-start; min-height: 30px; padding: 0 2px; }

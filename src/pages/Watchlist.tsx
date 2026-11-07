@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
+import { PortfolioTabs } from './Portfolio'
 import { useDerived } from '../lib/derived'
 import { currentTarget, holdingValue } from '../lib/calc'
 import { ago, num2, pct, sar } from '../lib/format'
@@ -43,8 +44,9 @@ export default function Watchlist() {
 
   return (
     <>
+      <PortfolioTabs active="watch" />
       <p className="muted" style={{ marginBottom: 14 }}>
-        الأسهم التي تتابعها قبل شرائها. الشراء فقط عندما تكتمل الشروط الخمسة: الأربعة أدناه، ونزول السعر تحت سعر الشراء بهامش الأمان. يصلك إشعار عند وصول أي سهم لسعر الشراء.
+        أسهم تتابعها قبل شرائها، ويصلك إشعار حين يصل أي منها إلى سعر الشراء.
       </p>
 
       <section className="section" style={{ marginTop: 0 }}>

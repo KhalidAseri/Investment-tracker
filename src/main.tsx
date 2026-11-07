@@ -1,9 +1,9 @@
+import './styles.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import { StoreProvider } from './lib/store'
 import { applyTheme } from './pages/Settings'
-import './styles.css'
 
 applyTheme(((localStorage.getItem('masar-theme') as 'auto' | 'light' | 'dark') || 'auto'))
 

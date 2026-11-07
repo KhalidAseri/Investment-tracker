@@ -1,0 +1,33 @@
+/* New-asset sheet (AddAssetSheet) */
+.aa { display: flex; flex-direction: column; gap: 12px; }
+.aa-list { display: flex; flex-direction: column; gap: 10px; }
+.aa .type-tile { transition: background 0.15s ease, transform 0.1s ease; min-height: 72px; }
+.aa .type-tile:active { transform: scale(0.985); }
+.aa .type-tile .tt-text { flex: 1; min-width: 0; font-size: inherit; color: inherit; }
+.aa .type-tile .tt-text > span { margin-top: 1px; }
+.aa .type-tile .chev { width: 18px; height: 18px; }
+
+.aa-back {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: -6px 0 2px;
+  padding-block: 4px; padding-inline: 6px 13px; border: 0; border-radius: 999px; background: var(--sunken);
+  color: var(--ink); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background 0.15s ease;
+}
+.aa-back:hover { background: var(--line); }
+.aa-back .aa-back-arrow { width: 17px; height: 17px; transform: scaleX(-1); color: var(--muted); }
+.aa-back-ico { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+.aa-back-ico svg { width: 15px; height: 15px; }
+
+.aa-other { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--line); }
+
+.aa-picked { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius-s); background: var(--sunken); font-size: 13.5px; color: var(--ink-2); }
+.aa-picked b { font-family: var(--font-display); font-weight: 600; color: var(--ink); }
+.aa-sym { font-family: var(--font-display); font-weight: 600; color: var(--ink); background: var(--surface); border-radius: 8px; padding: 2px 8px; font-size: 13px; }
+
+.aa-seg .segmented { display: flex; width: 100%; }
+
+.aa-value {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 2px;
+  padding: 14px 16px; border-radius: var(--radius-s); background: var(--accent-soft);
+}
+.aa-value span { font-size: 14px; color: var(--ink-2); }
+.aa-value b { font-size: 21px; font-weight: 600; color: var(--accent); }

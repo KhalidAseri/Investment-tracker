@@ -237,3 +237,27 @@ export function purification(transactions: Transaction[], holdings: Holding[], f
   const list = [...rows.values()].sort((a, b) => b.due - a.due)
   return { rows: list, total: list.reduce((s, r) => s + r.due, 0), dividends: list.reduce((s, r) => s + r.dividends, 0) }
 }
+
+/** Transactions that move money in or out of the main portfolio (goal portfolios and excluded accounts left out). */
+export function mainFlows(transactions: Transaction[], holdings: Holding[], accounts: Account[]) {
+  const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
+  const goalHoldings = new Set(holdings.filter((h) => h.goal_id).map((h) => h.id))
+  return transactions.filter((t) => !(t.holding_id && goalHoldings.has(t.holding_id)) && !(t.account_id && excluded.has(t.account_id)) && !/لهدف/.test(t.note ?? ''))
+}
+
+export type Period = '1w' | '1m' | '3m' | 'ytd' | '1y' | 'all'
+export const PERIODS: Array<{ k: Period; label: string; long: string }> = [
+  { k: '1w', label: 'أسبوع', long: 'خلال الأسبوع' },
+  { k: '1m', label: 'شهر', long: 'خلال الشهر' },
+  { k: '3m', label: '3 أشهر', long: 'خلال 3 أشهر' },
+  { k: 'ytd', label: 'السنة', long: 'منذ بداية السنة' },
+  { k: 'all', label: 'الكل', long: 'منذ البداية' },
+]
+/** start date (ISO) of a period, or undefined for all history */
+export function periodStart(p: Period, today = new Date()): string | undefined {
+  const d = new Date(today)
+  if (p === 'all') return undefined
+  if (p === 'ytd') return `${d.getFullYear()}-01-01`
+  const days = p === '1w' ? 7 : p === '1m' ? 30 : p === '3m' ? 91 : 365
+  return new Date(d.getTime() - days * 86400000).toISOString().slice(0, 10)
+}

@@ -71,7 +71,7 @@ export default function Activity() {
   )
 }
 
-function TxSheet({ initial, onClose }: { initial: Partial<Transaction>; onClose: () => void }) {
+export function TxSheet({ initial, onClose }: { initial: Partial<Transaction>; onClose: () => void }) {
   const { upsert, remove, notify, holdings, accounts, sleeves } = useStore()
   const [t, setT] = useState<Partial<Transaction>>(initial)
   const set = (p: Partial<Transaction>) => setT((v) => ({ ...v, ...p }))

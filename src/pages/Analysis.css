@@ -1,0 +1,94 @@
+/* Analysis tab: الأداء · التنويع · التكاليف. Builds on styles.css; only what the shared classes lack. */
+.an { --ink-3: var(--line-strong); } /* zero line of ReturnChart */
+.an-tabs { margin-bottom: 14px; }
+.an-pane { animation: pageIn 0.24s cubic-bezier(.2, .8, .2, 1); }
+.an-block { margin-top: 16px; }
+.an .tiles.an-top { margin-top: 0; }
+.an-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* period chips: one even row on phones, natural width on desktop */
+.an-periods { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; padding: 1px; }
+.an-periods::-webkit-scrollbar { display: none; }
+.an-periods button { flex: 1 0 auto; justify-content: center; padding: 6px 10px; }
+@media (min-width: 600px) { .an-periods button { flex: 0 0 auto; padding: 7px 18px; } }
+
+/* list cards */
+.an-list .card-head { margin-bottom: 6px; }
+.an-cap { display: flex; justify-content: space-between; gap: 12px; padding: 0 16px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.an-cap.flat { padding: 0 0 8px; }
+.an-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.an-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.an-name b { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-name .chip { flex: none; font-size: 11.5px; padding: 1px 8px; line-height: 1.6; }
+.an-main > b { font-weight: 600; }
+.an-sub { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-sub .figure { font-size: 12.5px; }
+.an-bar { display: block; height: 4px; border-radius: 99px; background: var(--sunken); margin-top: 7px; overflow: hidden; }
+.an-bar i { display: block; height: 100%; border-radius: 99px; background: var(--good); transition: width 0.4s ease; }
+.an-bar i.down { background: var(--bad); }
+.an-total { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface-2); border-top: 1px solid var(--line); }
+.an-missing { padding: 10px 16px 14px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); line-height: 1.7; }
+.an-missing a { font-weight: 500; }
+.an-hint { padding: 2px 16px 12px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.an-hint.flat { padding: 4px 0; border: 0; }
+.an-hint:last-child { border-bottom: 0; }
+.ri.an-static { cursor: default; }
+.ri.an-static:hover, .ri.an-static:active { background: none; }
+.an-list .ri .chev { margin-inline-start: -4px; }
+.an-target { scroll-margin-top: 14px; }
+
+/* chart card */
+.an-chart .legend { margin-top: 10px; }
+.an-chart .legend span { font-family: var(--font-display); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.an-bench { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.an-bench > span { color: var(--muted); font-size: 13.5px; flex: none; }
+.an-bench > b { font-weight: 500; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-bench .select { flex: 1; min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 12px; min-width: 0; text-overflow: ellipsis; }
+.an-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+/* donut legend */
+.an-donut { gap: 14px; }
+.an-donut .donut-legend { gap: 8px; }
+.an-legend-cap { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--muted); padding-bottom: 2px; }
+.an-donut .legend-item { gap: 6px; }
+.an-donut .legend-item .val { min-width: 34px; text-align: end; }
+.an-donut .legend-item .tgt { min-width: 34px; text-align: start; }
+@media (min-width: 960px) { .an-donut { gap: 24px; } .an-donut .legend-item { gap: 8px; font-size: 13.5px; } .an-donut .legend-item .val { min-width: 44px; } }
+
+/* diversification: two independent columns on desktop, blocks 1–4 in order on phones */
+.an-cols { display: flex; flex-direction: column; gap: 16px; }
+.an-c { display: contents; }
+.an-o1 { order: 1; } .an-o2 { order: 2; } .an-o3 { order: 3; } .an-o4 { order: 4; }
+@media (min-width: 960px) {
+  .an-cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
+  .an-c { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+}
+
+/* concentration */
+.an .tiles.an-tiles { margin-top: 0; grid-template-columns: 1fr 1fr; }
+.tile:has(.an-warn) { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
+.tile:has(.an-warn) .tile-ico { background: var(--warn-soft); color: var(--warn); }
+.an-warn { color: var(--warn); }
+.an-tsub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.an-name b[dir='auto'], .alloc-name span[dir='auto'] { text-align: right; }
+.banner.an-static { cursor: default; }
+.an-note p { font-size: 13.5px; }
+
+/* actual vs target */
+.an-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: -4px 0 12px; }
+.an-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.an-status.good { color: var(--good); }
+.an-status.warn { color: var(--warn); }
+.an-drift { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.an-drift .chip { font-size: 12px; padding: 2px 9px; }
+.an-drift .money { color: var(--ink-2); font-weight: 500; }
+
+/* exposure */
+.an-expo { display: grid; gap: 18px; }
+.an-expo-group { display: grid; gap: 10px; min-width: 0; }
+.an-expo-group h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); font-family: var(--font-ui); }
+.an-expo-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.an-expo-line > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.an-expo-line > span:last-child { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.an-expo-line .money { color: var(--muted); font-size: 12px; }
+.an-expo-line b { font-weight: 600; }

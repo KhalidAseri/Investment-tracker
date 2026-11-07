@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../lib/store'
+import { PortfolioTabs } from './Portfolio'
 import { useDerived } from '../lib/derived'
 import { holdingValue } from '../lib/calc'
 import { dateLong, pct, sar, sarShort } from '../lib/format'
@@ -29,7 +30,8 @@ export default function Goals() {
 
   return (
     <>
-      <p className="muted" style={{ marginBottom: 14 }}>محافظ منفصلة عن المحفظة الرئيسية لأهداف لها مبلغ وموعد: دفعة بيت، سيارة، تعليم، حج. أصول كل هدف لا تدخل في أوزان الاستقلال ولا في دخله.</p>
+      <PortfolioTabs active="goals" />
+      <p className="muted" style={{ marginBottom: 14 }}>محافظ منفصلة لأهداف لها مبلغ وموعد، مثل دفعة بيت أو سيارة. لا تدخل في أوزان المحفظة الرئيسية.</p>
 
       {active.length > 0 && (
         <div className="facts" style={{ marginTop: 0, marginBottom: 18 }}>

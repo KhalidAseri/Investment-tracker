@@ -34,7 +34,7 @@ export default function Calendar() {
   return (
     <>
       <div className="row wrap" style={{ gap: 10, marginBottom: 6 }}>
-        <p className="grow muted">مواعيد الأموال الداخلة والخارجة. الدخل المتوقع للاستثمار خلال السنة القادمة: <b className="figure" style={{ color: 'var(--ink)' }}>{sar(inflowYear)}</b></p>
+        <p className="grow muted">مواعيدك المالية خلال السنة. المبالغ الواردة المتوقعة: <b className="figure" style={{ color: 'var(--ink)' }}>{sar(inflowYear)}</b></p>
         {!readOnly && <button className="btn primary small" onClick={() => setEditing({ title: '', kind: 'other', event_date: todayISO(), recurrence: 'none', amount: null, done: false })}><IconPlus /> موعد جديد</button>}
       </div>
 

@@ -1,141 +1,227 @@
-import { useMemo, useState } from 'react'
+// «صافي الثروة»: everything owned minus everything owed, with a payoff calculator.
+import { useMemo, useState, type ReactNode, type SVGProps } from 'react'
 import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
-import { dateLong, pct, sar, sarShort } from '../lib/format'
-import { ASSET_KIND_LABEL, DEBT_LABEL, exposure, netWorth, otherAssetValue, payoffWithExtra, type Slice } from '../lib/wealth'
-import type { Obligation, OtherAsset } from '../lib/types'
-import { Empty, Knob } from '../components/ui'
-import { IconPlus } from '../components/icons'
+import { holdingValue } from '../lib/calc'
+import { monthName, num0, pct, sar, signedPct, todayISO } from '../lib/format'
+import { ASSET_KIND_LABEL, DEBT_LABEL, debtView, mainFlows, netWorth, otherAssetValue, payoffWithExtra, performance } from '../lib/wealth'
+import type { DebtKind, Obligation, OtherAsset, OtherAssetKind } from '../lib/types'
+import { Knob } from '../components/ui'
+import { Empty, Money, StackBar } from '../components/kit'
+import { IconBuilding, IconCash, IconChart, IconDoc, IconFlag, IconHome, IconLayers, IconPlus, IconScale, IconSparkle, IconWallet } from '../components/icons'
 import { ObligationSheet, OtherAssetSheet, monthsText } from '../components/WealthSheets'
+import { haptic, useCountUp } from '../lib/ui'
+import './NetWorth.css'
 
-function Bars({ title, slices, color }: { title: string; slices: Slice[]; color: string }) {
-  return (
-    <div className="panel stack" style={{ gap: 10 }}>
-      <h3 style={{ margin: 0 }}>{title}</h3>
-      {slices.length === 0 && <p className="small muted">لا أصول بعد.</p>}
-      {slices.map((s) => (
-        <div key={s.key} className="expo-row">
-          <div className="row between small"><span>{s.label}</span><span><b>{pct(s.pct, 0)}</b> <span className="muted">· {sarShort(s.value)}</span></span></div>
-          <div className="expo-track"><i style={{ width: `${Math.max(1.5, s.pct)}%`, background: color }} /></div>
-        </div>
-      ))}
-    </div>
-  )
+const IconCar = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden {...p}>
+    <path d="M4 16.5V12l2-5h12l2 5v4.5" /><path d="M3.5 12h17" /><path d="M4 16.5h16" /><path d="M6 16.5V19M18 16.5V19" /><circle cx="7.5" cy="14.2" r=".6" fill="currentColor" /><circle cx="16.5" cy="14.2" r=".6" fill="currentColor" />
+  </svg>
+)
+const ASSET_ICON: Record<OtherAssetKind, (p: SVGProps<SVGSVGElement>) => JSX.Element> = {
+  real_estate: IconHome, land: IconLayers, vehicle: IconCar, business: IconBuilding, other: IconSparkle,
+}
+const DEBT_ICON: Record<DebtKind, (p: SVGProps<SVGSVGElement>) => JSX.Element> = {
+  mortgage: IconHome, personal_loan: IconCash, advance: IconCash, car: IconCar, card: IconWallet, other: IconDoc,
+}
+
+const monthYear = (iso: string | null) => {
+  if (!iso) return ''
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00')
+  return `${monthName(d.getMonth())} ${d.getFullYear()}`
+}
+const counted = (n: number, one: string, two: string, few: string, many: string) =>
+  (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`)
+const assetsText = (n: number) => counted(n, 'أصل واحد', 'أصلان', 'أصول', 'أصلاً')
+const goalsText = (n: number) => counted(n, 'هدف واحد', 'هدفان', 'أهداف', 'هدفاً')
+const rateText = (r: number) => `${+r.toFixed(2)}%`
+
+/** One line in a card: icon, name, detail, amount. A link, a button, or plain text for viewers. */
+function Line({ icon, tone = '', name, sub, end, href, onClick }: {
+  icon: ReactNode; tone?: string; name: string; sub?: ReactNode; end: ReactNode; href?: string; onClick?: () => void
+}) {
+  const body = <>
+    <span className={`nw-ico ${tone}`}>{icon}</span>
+    <span className="ri-main"><b>{name}</b>{sub != null && <span>{sub}</span>}</span>
+    <span className="ri-end">{end}</span>
+  </>
+  if (href) return <a className="ri" href={href} onClick={() => haptic()}>{body}</a>
+  if (onClick) return <button type="button" className="ri" onClick={() => { haptic(); onClick() }}>{body}</button>
+  return <div className="ri nw-static">{body}</div>
 }
 
 export default function NetWorth() {
-  const { otherAssets, obligations, holdings, accounts, fx, readOnly, settings } = useStore()
+  const { otherAssets, obligations, holdings, accounts, goals, fx, readOnly, settings, snapshots, transactions } = useStore()
   const d = useDerived()
   const [asset, setAsset] = useState<Partial<OtherAsset> | null>(null)
   const [debt, setDebt] = useState<Partial<Obligation> | null>(null)
   const [extra, setExtra] = useState(1000)
   const [focusDebt, setFocusDebt] = useState<string | null>(null)
 
+  const goalsValue = d ? Object.values(d.totals.goals).reduce((a, b) => a + b, 0) : 0
   const nw = useMemo(() => d && netWorth({
-    invested: d.totals.total, goals: Object.values(d.totals.goals).reduce((a, b) => a + b, 0), outside: d.totals.outside, otherAssets, obligations,
-  }), [d, otherAssets, obligations])
-  const expo = useMemo(() => exposure(holdings, accounts, fx), [holdings, accounts, fx])
+    invested: d.totals.total, goals: goalsValue, outside: d.totals.outside, otherAssets, obligations,
+  }), [d, goalsValue, otherAssets, obligations])
+  const shown = useCountUp(nw?.net ?? 0)
+  // compare with what the portfolio has actually earned per year (needs about a year of daily values)
+  const earned = useMemo(() => performance(snapshots, mainFlows(transactions, holdings, accounts), undefined, d?.totals.total ?? 0, todayISO()).annualized, [snapshots, transactions, holdings, accounts, d?.totals.total])
   if (!d || !nw) return null
 
-  const goalsValue = Object.values(d.totals.goals).reduce((a, b) => a + b, 0)
-  const lines = [
-    { label: 'المحفظة الرئيسية', value: d.totals.total },
-    ...(goalsValue > 0 ? [{ label: 'محافظ الأهداف', value: goalsValue }] : []),
-    ...(d.totals.outside > 0 ? [{ label: 'حسابات خارج الخطة', value: d.totals.outside }] : []),
-    ...(nw.other > 0 ? [{ label: 'العقار والأصول الأخرى', value: nw.other }] : []),
-  ]
-  const debtsWithBalance = nw.debts.filter((x) => x.months != null && x.balance > 0)
-  const target = debtsWithBalance.find((x) => x.debt.id === focusDebt) ?? debtsWithBalance[0]
+  const owner = !readOnly
+  const share = (v: number) => (nw.assets > 0 ? pct((v / nw.assets) * 100, v / nw.assets >= 0.1 ? 0 : 1) : '')
+  const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
+  const live = holdings.filter((h) => !h.archived && holdingValue(h, fx) > 0)
+  const mainCount = live.filter((h) => !h.goal_id && !(h.account_id && excluded.has(h.account_id))).length
+  const activeGoals = goals.filter((g) => !g.archived)
+  const outsideNames = accounts.filter((a) => a.exclude_from_portfolio && live.some((h) => !h.goal_id && h.account_id === a.id)).map((a) => a.name)
+  const thisYear = new Date().getFullYear()
+
+  // debts: with a balance (largest first), recurring commitments, then the ones already paid off
+  const views = obligations.map((o) => debtView(o))
+  const owing = views.filter((x) => x.debt.balance != null && x.balance > 0).sort((a, b) => b.balance - a.balance)
+  const recurring = obligations.filter((o) => o.balance == null && !(o.end_year && o.end_year < thisYear))
+  const paid = views.filter((x) => x.debt.balance != null && x.balance <= 0).map((x) => x.debt)
+  const monthly = [...owing.map((x) => x.debt), ...recurring].reduce((a, o) => a + (Number(o.monthly_amount) || 0), 0)
+
+  const payable = owing.filter((x) => x.months != null)
+  const target = payable.find((x) => x.debt.id === focusDebt) ?? payable[0]
   const faster = target ? payoffWithExtra(target.debt, extra) : null
-  const recurring = obligations.filter((o) => o.balance == null)
+  const rate = Number(target?.debt.rate_pct) || 0
 
   return (
-    <>
-      <section className="status" style={{ paddingTop: 0 }}>
-        <p className="kicker">صافي ثروتك</p>
-        <p className="headline"><span className={`figure ${nw.net < 0 ? 'bad' : ''}`}>{sar(nw.net)}</span></p>
-        <p className="muted small">كل ما تملكه ({sarShort(nw.assets)}) ناقص ما عليك من ديون ({sarShort(nw.owed)}).</p>
+    <div className="nw">
+      <section className="hero nw-hero">
+        <div className="hero-top"><span>صافي ثروتك</span><span className="nw-hero-ico"><IconScale /></span></div>
+        <div className="hero-value">{shown < -0.5 ? '−' : ''}{num0(Math.abs(shown))}<small>ريال</small></div>
+        <div className="nw-split">
+          <StackBar parts={[
+            { key: 'own', value: nw.assets, color: 'var(--nw-own)', label: 'ما تملكه' },
+            { key: 'owe', value: nw.owed, color: 'var(--nw-owe)', label: 'ما عليك' },
+          ]} />
+          <div className="nw-legend">
+            <div><span><i className="own" />ما تملكه</span><b className="money">{sar(nw.assets)}</b></div>
+            <div><span><i className="owe" />ما عليك</span><b className="money">{sar(nw.owed)}</b></div>
+          </div>
+        </div>
       </section>
 
-      <div className="panel flush">
-        {lines.map((l) => (
-          <div key={l.label} className="list-item" style={{ cursor: 'default' }}><div className="grow">{l.label}</div><div className="amount">{sar(l.value)}</div></div>
-        ))}
-        {nw.owed > 0 && <div className="list-item" style={{ cursor: 'default' }}><div className="grow">الديون المتبقية</div><div className="amount bad">−{sar(nw.owed)}</div></div>}
-      </div>
+      <div className="layout even nw-grid">
+        <section className="card flush nw-card">
+          <div className="card-head"><h3>ما تملكه</h3><Money v={nw.assets} className="nw-total" /></div>
+          <Line icon={<IconChart />} name="المحفظة الرئيسية" sub={assetsText(mainCount)} href="#/portfolio"
+            end={<><Money v={d.totals.total} /><span className="sub">{share(d.totals.total)}</span></>} />
+          {(goalsValue > 0 || activeGoals.length > 0) && (
+            <Line icon={<IconFlag />} tone="goal" name="محافظ الأهداف" sub={activeGoals.length ? goalsText(activeGoals.length) : undefined} href="#/goals"
+              end={<><Money v={goalsValue} /><span className="sub">{share(goalsValue)}</span></>} />
+          )}
+          {d.totals.outside > 0 && (
+            <Line icon={<IconCash />} tone="calm" name="حسابات خارج الخطة" sub={outsideNames.join('، ') || undefined} href="#/portfolio"
+              end={<><Money v={d.totals.outside} /><span className="sub">{share(d.totals.outside)}</span></>} />
+          )}
+          {otherAssets.map((a) => {
+            const Icon = ASSET_ICON[a.kind] ?? IconSparkle
+            const v = otherAssetValue(a)
+            const change = Number(a.appreciation_pct) || 0
+            return (
+              <Line key={a.id} icon={<Icon />} tone="calm" name={a.name}
+                sub={`${ASSET_KIND_LABEL[a.kind] ?? 'أخرى'} · ${change ? `${signedPct(change)} سنوياً` : `قيمة ${monthYear(a.value_date)}`}`}
+                onClick={owner ? () => setAsset(a) : undefined}
+                end={<><Money v={v} /><span className="sub">{share(v)}</span></>} />
+            )
+          })}
+          {owner && (
+            <button type="button" className="nw-add" onClick={() => { haptic(); setAsset({ name: '', kind: 'real_estate', value: 0 }) }}>
+              <IconPlus />{otherAssets.length ? 'أضف عقاراً أو أصلاً آخر' : 'أضف بيتك أو أرضك أو سيارتك'}
+            </button>
+          )}
+        </section>
 
-      <section className="section">
-        <div className="section-head"><h2>العقار والأصول الأخرى</h2>
-          {!readOnly && <button className="btn primary small" onClick={() => setAsset({ name: '', kind: 'real_estate', value: 0 })}><IconPlus /> أصل</button>}
-        </div>
-        {otherAssets.length === 0 ? (
-          <Empty title="أضف بيتك أو أرضك أو سيارتك"><p className="muted small">تدخل في صافي ثروتك فقط، ولا تؤثر على أوزان المحفظة.</p></Empty>
-        ) : (
-          <div className="panel flush">
-            {otherAssets.map((a) => (
-              <button key={a.id} className="list-item" onClick={() => !readOnly && setAsset(a)} style={readOnly ? { cursor: 'default' } : undefined}>
-                <div className="grow"><div>{a.name}</div><div className="meta">{ASSET_KIND_LABEL[a.kind]}، قُدّر في {dateLong(a.value_date)}{a.appreciation_pct ? `، ${a.appreciation_pct > 0 ? '+' : ''}${a.appreciation_pct}% سنوياً` : ''}</div></div>
-                <div className="amount">{sar(otherAssetValue(a))}</div>
+        <div className="nw-col">
+          <section className="card flush nw-card">
+            <div className="card-head"><h3>ما عليك</h3>{(owing.length > 0 || recurring.length > 0) && <Money v={nw.owed} className="nw-total" />}</div>
+            {owing.length === 0 && recurring.length === 0 && paid.length === 0 ? (
+              <Empty icon={<IconScale />} title="لا ديون مسجّلة" text={owner ? 'أضف التمويل أو السلفة لترى متى تنتهي.' : undefined}
+                action={owner ? { label: 'أضف ديناً', onClick: () => setDebt({ name: '', kind: 'personal_loan', monthly_amount: 0, balance: 0, sort: obligations.length + 1 }) } : undefined} />
+            ) : <>
+              {owing.map((x) => {
+                const Icon = DEBT_ICON[x.debt.kind] ?? IconDoc
+                return (
+                  <Line key={x.debt.id} icon={<Icon />} tone="debt" name={x.debt.name}
+                    sub={`قسط ${sar(Number(x.debt.monthly_amount))}${x.debt.rate_pct ? ` · ${rateText(Number(x.debt.rate_pct))}` : ''}`}
+                    onClick={owner ? () => setDebt(x.debt) : undefined}
+                    end={<><Money v={x.balance} /><span className="sub">{x.payoffDate ? `حتى ${monthYear(x.payoffDate)}` : x.months == null ? 'القسط لا يغطي الربح' : ''}</span></>} />
+                )
+              })}
+              {recurring.map((o) => {
+                const Icon = DEBT_ICON[o.kind] ?? IconDoc
+                return (
+                  <Line key={o.id} icon={<Icon />} tone="calm" name={o.name}
+                    sub={`${DEBT_LABEL[o.kind] ?? 'التزام'}${o.end_year ? ` · حتى ${o.end_year}` : ''}`}
+                    onClick={owner ? () => setDebt(o) : undefined}
+                    end={<><Money v={Number(o.monthly_amount)} /><span className="sub">شهرياً</span></>} />
+                )
+              })}
+              {paid.map((o) => {
+                const Icon = DEBT_ICON[o.kind] ?? IconDoc
+                return (
+                  <Line key={o.id} icon={<Icon />} tone="calm" name={o.name} sub={DEBT_LABEL[o.kind] ?? 'التزام'}
+                    onClick={owner ? () => setDebt(o) : undefined} end={<span className="chip accent">سُدّد</span>} />
+                )
+              })}
+              {monthly > 0 && <div className="nw-kv"><span>الأقساط الشهرية</span><Money v={monthly} /></div>}
+            </>}
+            {owner && (owing.length > 0 || recurring.length > 0 || paid.length > 0) && (
+              <button type="button" className="nw-add" onClick={() => { haptic(); setDebt({ name: '', kind: 'personal_loan', monthly_amount: 0, balance: 0, sort: obligations.length + 1 }) }}>
+                <IconPlus />أضف ديناً أو التزاماً
               </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="section">
-        <div className="section-head"><h2>الديون</h2>
-          {!readOnly && <button className="btn primary small" onClick={() => setDebt({ name: '', kind: 'personal_loan', monthly_amount: 0, balance: 0, sort: obligations.length + 1 })}><IconPlus /> دين</button>}
-        </div>
-        {nw.debts.length === 0 && recurring.length === 0 ? (
-          <Empty title="لا ديون مسجّلة"><p className="muted small">أضف التمويل أو السلفة بالمبلغ المتبقي والقسط، فيظهر متى تنتهي وكم توفّر لو دفعت أكثر.</p></Empty>
-        ) : (
-          <div className="panel flush">
-            {nw.debts.map((x) => (
-              <button key={x.debt.id} className="list-item" onClick={() => !readOnly && setDebt(x.debt)} style={readOnly ? { cursor: 'default' } : undefined}>
-                <div className="grow"><div>{x.debt.name}</div>
-                  <div className="meta">{DEBT_LABEL[x.debt.kind ?? 'other']}، قسط {sar(Number(x.debt.monthly_amount))}{x.months != null ? `، ينتهي ${x.payoffDate ? dateLong(x.payoffDate).replace(/^\d+ /, '') : ''} (بعد ${monthsText(x.months)})` : ''}</div>
-                </div>
-                <div className="amount">{sar(x.balance)}</div>
-              </button>
-            ))}
-            {recurring.map((o) => (
-              <button key={o.id} className="list-item" onClick={() => !readOnly && setDebt(o)} style={readOnly ? { cursor: 'default' } : undefined}>
-                <div className="grow"><div>{o.name}</div><div className="meta">{DEBT_LABEL[o.kind ?? 'other']}، المتبقي غير مُدخل{o.end_year ? `، حتى ${o.end_year}` : ''}</div></div>
-                <div className="amount muted">{sar(Number(o.monthly_amount))} / شهر</div>
-              </button>
-            ))}
-          </div>
-        )}
-        {target && (
-          <div className="panel stack" style={{ marginTop: 12 }}>
-            <h3 style={{ margin: 0 }}>لو دفعت أكثر كل شهر</h3>
-            {debtsWithBalance.length > 1 && (
-              <div className="segmented" role="group" aria-label="الدين">
-                {debtsWithBalance.map((x) => <button key={x.debt.id} type="button" aria-pressed={x.debt.id === target.debt.id} onClick={() => setFocusDebt(x.debt.id)}>{x.debt.name}</button>)}
-              </div>
             )}
-            <Knob label="زيادة شهرية على القسط" value={extra} min={0} max={Math.max(5000, Math.round(Number(target.debt.monthly_amount) * 1.5 / 500) * 500)} step={250} onChange={setExtra} display={sar(extra)} />
-            {faster && faster.saved > 0 ? (
-              <p className="small">ينتهي «{target.debt.name}» قبل موعده بـ <b>{monthsText(faster.saved)}</b>{faster.interestSaved > 1 ? <> وتوفّر أرباحاً نحو <b className="good">{sar(faster.interestSaved)}</b></> : null}.
-                {!target.debt.rate_pct && ' (بلا نسبة ربح مسجّلة، فالتوفير في الوقت فقط.)'}</p>
-            ) : <p className="small muted">حرّك المؤشر لترى أثر الزيادة.</p>}
-            <p className="tiny muted">إن كانت نسبة ربح الدين أعلى مما تتوقعه من استثماراتك، فسداده أولاً أجدى من استثمار المبلغ.</p>
-          </div>
-        )}
-      </section>
+          </section>
 
-      <section className="section">
-        <div className="section-head"><h2>أين أموالك المستثمرة؟</h2></div>
-        <div className="stack">
-          <Bars title="حسب السوق" slices={expo.region} color="var(--growth)" />
-          <Bars title="حسب العملة" slices={expo.currency} color="var(--income)" />
-          <Bars title="حسب مكان الحساب" slices={expo.custody} color="var(--accent)" />
+          {target && (
+            <section className="card nw-payoff">
+              <div className="card-head"><h3>لو دفعت أكثر</h3></div>
+              {payable.length > 1 && (
+                <div className="segmented full" role="group" aria-label="الدين">
+                  {payable.map((x) => (
+                    <button key={x.debt.id} type="button" aria-pressed={x.debt.id === target.debt.id} onClick={() => { haptic(); setFocusDebt(x.debt.id) }}>{x.debt.name}</button>
+                  ))}
+                </div>
+              )}
+              <Knob label="زيادة على القسط شهرياً" value={extra} min={0} step={250}
+                max={Math.max(5000, Math.round((Number(target.debt.monthly_amount) * 1.5) / 500) * 500)}
+                onChange={setExtra} display={sar(extra)} />
+              {faster && faster.saved > 0 ? (
+                <div className="nw-res">
+                  <div>
+                    <span>ينتهي قبل موعده بـ</span>
+                    <b>{monthsText(faster.saved)}</b>
+                    <small>في {monthYear(faster.payoffDate)}</small>
+                  </div>
+                  <div>
+                    <span>توفّر من الأرباح</span>
+                    {rate > 0 && faster.interestSaved > 1
+                      ? <b className="good"><Money v={faster.interestSaved} /></b>
+                      : <b className="muted">—</b>}
+                    <small>{rate > 0 ? `بنسبة ${rateText(rate)} سنوياً` : 'بلا نسبة ربح مسجّلة'}</small>
+                  </div>
+                </div>
+              ) : <p className="small muted">حرّك المؤشر لترى أثر الزيادة.</p>}
+              {rate > 0 && (
+                <p className="nw-verdict">
+                  {earned == null
+                    ? `قارن ربح هذا الدين ${rateText(rate)} بما تحققه استثماراتك سنوياً: إن كان الدين أعلى فسداده أولاً أجدى.`
+                    : rate > earned
+                      ? `ربح هذا الدين ${rateText(rate)} أعلى مما حققته استثماراتك سنوياً (${rateText(earned)})، فسداده أولاً أجدى.`
+                      : `حققت استثماراتك ${rateText(earned)} سنوياً، وهو أعلى من ربح هذا الدين ${rateText(rate)}.`}
+                </p>
+              )}
+            </section>
+          )}
         </div>
-        <p className="tiny muted" style={{ marginTop: 8 }}>تشمل كل الاستثمارات ومحافظ الأهداف. السوق مقدّر من اسم الأصل ورمزه، ويمكنك تصحيحه من صفحة الأصل.</p>
-      </section>
+      </div>
 
       {asset && <OtherAssetSheet initial={asset} onClose={() => setAsset(null)} />}
       {debt && <ObligationSheet initial={debt} onClose={() => setDebt(null)} />}
-    </>
+    </div>
   )
 }

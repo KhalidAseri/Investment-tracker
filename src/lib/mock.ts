@@ -44,9 +44,15 @@ function fixture() {
     h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false, cost_basis: 12600, purification_pct: 0.8 }, 9),
   ]
   const today = new Date()
-  const snapshots = Array.from({ length: 40 }, (_, i) => {
-    const d = new Date(today.getTime() - (39 - i) * 86400000)
-    return { user_id: uid, snap_date: iso(d), total_sar: 150000 + i * 260 + Math.sin(i / 3) * 900, by_sleeve: {}, by_account: {} }
+  // a believable 4-month history that ends near today's value, with a 10,000 deposit 20 days ago
+  const fxm: Record<string, number> = { SAR: 1, USD: 3.75, GBP: 5 }
+  const mainTotal = holdings.filter((h) => h.account_id !== accounts[3].id).reduce((a, h) => a + h.quantity * h.price * (fxm[h.currency] ?? 1), 0)
+  const DAYS = 120
+  const snapshots = Array.from({ length: DAYS }, (_, i) => {
+    const d = new Date(today.getTime() - (DAYS - i) * 86400000)
+    const k = i / (DAYS - 1)
+    const v = mainTotal * (0.925 + 0.07 * k) + Math.sin(i / 4.5) * mainTotal * 0.012 + Math.sin(i / 1.7) * mainTotal * 0.003 - (DAYS - i >= 20 ? 10000 : 0)
+    return { user_id: uid, snap_date: iso(d), total_sar: Math.round(v), by_sleeve: {}, by_account: {} }
   })
   const ev = (title: string, kind: string, date: string, amount: number | null, recurrence = 'none', note: string | null = null) =>
     ({ id: id(), user_id: uid, title, kind, event_date: date, amount, recurrence, done: false, note })
@@ -107,6 +113,8 @@ function fixture() {
 
 export function createMockClient(): any {
   const db: Record<string, Row[]> = fixture()
+  // demo only: lets screenshot scripts find record ids (e.g. #/asset/<id>)
+  if (typeof window !== 'undefined') (window as any).__demoDb = db
   const session = { user: { id: uid, email: 'demo@masar.local' }, access_token: 'demo' }
   class Q {
     private op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'

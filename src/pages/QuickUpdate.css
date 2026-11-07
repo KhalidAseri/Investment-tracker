@@ -1,0 +1,45 @@
+/* Quick update of manual values */
+.qu { display: flex; flex-direction: column; gap: 14px; }
+.qu-intro { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+.qu-list { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) { .qu-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+
+.qu-item {
+  display: flex; flex-direction: column; gap: 12px; padding: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.qu-item.is-changed { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-1); }
+.qu-item.is-ok { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.qu-head { display: flex; align-items: center; gap: 12px; }
+.qu-name { flex: 1; min-width: 0; }
+.qu-name b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 500; line-height: 1.45; }
+.qu-name span { display: block; margin-top: 1px; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qu-now { font-weight: 600; font-size: 15px; white-space: nowrap; }
+
+.qu-inputs { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 10px; }
+.qu-inputs.one { grid-template-columns: minmax(0, 1fr); }
+.field.qu-field { gap: 4px; }
+.field.qu-field > span { font-size: 12.5px; color: var(--muted); font-weight: 400; }
+.qu-field .input.num { min-height: 44px; font-size: 16px; }
+.qu-field .input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+
+.qu-foot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 10px; min-height: 36px; }
+.qu-foot .lbl { flex: 1 0 auto; font-size: 13px; color: var(--muted); }
+.qu-when { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.qu-when.warn { color: var(--warn); }
+.qu-when.warn::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.qu-foot b { font-size: 16px; font-weight: 600; }
+.btn.qu-ok svg { width: 16px; height: 16px; stroke-width: 2.4; }
+
+.qu-bar {
+  position: sticky; z-index: 5; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
+  display: flex; align-items: center; gap: 12px; padding: 10px; margin-top: 4px;
+  border-radius: calc(var(--radius) + 2px); border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: saturate(1.4) blur(16px); -webkit-backdrop-filter: saturate(1.4) blur(16px);
+  box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.35);
+}
+.qu-bar .btn { flex: 1; }
+.qu-net { display: flex; flex-direction: column; line-height: 1.3; padding-inline: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.qu-net b { font-size: 15px; font-weight: 600; font-family: var(--font-display); }
+@media (min-width: 960px) { .qu-bar { bottom: 20px; } }

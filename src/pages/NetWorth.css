@@ -1,0 +1,60 @@
+/* ===================== net worth page (صافي الثروة) ===================== */
+.nw { --nw-own: #b9f5dc; --nw-owe: #ffb2a6; }
+.nw-grid { margin-top: 14px; gap: 14px; }
+.nw-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* hero: net figure, then what you own against what you owe */
+.nw-hero-ico { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.12); color: #fff; }
+.nw-hero-ico svg { width: 17px; height: 17px; }
+.nw-split { margin-top: 16px; }
+.nw-split .stackbar { height: 10px; gap: 3px; background: rgba(255, 255, 255, 0.12); }
+.nw-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; padding-bottom: 4px; }
+.nw-legend > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nw-legend > div + div { align-items: flex-end; text-align: end; }
+.nw-legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(255, 255, 255, 0.75); }
+.nw-legend i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.nw-legend i.own { background: var(--nw-own); }
+.nw-legend i.owe { background: var(--nw-owe); }
+.nw-legend b { font-family: var(--font-display); font-weight: 600; font-size: 16px; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* cards */
+.nw-card .card-head { padding-bottom: 4px; }
+.nw-total { font-weight: 600; font-size: 15px; color: var(--ink-2); }
+.nw-ico { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.nw-ico svg { width: 20px; height: 20px; }
+.nw-ico.goal { background: color-mix(in srgb, var(--hedge) 16%, transparent); color: var(--horizon); }
+.nw-ico.calm { background: var(--sunken); color: var(--ink-2); }
+.nw-ico.debt { background: var(--bad-soft); color: var(--bad); }
+.nw-card .ri-main b { font-weight: 500; }
+.nw-card .ri-main > span span, .nw-card .ri-main > span bdi { display: inline; }
+.nw-card .ri-end .money { font-weight: 600; font-size: 15px; }
+.nw-static { cursor: default; }
+.nw-static:hover, .nw-static:active { background: none; }
+.nw-add {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--line);
+  background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-align: start;
+}
+.nw-add:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.nw-add svg { width: 18px; height: 18px; flex: none; }
+.nw-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 16px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
+.nw-kv .money { color: var(--ink); font-weight: 600; font-size: 14.5px; }
+.nw-card .empty { padding: 20px 16px 24px; }
+
+/* payoff calculator */
+.nw-payoff { display: flex; flex-direction: column; gap: 14px; }
+.nw-payoff .card-head { margin-bottom: 0; }
+.nw-res { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.nw-res > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px 14px; border-radius: 14px; background: var(--sunken); }
+.nw-res > div > span { font-size: 12.5px; color: var(--muted); }
+.nw-res b { font-family: var(--font-display); font-weight: 600; font-size: 15.5px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.nw-res b.good .money { color: var(--good); }
+.nw-res small { font-size: 12px; color: var(--muted); }
+.nw-verdict { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+@media (min-width: 960px) {
+  .nw-grid { margin-top: 18px; gap: 18px; }
+  .nw-hero { padding: 22px 26px 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 56px; row-gap: 6px; align-items: end; }
+  .nw-hero .hero-top { grid-column: 1 / -1; }
+  .nw-hero-ico { display: none; }
+  .nw-split { margin-top: 0; padding-bottom: 4px; }
+}

@@ -1,68 +1,91 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useStore } from './lib/store'
 import { supabase } from './lib/supabase'
-import Overview from './pages/Overview'
-import Holdings from './pages/Holdings'
+import Home from './pages/Home'
+import Portfolio from './pages/Portfolio'
+import Asset from './pages/Asset'
+import QuickUpdate from './pages/QuickUpdate'
 import Deposit from './pages/Deposit'
 import Plan from './pages/Plan'
 import Calendar from './pages/Calendar'
-import Activity from './pages/Activity'
+import Activity, { TxSheet } from './pages/Activity'
 import Settings from './pages/Settings'
 import Watchlist from './pages/Watchlist'
-import Payouts from './pages/Payouts'
+import Payouts, { RecordPayoutSheet } from './pages/Payouts'
 import Goals from './pages/Goals'
 import Onboarding from './pages/Onboarding'
-import Performance from './pages/Performance'
+import Analysis from './pages/Analysis'
 import NetWorth from './pages/NetWorth'
 import Import from './pages/Import'
 import Report from './pages/Report'
+import Me from './pages/Me'
 import { LockGate } from './components/LockGate'
+import { AddAssetSheet } from './components/AddAsset'
+import { Sheet } from './components/ui'
 import { markUnlocked } from './lib/lock'
-import { IconCalendar, IconChevron, IconCoins, IconFlag, IconDeposit, IconEye, IconHome, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
+import { greeting, haptic, todayLabel, usePrivacy, type ActionKind } from './lib/ui'
+import { todayISO } from './lib/format'
+import { useDerived } from './lib/derived'
+import {
+  IconCalendar, IconChevron, IconCoins, IconFlag, IconDeposit, IconEye, IconEyeOff, IconHome, IconList, IconSettings, IconTarget, IconWallet,
+  IconChart, IconScale, IconImport, IconDoc, IconPlus, IconPencil, IconCash, IconUser,
+} from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'payouts' | 'goals' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
-export type Go = (r: Route) => void
+export type Route = 'home' | 'portfolio' | 'goals' | 'watch' | 'asset' | 'update' | 'deposit' | 'income' | 'analysis' | 'networth' | 'me'
+  | 'calendar' | 'activity' | 'import' | 'report' | 'plan' | 'settings'
+export type Go = (r: Route, param?: string) => void
 
 const TITLES: Record<Route, string> = {
-  home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', plan: 'الأوزان المستهدفة',
-  payouts: 'التوزيعات', goals: 'الأهداف', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
-  performance: 'الأداء', networth: 'صافي الثروة', import: 'الاستيراد من دراهم', report: 'التقرير السنوي',
+  home: 'الرئيسية', portfolio: 'المحفظة', goals: 'المحفظة', watch: 'المحفظة', asset: 'تفاصيل الأصل', update: 'تحديث القيم',
+  deposit: 'إيداع جديد', income: 'الدخل', analysis: 'التحليل', networth: 'صافي الثروة', me: 'حسابي', calendar: 'التقويم',
+  activity: 'العمليات', import: 'الاستيراد من دراهم', report: 'التقرير السنوي', plan: 'الأوزان المستهدفة', settings: 'الإعدادات',
 }
-const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
-  { r: 'home', label: 'الرئيسية', icon: IconHome },
-  { r: 'holdings', label: 'المحفظة', icon: IconWallet },
-  { r: 'deposit', label: 'الإيداع', icon: IconDeposit },
-  { r: 'performance', label: 'الأداء', icon: IconChart, desc: 'ربحك الحقيقي ومقارنته بالمؤشر، وربح كل أصل، والرسوم' },
-  { r: 'networth', label: 'صافي الثروة', icon: IconScale, desc: 'كل ما تملك وما عليك: العقار والديون وتوزيع أموالك' },
-  { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
-  { r: 'goals', label: 'الأهداف', icon: IconFlag, desc: 'محافظ منفصلة لدفعة بيت أو سيارة أو تعليم' },
-  { r: 'plan', label: 'الأوزان', icon: IconTarget, desc: 'الأوزان المستهدفة لكل طبقة وحد التنبيه' },
-  { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
-  { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
-  { r: 'activity', label: 'العمليات', icon: IconList, desc: 'الإيداعات والتوزيعات وعمليات IBKR' },
-  { r: 'import', label: 'استيراد', icon: IconImport, desc: 'تحديث أصولك وعملياتك من تقرير دراهم أو ملف عملياته' },
-  { r: 'report', label: 'التقرير السنوي', icon: IconDoc, desc: 'ملخص السنة للطباعة أو الحفظ PDF' },
-  { r: 'settings', label: 'الإعدادات', icon: IconSettings, desc: 'ربط IBKR والإشعارات والمتابعة العائلية والمظهر' },
-]
-const OWNER_TABS: Route[] = ['home', 'holdings', 'deposit', 'performance', 'more']
-const VIEWER_TABS: Route[] = ['home', 'holdings', 'performance', 'calendar', 'more']
-const VIEWER_HIDDEN: Route[] = ['deposit', 'import']
+const ALIASES: Record<string, Route> = { holdings: 'portfolio', payouts: 'income', performance: 'analysis', more: 'me', outlook: 'home', profile: 'home' }
+/** which bottom tab a page belongs to */
+const PARENT: Partial<Record<Route, Route>> = { goals: 'portfolio', watch: 'portfolio', asset: 'portfolio', update: 'portfolio' }
+const MAIN: Route[] = ['home', 'portfolio', 'goals', 'watch', 'income', 'analysis']
 
-const readRoute = (): Route => {
-  const h = location.hash.replace(/^#\/?/, '') as Route
-  return h && h in TITLES ? h : 'home'
+type Nav = { r: Route; label: string; icon: (p: any) => JSX.Element }
+const PRIMARY: Nav[] = [
+  { r: 'home', label: 'الرئيسية', icon: IconHome },
+  { r: 'portfolio', label: 'المحفظة', icon: IconWallet },
+  { r: 'income', label: 'الدخل', icon: IconCoins },
+  { r: 'analysis', label: 'التحليل', icon: IconChart },
+]
+const SECONDARY: Nav[] = [
+  { r: 'deposit', label: 'إيداع جديد', icon: IconDeposit },
+  { r: 'update', label: 'تحديث القيم', icon: IconPencil },
+  { r: 'goals', label: 'الأهداف', icon: IconFlag },
+  { r: 'watch', label: 'المراقبة', icon: IconEye },
+  { r: 'networth', label: 'صافي الثروة', icon: IconScale },
+  { r: 'calendar', label: 'التقويم', icon: IconCalendar },
+  { r: 'activity', label: 'العمليات', icon: IconList },
+  { r: 'import', label: 'الاستيراد', icon: IconImport },
+  { r: 'report', label: 'التقرير السنوي', icon: IconDoc },
+  { r: 'plan', label: 'الأوزان المستهدفة', icon: IconTarget },
+  { r: 'settings', label: 'الإعدادات', icon: IconSettings },
+]
+const VIEWER_HIDDEN: Route[] = ['deposit', 'import', 'update']
+
+const readRoute = (): { route: Route; param: string } => {
+  const raw = location.hash.replace(/^#\/?/, '')
+  const [head, ...rest] = raw.split('/')
+  const r = (ALIASES[head] ?? head) as Route
+  return { route: r && r in TITLES ? r : 'home', param: decodeURIComponent(rest.join('/')) }
 }
 
 export default function App() {
-  const { session, ready, loading, error, settings, save, refreshing, refreshMarket, notify, toast, reload, readOnly, needsSetup } = useStore()
-  const [route, setRoute] = useState<Route>(readRoute)
+  const { session, ready, loading, error, settings, save, toast, readOnly, needsSetup } = useStore()
+  const [{ route, param }, setLoc] = useState(readRoute)
+  const [action, setAction] = useState<ActionKind | null>(null)
   useEffect(() => {
-    const on = () => { setRoute(readRoute()); window.scrollTo({ top: 0 }) }
+    const on = () => { setLoc(readRoute()); window.scrollTo({ top: 0 }) }
+    const act = (e: Event) => setAction(((e as CustomEvent).detail as ActionKind) ?? 'sheet')
     window.addEventListener('hashchange', on)
-    return () => window.removeEventListener('hashchange', on)
+    window.addEventListener('masar:action', act)
+    return () => { window.removeEventListener('hashchange', on); window.removeEventListener('masar:action', act) }
   }, [])
-  const go: Go = (r) => { location.hash = r === 'home' ? '/' : `/${r}` }
-
+  const go: Go = (r, p) => { haptic(); location.hash = r === 'home' ? '/' : `/${r}${p ? `/${encodeURIComponent(p)}` : ''}` }
   if (!ready) return <Splash />
   if (!session) return <Auth />
   if (error) return (
@@ -71,84 +94,107 @@ export default function App() {
       <button className="btn primary" onClick={() => location.reload()}>أعد المحاولة</button>
     </div></div>
   )
-  if (loading) return <Splash text="نجهّز خطتك…" />
+  if (loading) return <Splash text="نجهّز محفظتك…" />
   if (needsSetup) return <>{<Onboarding />}{toast && <div className="toast" role="status">{toast}</div>}</>
   if (!settings) return <NoAccess />
 
-  const TABS = readOnly ? VIEWER_TABS : OWNER_TABS
-  const nav = readOnly ? NAV.filter((n) => !VIEWER_HIDDEN.includes(n.r)) : NAV
   const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
-
+  const tab = PARENT[current] ?? current
+  const isMain = MAIN.includes(current)
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, payouts: <Payouts />, goals: <Goals />, plan: <Plan />, watch: <Watchlist />,
-    calendar: <Calendar />, activity: <Activity />, settings: <Settings />, performance: <Performance />, networth: <NetWorth />, import: <Import />, report: <Report />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
+    home: <Home go={go} />, portfolio: <Portfolio go={go} />, goals: <Goals />, watch: <Watchlist />, asset: <Asset id={param} go={go} />,
+    update: <QuickUpdate go={go} />, deposit: <Deposit />, income: <Payouts />, analysis: <Analysis />, networth: <NetWorth />,
+    me: <Me go={go} />, calendar: <Calendar />, activity: <Activity />, import: <Import />, report: <Report />, plan: <Plan />, settings: <Settings />,
   }
-  const activeTab = TABS.includes(current) ? current : 'more'
+  const secondary = readOnly ? SECONDARY.filter((n) => !VIEWER_HIDDEN.includes(n.r)) : SECONDARY
 
   return (
     <LockGate>
     <div className="app">
       <nav className="sidebar" aria-label="التنقل">
-        <div className="brand"><img src="./icons/icon-192.png" width={34} height={34} alt="" style={{ borderRadius: 9 }} /><b>مسار</b></div>
-        {nav.map((n) => (
-          <button key={n.r} className="side-link" aria-current={current === n.r ? 'page' : undefined} onClick={() => go(n.r)}>
-            <n.icon />{n.label}
-          </button>
+        <div className="brand"><img src="./icons/icon-192.png" width={34} height={34} alt="" style={{ borderRadius: 10 }} /><b>مسار</b></div>
+        {!readOnly && <button className="btn primary side-add" onClick={() => setAction('sheet')}><IconPlus /> إضافة</button>}
+        {PRIMARY.map((n) => (
+          <button key={n.r} className="side-link" aria-current={tab === n.r ? 'page' : undefined} onClick={() => go(n.r)}><n.icon />{n.label}</button>
+        ))}
+        <div className="side-group">المزيد</div>
+        {secondary.map((n) => (
+          <button key={n.r} className="side-link" aria-current={current === n.r ? 'page' : undefined} onClick={() => go(n.r)}><n.icon />{n.label}</button>
         ))}
         <div className="side-foot">{readOnly ? <span className="save-dot">للاطلاع فقط</span> : <span className="save-dot" data-s={save}>{saveText(save)}</span>}</div>
       </nav>
-
       <main className="main">
-        <header className="topbar">
-          {current !== 'home' && !TABS.includes(current) && (
-            <button className="icon-btn" aria-label="رجوع" onClick={() => go('more')} style={{ transform: 'scaleX(-1)' }}><IconChevron /></button>
-          )}
-          <h1>{TITLES[current]}</h1>
-          {readOnly ? (
-            <button className="icon-btn" aria-label="حدّث البيانات" onClick={async () => { await reload(); notify('حُدّثت البيانات') }}><IconRefresh /></button>
-          ) : <>
-            <span className="save-dot" data-s={save}>{saveText(save)}</span>
-            <button className="icon-btn" aria-label="حدّث الأسعار والبيانات" disabled={refreshing}
-              onClick={async () => { const r = await refreshMarket('all'); notify(r.message); reload() }}>
-              <IconRefresh className={refreshing ? 'spin' : ''} />
-            </button>
-          </>}
-        </header>
-        {readOnly && current === 'home' && <div className="viewer-banner"><IconEye width={18} height={18} /><span><b>وضع المتابعة</b>: ترى التقدم أولاً بأول، والتعديل لصاحب المحفظة.</span></div>}
-        {page[current]}
+        <TopBar route={current} isMain={isMain} go={go} save={save} readOnly={readOnly} />
+        {readOnly && current === 'home' && <div className="viewer-banner"><IconEye width={18} height={18} /><span><b>وضع المتابعة</b>: ترى المحفظة أولاً بأول، والتعديل لصاحبها.</span></div>}
+        <div className="page" key={current + param}>{page[current]}</div>
       </main>
-
       <nav className="tabbar" aria-label="التنقل الرئيسي">
-        {TABS.map((t) => {
-          const n = t === 'more' ? { label: 'المزيد', icon: IconMore } : NAV.find((x) => x.r === t)!
-          return (
-            <button key={t} className="tab" aria-current={activeTab === t ? 'page' : undefined} onClick={() => go(t)}>
-              <n.icon />{n.label}
-            </button>
-          )
-        })}
+        {PRIMARY.slice(0, 2).map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
+        {!readOnly && <div className="fab-slot"><button className="fab" aria-label="إضافة" onClick={() => { haptic(12); setAction('sheet') }}><IconPlus /></button></div>}
+        {PRIMARY.slice(2).map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
       </nav>
+      {action === 'sheet' && <ActionSheet go={go} onPick={(k) => setAction(k)} onClose={() => setAction(null)} />}
+      {action === 'asset' && <AddAssetSheet onClose={() => setAction(null)} />}
+      {action === 'payout' && <RecordPayoutSheet initial={{ date: todayISO() }} onClose={() => setAction(null)} />}
+      {action === 'tx' && <TxSheet initial={{ kind: 'withdrawal', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' }} onClose={() => setAction(null)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
     </LockGate>
   )
 }
 
-const saveText = (s: string) => (s === 'saving' ? 'يحفظ…' : s === 'saved' ? 'محفوظ' : s === 'error' ? 'لم يُحفظ' : 'متزامن')
+function TabButton({ n, active, onClick }: { n: Nav; active: boolean; onClick: () => void }) {
+  return <button className="tab" aria-current={active ? 'page' : undefined} onClick={onClick}><n.icon />{n.label}</button>
+}
 
-function More({ go, items }: { go: Go; items: typeof NAV }) {
+function TopBar({ route, isMain, go, save, readOnly }: { route: Route; isMain: boolean; go: Go; save: string; readOnly: boolean }) {
+  const [hidden, toggle] = usePrivacy()
+  const { session } = useStore()
+  const letter = (session?.user.email ?? 'م').charAt(0).toUpperCase()
+  const back = () => { if (history.length > 1) history.back(); else go(PARENT[route] ?? 'home') }
+  const showSave = save === 'saving' || save === 'error'
   return (
-    <div className="panel flush">
-      {items.map((n) => (
-        <button key={n.r} className="list-item" onClick={() => go(n.r)}>
-          <span className="icon-btn" style={{ border: 0, background: 'var(--sunken)' }}><n.icon /></span>
-          <div className="grow"><div>{n.label}</div><div className="meta">{n.desc}</div></div>
-          <IconChevron width={18} height={18} />
-        </button>
-      ))}
-    </div>
+    <header className={`topbar ${isMain ? '' : 'sub'}`}>
+      {!isMain && <button className="icon-btn" aria-label="رجوع" onClick={back} style={{ transform: 'scaleX(-1)' }}><IconChevron /></button>}
+      {route === 'home'
+        ? <div className="greet"><b>{greeting()}</b><span>{todayLabel()}</span></div>
+        : <h1>{TITLES[route]}</h1>}
+      {showSave && !readOnly && <span className="save-dot" data-s={save}>{saveText(save)}</span>}
+      <button className="icon-btn" aria-label={hidden ? 'أظهر المبالغ' : 'أخفِ المبالغ'} aria-pressed={hidden} onClick={toggle}>{hidden ? <IconEyeOff /> : <IconEye />}</button>
+      {isMain && <button className="icon-btn me-btn" aria-label="حسابي" onClick={() => go('me')}>{/^[a-z]$/i.test(letter) ? letter : <IconUser />}</button>}
+    </header>
   )
 }
+
+function ActionSheet({ go, onPick, onClose }: { go: Go; onPick: (k: ActionKind) => void; onClose: () => void }) {
+  const d = useDerived()
+  const stale = d?.staleManual.length ?? 0
+  const to = (r: Route) => { onClose(); go(r) }
+  const tiles: Array<{ key: string; icon: ReactNode; title: string; text: string; run: () => void; badge?: number }> = [
+    { key: 'deposit', icon: <IconDeposit />, title: 'إيداع جديد', text: 'قسّم مبلغاً على محفظتك وأهدافك', run: () => to('deposit') },
+    { key: 'asset', icon: <IconWallet />, title: 'أصل جديد', text: 'سهم، صندوق، مرابحة أو غيرها', run: () => onPick('asset') },
+    { key: 'update', icon: <IconPencil />, title: 'تحديث القيم', text: 'حدّث الأصول اليدوية دفعة واحدة', run: () => to('update'), badge: stale },
+    { key: 'payout', icon: <IconCoins />, title: 'توزيع وصلني', text: 'سجّل أرباحاً نقدية استلمتها', run: () => onPick('payout') },
+    { key: 'import', icon: <IconImport />, title: 'استيراد من دراهم', text: 'التقرير الشهري أو ملف العمليات', run: () => to('import') },
+    { key: 'tx', icon: <IconCash />, title: 'عملية أخرى', text: 'سحب، زكاة مدفوعة، رسوم', run: () => onPick('tx') },
+  ]
+  return (
+    <Sheet title="ماذا تريد أن تفعل؟" onClose={onClose}>
+      <div className="action-grid">
+        {tiles.map((t) => (
+          <button key={t.key} type="button" className="action-tile" onClick={() => { haptic(); t.run() }}>
+            <span className="ico">{t.icon}</span>
+            <b>{t.title}</b>
+            <span>{t.text}</span>
+            {!!t.badge && <i className="badge">{t.badge}</i>}
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  )
+}
+
+const saveText = (s: string) => (s === 'saving' ? 'يحفظ…' : s === 'saved' ? 'محفوظ' : s === 'error' ? 'لم يُحفظ' : 'متزامن')
 
 function NoAccess() {
   const { signOut, session } = useStore()
