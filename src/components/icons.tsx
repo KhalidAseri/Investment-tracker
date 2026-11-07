@@ -23,3 +23,5 @@ export const IconChevron = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><p
 export const IconLink = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></svg>)
 export const IconScale = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M12 4v16M6 20h12M4 8h16" /><path d="m6 8-2.5 6a3 3 0 0 0 5 0Z" /><path d="m18 8-2.5 6a3 3 0 0 0 5 0Z" /></svg>)
 export const IconCoins = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><ellipse cx="9" cy="7" rx="5.5" ry="2.5" /><path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7" /><path d="M9.5 16.3c.9.1 1.8.2 2.7.2 3 0 5.5-1.1 5.5-2.5v-4" /><path d="M3.5 11v4c0 1.4 2.5 2.5 5.5 2.5" /></svg>)
+export const IconEye = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></svg>)
+export const IconBell = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>)

@@ -1,6 +1,7 @@
 // daily-update: refreshes FX + prices, syncs IBKR Flex reports, and stores a daily snapshot.
 // Called by pg_cron (x-cron-key header) for every user, or by the app with the user's JWT for that user only.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -218,6 +219,24 @@ async function syncIbkr(admin: SupabaseClient, uid: string, token: string, query
   return { positions: positions.length, cash: cash.length, transactions: txRows.length };
 }
 
+async function fundNav(fundId: string): Promise<{ price: number; date: string } | null> {
+  if (!/^\d+$/.test(fundId.trim())) return null;
+  try {
+    const r = await fetch(
+      `https://static.mubasher.info/File.MubasherCharts/File.Mutual_Fund_Charts_Dir/priceChartFund_${fundId.trim()}.csv`,
+      { headers: { "User-Agent": BROWSER_UA } },
+    );
+    if (!r.ok) return null;
+    const last = (await r.text()).trim().split(/\r?\n/).pop() ?? "";
+    const m = last.match(/^(\d{4})\/(\d{2})\/(\d{2})[^,]*,\s*([\d.]+)/);
+    if (!m) return null;
+    const price = Number(m[4]);
+    return Number.isFinite(price) && price > 0 ? { price, date: `${m[1]}-${m[2]}-${m[3]}` } : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // ---------- prices + snapshot ----------
 async function refreshPrices(admin: SupabaseClient, uid: string) {
   const { data } = await admin.from("holdings").select("id, symbol, currency")
@@ -232,7 +251,145 @@ async function refreshPrices(admin: SupabaseClient, uid: string) {
     await admin.from("holdings").update({ price: q.price, currency: q.currency || h.currency, price_updated_at: now }).eq("id", h.id);
     updated++;
   }));
+  // Saudi mutual funds (e.g. Al Rajhi): last published NAV from Mubasher's fund price file.
+  // Only moves forward: an older published price never overwrites a newer one the owner typed in.
+  const { data: funds } = await admin.from("holdings").select("id, name, symbol, price_updated_at")
+    .eq("user_id", uid).eq("price_source", "nav").eq("archived", false);
+  await Promise.all((funds ?? []).map(async (h) => {
+    const nav = h.symbol ? await fundNav(h.symbol) : null;
+    if (!nav) { failed.push(h.name); return; }
+    const current = h.price_updated_at ? String(h.price_updated_at).slice(0, 10) : "";
+    if (nav.date <= current) return;
+    await admin.from("holdings").update({ price: nav.price, currency: "SAR", price_updated_at: `${nav.date}T12:00:00+03:00` }).eq("id", h.id);
+    updated++;
+  }));
+  // watchlist quotes
+  const { data: watch } = await admin.from("watchlist").select("id, symbol").eq("user_id", uid);
+  await Promise.all((watch ?? []).map(async (w) => {
+    if (!w.symbol) return;
+    const q = await yahooQuote(w.symbol);
+    if (!q) { failed.push(w.symbol); return; }
+    await admin.from("watchlist").update({ price: q.price, currency: q.currency || "SAR", price_updated_at: now }).eq("id", w.id);
+    updated++;
+  }));
   return { updated, failed };
+}
+
+// ---------- push notifications ----------
+const APP_URL = "https://khalidaseri.github.io/Investment-tracker/";
+
+async function ensureVapid(admin: SupabaseClient): Promise<{ public_key: string; private_key: string }> {
+  const read = async () => {
+    const { data } = await admin.rpc("get_vapid");
+    const row = Array.isArray(data) ? data[0] : data;
+    return row?.public_key && row?.private_key ? row : null;
+  };
+  const found = await read();
+  if (found) return found;
+  const k = webpush.generateVAPIDKeys();
+  await admin.rpc("store_vapid", { p_public: k.publicKey, p_private: k.privateKey });
+  return (await read()) ?? { public_key: k.publicKey, private_key: k.privateKey };
+}
+
+async function sendPush(admin: SupabaseClient, uid: string, payload: { title: string; body: string; url?: string; tag?: string }) {
+  const { data: subs } = await admin.from("push_subscriptions").select("id, endpoint, p256dh, auth").eq("user_id", uid);
+  if (!subs?.length) return 0;
+  const v = await ensureVapid(admin);
+  webpush.setVapidDetails(APP_URL, v.public_key, v.private_key);
+  let sent = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify({ url: APP_URL, ...payload }), { TTL: 86400 });
+      sent++;
+    } catch (e) {
+      const code = (e as { statusCode?: number }).statusCode;
+      if (code === 404 || code === 410) await admin.from("push_subscriptions").delete().eq("id", s.id);
+    }
+  }
+  return sent;
+}
+
+const yearFrac = (d = new Date()) => {
+  const y = d.getUTCFullYear();
+  const a = Date.UTC(y, 0, 1), b = Date.UTC(y + 1, 0, 1);
+  return y + (d.getTime() - a) / (b - a);
+};
+const fmt0 = (n: number) => Math.round(n).toLocaleString("en-US");
+
+function nextOccurrence(dateISO: string, recurrence: string, fromISO: string): string | null {
+  const d = new Date(dateISO + "T12:00:00Z");
+  const from = new Date(fromISO + "T00:00:00Z");
+  if (recurrence === "none") return d >= from ? dateISO : null;
+  let guard = 0;
+  while (d < from && guard++ < 1200) {
+    if (recurrence === "monthly") d.setUTCMonth(d.getUTCMonth() + 1);
+    else d.setUTCFullYear(d.getUTCFullYear() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean) {
+  const { count } = await admin.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", uid);
+  if (!count) return { sent: 0 };
+  const today = riyadhDate();
+  const alerts: Array<{ key: string; title: string; body: string; tag: string }> = [];
+
+  if (morning) {
+    const { data: events } = await admin.from("events").select("*").eq("user_id", uid).eq("done", false);
+    for (const e of events ?? []) {
+      const next = nextOccurrence(e.event_date, e.recurrence, today);
+      if (!next) continue;
+      const days = Math.round((Date.parse(next + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 86400000);
+      if (days < 0 || days > 3) continue;
+      const when = days === 0 ? "اليوم" : days === 1 ? "غداً" : `بعد ${days} أيام`;
+      alerts.push({ key: `ev:${e.id}:${next}`, tag: "event", title: e.title, body: `${when}${e.amount ? `، ${fmt0(e.amount)} ريال` : ""}${e.note ? `. ${e.note}` : ""}` });
+    }
+
+    const [{ data: s }, { data: sleeves }, { data: snap }, { data: conn }] = await Promise.all([
+      admin.from("plan_settings").select("*").eq("user_id", uid).maybeSingle(),
+      admin.from("sleeves").select("id, name, target_now, target_fi").eq("user_id", uid),
+      admin.from("snapshots").select("total_sar, by_sleeve").eq("user_id", uid).order("snap_date", { ascending: false }).limit(1).maybeSingle(),
+      admin.from("ibkr_connection").select("last_status, last_message").eq("user_id", uid).maybeSingle(),
+    ]);
+    if (s && snap && Number(snap.total_sar) > 0) {
+      const yf = yearFrac();
+      const p = yf <= s.glide_start_year ? 0 : yf >= s.independence_year ? 1 : (yf - s.glide_start_year) / (s.independence_year - s.glide_start_year);
+      const off = (sleeves ?? []).filter((x) => {
+        const target = Number(x.target_now) + (Number(x.target_fi) - Number(x.target_now)) * p;
+        const actual = (Number((snap.by_sleeve as Record<string, number>)[x.id] ?? 0) / Number(snap.total_sar)) * 100;
+        return Math.abs(actual - target) > Number(s.rebalance_band);
+      });
+      if (off.length) {
+        const week = `${today.slice(0, 4)}-${Math.floor((Date.parse(today) - Date.UTC(Number(today.slice(0, 4)), 0, 1)) / 604800000)}`;
+        alerts.push({ key: `drift:${week}`, tag: "drift", title: "أوزان المحفظة تحتاج تصحيحاً",
+          body: `${off.length === 1 ? off[0].name : `${off.length} طبقات`} بعيدة عن الوزن المستهدف. افتح مخطط الإيداع ليوجّه إيداعك القادم.` });
+      }
+    }
+    if (conn?.last_status === "error") {
+      alerts.push({ key: `ibkr:${today}`, tag: "ibkr", title: "تعذّرت مزامنة IBKR", body: conn.last_message ?? "افتح الإعدادات وتحقق من الرمز" });
+    }
+  }
+
+  const { data: watch } = await admin.from("watchlist").select("*").eq("user_id", uid);
+  for (const w of watch ?? []) {
+    if (!w.price || !w.fair_value) continue;
+    const buy = Number(w.fair_value) * (1 - Number(w.margin_pct) / 100);
+    if (Number(w.price) > buy) continue;
+    const met = [w.c_size, w.c_shariah, w.c_quality, w.c_thesis].filter(Boolean).length;
+    alerts.push({ key: `watch:${w.id}:${today}`, tag: `watch-${w.id}`, title: `${w.name} في منطقة الشراء`,
+      body: `السعر ${Number(w.price).toFixed(2)} أقل من سعر الشراء ${buy.toFixed(2)}. الشروط المكتملة ${met + 1} من 5.` });
+  }
+
+  if (!alerts.length) return { sent: 0 };
+  const { data: logged } = await admin.from("notification_log").select("key").eq("user_id", uid).in("key", alerts.map((a) => a.key));
+  const seen = new Set((logged ?? []).map((l) => l.key));
+  let sent = 0;
+  for (const a of alerts.filter((x) => !seen.has(x.key))) {
+    const n = await sendPush(admin, uid, { title: a.title, body: a.body, tag: a.tag });
+    if (n) { sent++; await admin.from("notification_log").insert({ user_id: uid, key: a.key }); }
+  }
+  return { sent };
 }
 
 async function writeSnapshot(admin: SupabaseClient, uid: string, fx: Fx) {
@@ -284,7 +441,18 @@ Deno.serve(async (req) => {
     const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
     const { data, error } = await admin.auth.getUser(jwt);
     if (error || !data?.user) return json({ error: "unauthorized" }, 401);
-    userIds = [data.user.id];
+    const uid = data.user.id;
+    if (mode === "vapid") {
+      const v = await ensureVapid(admin);
+      return json({ ok: true, publicKey: v.public_key });
+    }
+    if (mode === "push-test") {
+      const sent = await sendPush(admin, uid, { title: "مسار", body: "الإشعارات تعمل على هذا الجهاز. ستصلك تنبيهات المواعيد والأوزان وفرص المراقبة هنا.", tag: "test" });
+      return json({ ok: sent > 0, sent });
+    }
+    const { count } = await admin.from("plan_settings").select("user_id", { count: "exact", head: true }).eq("user_id", uid);
+    if (!count) return json({ ok: true, results: [] });
+    userIds = [uid];
   }
 
   const fx = await refreshFx(admin);
@@ -314,6 +482,9 @@ Deno.serve(async (req) => {
     }
     if (mode === "all" || mode === "prices") res.prices = await refreshPrices(admin, uid);
     res.snapshot = await writeSnapshot(admin, uid, fx);
+    if (cronKey) {
+      try { res.notify = await notifyUser(admin, uid, mode === "all"); } catch (e) { res.notify = { error: String(e) }; }
+    }
     results.push(res);
   }
   return json({ ok: true, results, fx });

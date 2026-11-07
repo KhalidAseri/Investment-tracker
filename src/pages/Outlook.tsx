@@ -7,7 +7,7 @@ import { LinesChart, PathChart } from '../components/charts'
 import { Knob, Segmented, Switch } from '../components/ui'
 
 export default function Outlook() {
-  const { settings, updateSettings, upsert, notify } = useStore()
+  const { settings, updateSettings, upsert, notify, readOnly } = useStore()
   const d = useDerived()
   const [stress, setStress] = useState<'none' | 'crash'>('none')
   const startYear = settings?.independence_year ?? 2038
@@ -72,7 +72,7 @@ export default function Outlook() {
           <Switch label="أضف قسط التمويل العقاري للدخل المطلوب" hint={`${sar(s.mortgage_monthly)} شهرياً حتى ${s.mortgage_end_year}`}
             checked={s.include_mortgage} onChange={(v) => updateSettings({ include_mortgage: v })} />
         </div>
-        <p className="tiny muted" style={{ marginTop: 8 }}>كل تغيير يُحفظ ويظهر فوراً على أجهزتك الأخرى.</p>
+        <p className="tiny muted" style={{ marginTop: 8 }}>{readOnly ? 'جرّب الأرقام بحرية؛ تجاربك لا تُحفظ ولا تغيّر الخطة.' : 'كل تغيير يُحفظ ويظهر فوراً على أجهزتك الأخرى.'}</p>
       </section>
 
       <section className="section">
@@ -129,13 +129,13 @@ export default function Outlook() {
               : <>في السيناريو المتوقع يبدأ دخلك عند <b className="figure">{sar(first)}</b>، أي أقل من هدفك. أخّر سنة الاستقلال أو ارفع الإيداع.</>}
           </p>
         </div>
-        <div className="row wrap" style={{ marginTop: 12, gap: 10 }}>
+        {!readOnly && <div className="row wrap" style={{ marginTop: 12, gap: 10 }}>
           <button className="btn ghost" onClick={async () => {
             const amount = Math.round((startValue * s.withdrawal_rate) / 100 / 12)
             const ok = await upsert('events', { title: 'التحويل الشهري من احتياطي الدخل', kind: 'withdrawal', event_date: `${startYear}-01-27`, amount, recurrence: 'monthly', note: 'يُعاد حسابه كل يناير' })
             if (ok) notify('أُضيف التحويل الشهري إلى التقويم')
           }}>أضف التحويل الشهري إلى التقويم</button>
-        </div>
+        </div>}
       </section>
     </>
   )

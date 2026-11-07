@@ -9,14 +9,15 @@ import Plan from './pages/Plan'
 import Calendar from './pages/Calendar'
 import Activity from './pages/Activity'
 import Settings from './pages/Settings'
-import { IconCalendar, IconChevron, IconDeposit, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
+import Watchlist from './pages/Watchlist'
+import { IconCalendar, IconChevron, IconDeposit, IconEye, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'plan' | 'calendar' | 'activity' | 'settings' | 'more'
+export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
   home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', outlook: 'المستقبل والدخل', plan: 'الخطة والأوزان',
-  calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
@@ -24,11 +25,14 @@ const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?
   { r: 'deposit', label: 'الإيداع', icon: IconDeposit },
   { r: 'outlook', label: 'المستقبل', icon: IconHorizon },
   { r: 'plan', label: 'الخطة', icon: IconTarget, desc: 'الأوزان المستهدفة وقواعد المتابعة والسحب' },
+  { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
   { r: 'activity', label: 'العمليات', icon: IconList, desc: 'الإيداعات والتوزيعات وعمليات IBKR' },
-  { r: 'settings', label: 'الإعدادات', icon: IconSettings, desc: 'ربط IBKR والحسابات والمظهر والنسخ الاحتياطي' },
+  { r: 'settings', label: 'الإعدادات', icon: IconSettings, desc: 'ربط IBKR والإشعارات والمتابعة العائلية والمظهر' },
 ]
-const TABS: Route[] = ['home', 'holdings', 'deposit', 'outlook', 'more']
+const OWNER_TABS: Route[] = ['home', 'holdings', 'deposit', 'outlook', 'more']
+const VIEWER_TABS: Route[] = ['home', 'holdings', 'outlook', 'calendar', 'more']
+const VIEWER_HIDDEN: Route[] = ['deposit']
 
 const readRoute = (): Route => {
   const h = location.hash.replace(/^#\/?/, '') as Route
@@ -36,7 +40,7 @@ const readRoute = (): Route => {
 }
 
 export default function App() {
-  const { session, ready, loading, error, settings, save, refreshing, refreshMarket, notify, toast, reload } = useStore()
+  const { session, ready, loading, error, settings, save, refreshing, refreshMarket, notify, toast, reload, readOnly } = useStore()
   const [route, setRoute] = useState<Route>(readRoute)
   useEffect(() => {
     const on = () => { setRoute(readRoute()); window.scrollTo({ top: 0 }) }
@@ -53,39 +57,49 @@ export default function App() {
       <button className="btn primary" onClick={() => location.reload()}>أعد المحاولة</button>
     </div></div>
   )
-  if (loading || !settings) return <Splash text="نجهّز خطتك…" />
+  if (loading) return <Splash text="نجهّز خطتك…" />
+  if (!settings) return <NoAccess />
+
+  const TABS = readOnly ? VIEWER_TABS : OWNER_TABS
+  const nav = readOnly ? NAV.filter((n) => !VIEWER_HIDDEN.includes(n.r)) : NAV
+  const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
 
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, plan: <Plan />,
-    calendar: <Calendar />, activity: <Activity />, settings: <Settings />, more: <More go={go} />,
+    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, plan: <Plan />, watch: <Watchlist />,
+    calendar: <Calendar />, activity: <Activity />, settings: <Settings />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
-  const activeTab = TABS.includes(route) ? route : 'more'
+  const activeTab = TABS.includes(current) ? current : 'more'
 
   return (
     <div className="app">
       <nav className="sidebar" aria-label="التنقل">
         <div className="brand"><img src="./icons/icon-192.png" width={34} height={34} alt="" style={{ borderRadius: 9 }} /><b>مسار</b></div>
-        {NAV.map((n) => (
-          <button key={n.r} className="side-link" aria-current={route === n.r ? 'page' : undefined} onClick={() => go(n.r)}>
+        {nav.map((n) => (
+          <button key={n.r} className="side-link" aria-current={current === n.r ? 'page' : undefined} onClick={() => go(n.r)}>
             <n.icon />{n.label}
           </button>
         ))}
-        <div className="side-foot"><span className="save-dot" data-s={save}>{saveText(save)}</span></div>
+        <div className="side-foot">{readOnly ? <span className="save-dot">للاطلاع فقط</span> : <span className="save-dot" data-s={save}>{saveText(save)}</span>}</div>
       </nav>
 
       <main className="main">
         <header className="topbar">
-          {route !== 'home' && !TABS.includes(route) && (
+          {current !== 'home' && !TABS.includes(current) && (
             <button className="icon-btn" aria-label="رجوع" onClick={() => go('more')} style={{ transform: 'scaleX(-1)' }}><IconChevron /></button>
           )}
-          <h1>{TITLES[route]}</h1>
-          <span className="save-dot" data-s={save}>{saveText(save)}</span>
-          <button className="icon-btn" aria-label="حدّث الأسعار والبيانات" disabled={refreshing}
-            onClick={async () => { const r = await refreshMarket('all'); notify(r.message); reload() }}>
-            <IconRefresh className={refreshing ? 'spin' : ''} />
-          </button>
+          <h1>{TITLES[current]}</h1>
+          {readOnly ? (
+            <button className="icon-btn" aria-label="حدّث البيانات" onClick={async () => { await reload(); notify('حُدّثت البيانات') }}><IconRefresh /></button>
+          ) : <>
+            <span className="save-dot" data-s={save}>{saveText(save)}</span>
+            <button className="icon-btn" aria-label="حدّث الأسعار والبيانات" disabled={refreshing}
+              onClick={async () => { const r = await refreshMarket('all'); notify(r.message); reload() }}>
+              <IconRefresh className={refreshing ? 'spin' : ''} />
+            </button>
+          </>}
         </header>
-        {page[route]}
+        {readOnly && current === 'home' && <div className="viewer-banner"><IconEye width={18} height={18} /><span><b>وضع المتابعة</b>: ترى التقدم أولاً بأول، والتعديل لصاحب المحفظة.</span></div>}
+        {page[current]}
       </main>
 
       <nav className="tabbar" aria-label="التنقل الرئيسي">
@@ -105,10 +119,10 @@ export default function App() {
 
 const saveText = (s: string) => (s === 'saving' ? 'يحفظ…' : s === 'saved' ? 'محفوظ' : s === 'error' ? 'لم يُحفظ' : 'متزامن')
 
-function More({ go }: { go: Go }) {
+function More({ go, items }: { go: Go; items: typeof NAV }) {
   return (
     <div className="panel flush">
-      {NAV.filter((n) => n.desc).map((n) => (
+      {items.map((n) => (
         <button key={n.r} className="list-item" onClick={() => go(n.r)}>
           <span className="icon-btn" style={{ border: 0, background: 'var(--sunken)' }}><n.icon /></span>
           <div className="grow"><div>{n.label}</div><div className="meta">{n.desc}</div></div>
@@ -116,6 +130,17 @@ function More({ go }: { go: Go }) {
         </button>
       ))}
     </div>
+  )
+}
+
+function NoAccess() {
+  const { signOut, session } = useStore()
+  return (
+    <div className="auth"><div className="auth-card panel stack">
+      <h2>لا توجد محفظة لعرضها</h2>
+      <p className="muted small">الحساب <span className="ltr">{session?.user.email}</span> لم يعد مضافاً لمتابعة أي محفظة. اطلب من صاحبها إضافة بريدك من الإعدادات.</p>
+      <button className="btn ghost" onClick={() => signOut()}>تسجيل الخروج</button>
+    </div></div>
   )
 }
 
@@ -147,7 +172,7 @@ function Auth() {
     } catch (err: any) {
       const m = String(err?.message ?? '')
       setMsg(
-        /restricted|Database error saving new user/i.test(m) ? 'التسجيل في هذا التطبيق مقصور على صاحبه.'
+        /restricted|Database error saving new user/i.test(m) ? 'التسجيل مقصور على صاحب التطبيق ومن يضيفه للمتابعة. تأكد أن بريدك مضاف.'
           : /Invalid login/i.test(m) ? 'البريد أو كلمة المرور غير صحيحة. إن كانت أول مرة فاختر «إنشاء الحساب».'
           : /already registered/i.test(m) ? 'هذا البريد مسجل مسبقاً؛ اختر «تسجيل الدخول».'
           : /Password should be/i.test(m) ? 'كلمة المرور قصيرة؛ استخدم 8 أحرف على الأقل.'

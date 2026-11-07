@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { Account, Fx, Holding, IbkrConnection, MoneyEvent, PlanSettings, Sleeve, Snapshot, Transaction } from './types'
+import type { Account, Fx, Holding, IbkrConnection, MoneyEvent, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions'
+type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions' | 'watchlist'
 
 interface Store {
   session: Session | null
@@ -18,6 +18,9 @@ interface Store {
   transactions: Transaction[]
   events: MoneyEvent[]
   snapshots: Snapshot[]
+  watchlist: WatchItem[]
+  /** true when signed in as an invited viewer of someone else's portfolio */
+  readOnly: boolean
   fx: Fx
   fxUpdatedAt: string | null
   ibkr: IbkrConnection | null
@@ -57,6 +60,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [events, setEvents] = useState<MoneyEvent[]>([])
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [watchlist, setWatchlist] = useState<WatchItem[]>([])
   const [fx, setFx] = useState<Fx>({ SAR: 1, USD: 3.75 })
   const [fxUpdatedAt, setFxUpdatedAt] = useState<string | null>(null)
   const [ibkr, setIbkr] = useState<IbkrConnection | null>(null)
@@ -90,7 +94,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------- load ----------
   const reload = useCallback(async () => {
-    const [st, sl, ac, ho, tx, ev, sn, fr, ib] = await Promise.all([
+    const [st, sl, ac, ho, tx, ev, sn, fr, ib, wl] = await Promise.all([
       supabase.from('plan_settings').select('*').maybeSingle(),
       supabase.from('sleeves').select('*'),
       supabase.from('accounts').select('*'),
@@ -100,6 +104,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase.from('snapshots').select('snap_date,total_sar,by_sleeve,by_account').order('snap_date'),
       supabase.from('fx_rates').select('*'),
       supabase.from('ibkr_connection').select('user_id,query_id,last_sync_at,last_status,last_message').maybeSingle(),
+      supabase.from('watchlist').select('*'),
     ])
     const firstError = [st, sl, ac, ho, tx, ev, sn, fr].find((r) => r.error)?.error
     if (firstError) throw new Error(firstError.message)
@@ -110,6 +115,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTransactions((tx.data ?? []) as Transaction[])
     setEvents((ev.data ?? []) as MoneyEvent[])
     setSnapshots((sn.data ?? []) as Snapshot[])
+    setWatchlist(byKey((wl.data ?? []) as WatchItem[], 'sort'))
     const rates: Fx = {}
     let latest: string | null = null
     for (const r of fr.data ?? []) {
@@ -146,9 +152,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id, reload])
 
   // ---------- realtime: other devices' edits appear here ----------
+  const ownerId = settings?.user_id ?? session?.user?.id ?? null
+  const readOnly = !!(settings && session && settings.user_id !== session.user.id)
   useEffect(() => {
-    if (!session) return
-    const uid = session.user.id
+    if (!session || !ownerId) return
+    const uid = ownerId
     const apply = <T extends { id: string }>(set: React.Dispatch<React.SetStateAction<T[]>>, sortKey?: keyof T) =>
       (p: { eventType: string; new: unknown; old: unknown }) => {
         set((rows) => {
@@ -165,6 +173,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sleeves', filter }, apply<Sleeve>(setSleeves, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'accounts', filter }, apply<Account>(setAccounts, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter }, apply<MoneyEvent>(setEvents))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist', filter }, apply<WatchItem>(setWatchlist, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter }, (p) => {
         setTransactions((rows) => {
           if (p.eventType === 'DELETE') return rows.filter((r) => r.id !== (p.old as Transaction).id)
@@ -183,11 +192,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [session?.user?.id])
+  }, [session?.user?.id, ownerId])
 
   // ---------- mutations ----------
   const updateSettings = useCallback((patch: Partial<PlanSettings>) => {
     setSettings((s) => (s ? { ...s, ...patch } : s))
+    if (readOnly) return
     settingsPatch.current = { ...settingsPatch.current, ...patch }
     setSave('saving')
     window.clearTimeout(settingsTimer.current)
@@ -199,10 +209,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       end(!error)
       if (error) notify('تعذّر حفظ الإعداد؛ تحقق من الاتصال')
     }, 650)
-  }, [session?.user?.id, notify])
+  }, [session?.user?.id, notify, readOnly])
 
   const setterFor = (table: Table): React.Dispatch<React.SetStateAction<any[]>> =>
-    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions } as const)[table] as any
+    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions, watchlist: setWatchlist } as const)[table] as any
 
   const upsert = useCallback(async <T extends Record<string, any>>(table: Table, row: T): Promise<T | null> => {
     begin()
@@ -285,13 +295,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([])
+    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([]); setWatchlist([]); setIbkr(null)
   }, [])
 
   const value = useMemo<Store>(() => ({
-    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, fx, fxUpdatedAt, ibkr,
+    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut,
-  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, fx, fxUpdatedAt, ibkr,
+  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

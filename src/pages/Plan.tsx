@@ -9,7 +9,7 @@ import { NumberField, SelectField, Sheet, Switch, TextField } from '../component
 import { IconPlus } from '../components/icons'
 
 export default function Plan() {
-  const { settings, sleeves, updateSettings } = useStore()
+  const { settings, sleeves, updateSettings, readOnly } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const [editing, setEditing] = useState<Partial<Sleeve> | null>(null)
@@ -26,7 +26,7 @@ export default function Plan() {
 
       <section className="section">
         <div className="section-head"><h2>الأوزان المستهدفة</h2>
-          <button className="btn primary small" onClick={() => setEditing({ name: '', layer: 'growth', target_now: 0, target_fi: 0, accepts_new_money: true, zakat_rate: 2.5, sort: sleeves.length + 1 })}><IconPlus /> طبقة جديدة</button>
+          {!readOnly && <button className="btn primary small" onClick={() => setEditing({ name: '', layer: 'growth', target_now: 0, target_fi: 0, accepts_new_money: true, zakat_rate: 2.5, sort: sleeves.length + 1 })}><IconPlus /> طبقة جديدة</button>}
         </div>
         <div className="panel">
           <div className="stack" style={{ gap: 8 }}>
@@ -39,7 +39,7 @@ export default function Plan() {
             <thead><tr><th>الطبقة</th><th className="n">الآن</th><th className="n">هذا العام</th><th className="n">عند الاستقلال</th></tr></thead>
             <tbody>
               {LAYER_ORDER.flatMap((layer) => sleeves.filter((x) => x.layer === layer)).map((x) => (
-                <tr key={x.id} style={{ cursor: 'pointer' }} onClick={() => setEditing(x)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setEditing(x)}>
+                <tr key={x.id} style={{ cursor: readOnly ? 'default' : 'pointer' }} onClick={() => !readOnly && setEditing(x)} tabIndex={readOnly ? undefined : 0} onKeyDown={(e) => !readOnly && e.key === 'Enter' && setEditing(x)}>
                   <td>
                     <div className="row" style={{ gap: 8 }}><span className="dot" style={{ background: colors[x.id]?.color, opacity: colors[x.id]?.opacity }} />
                       <span>{x.name}</span></div>
@@ -56,6 +56,7 @@ export default function Plan() {
         </div>
       </section>
 
+      <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <section className="section">
         <div className="section-head"><h2>مسار الانتقال</h2></div>
         <div className="panel grid2">
@@ -81,6 +82,7 @@ export default function Plan() {
           </div>
         </div>
       </section>
+      </fieldset>
 
       {editing && <SleeveSheet initial={editing} onClose={() => setEditing(null)} />}
     </>
@@ -116,7 +118,6 @@ function SleeveSheet({ initial, onClose }: { initial: Partial<Sleeve>; onClose: 
           <NumberField label="الوزن الآن" value={x.target_now ?? 0} suffix="%" decimals={1} onChange={(v) => set({ target_now: v })} />
           <NumberField label="الوزن عند الاستقلال" value={x.target_fi ?? 0} suffix="%" decimals={1} onChange={(v) => set({ target_fi: v })} />
           <NumberField label="العائد المتوقع" value={x.expected_return ?? 0} suffix="%" decimals={1} onChange={(v) => set({ expected_return: v })} />
-          <NumberField label="نسبة الزكاة" value={x.zakat_rate ?? 2.5} suffix="%" decimals={2} onChange={(v) => set({ zakat_rate: v })} hint="حسب الطريقة التي تعتمدها" />
         </div>
         <Switch label="تقبل الإيداع الجديد" hint="إن أُغلقت يتجاهلها مخطط الإيداع" checked={!!x.accepts_new_money} onChange={(v) => set({ accepts_new_money: v })} />
         <TextField label="الأداة المقترحة أو ملاحظة" value={x.note ?? ''} onChange={(v) => set({ note: v })} />

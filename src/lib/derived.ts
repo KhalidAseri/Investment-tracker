@@ -43,14 +43,14 @@ export function useDerived() {
     const outOfBand = drift.filter((d) => Math.abs(d.diff) > settings.rebalance_band)
     const safety = totals.byLayer.safety
     const wd = withdrawalStatus(settings, snapshots, totals.total, safety)
-    const zakat = zakatEstimate(sleeves, totals)
+    const zakat = zakatEstimate(holdings, fx)
     const soon = upcoming(events, todayISO(), 60)
     const today = todayISO()
     const before = [...snapshots].reverse().find((x) => x.snap_date < today)
     const change = before && Number(before.total_sar) > 0 ? totals.total - Number(before.total_sar) : null
     const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
     const unassigned = holdings.filter((h) => !h.archived && !h.sleeve_id && Number(h.quantity) !== 0 && !(h.account_id && excluded.has(h.account_id)))
-    const staleManual = holdings.filter((h) => !h.archived && h.price_source === 'manual' && Number(h.quantity) > 0 &&
+    const staleManual = holdings.filter((h) => !h.archived && (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0 &&
       (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000))
     const targetSum = { now: sleeves.reduce((a, s) => a + Number(s.target_now), 0), fi: sleeves.reduce((a, s) => a + Number(s.target_fi), 0) }
     return {

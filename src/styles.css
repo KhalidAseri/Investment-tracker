@@ -308,3 +308,31 @@ p { margin: 0; }
 .steps { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 8px; }
 .steps li { padding-inline-start: 4px; }
 .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--sunken); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; direction: ltr; unicode-bidi: isolate; }
+
+/* ---------- watchlist ---------- */
+textarea.input { min-height: 0; height: auto; padding-top: 10px; padding-bottom: 10px; line-height: 1.7; resize: vertical; }
+.panel.inset { background: var(--sunken); border-color: transparent; }
+.callout { background: var(--sunken); border-radius: var(--radius-s); padding: 12px 14px; font-size: 14px; }
+.dots { display: flex; gap: 4px; margin-top: 7px; }
+.dots i { width: 18px; height: 5px; border-radius: 3px; background: var(--line-strong); }
+.dots i.on { background: var(--accent); }
+.checks { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.check { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.check:last-child { border-bottom: 0; }
+.check b { display: block; font-weight: 500; }
+.check small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.check input, .check .box { appearance: none; flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 7px; border: 1.5px solid var(--line-strong); background: var(--surface); cursor: pointer; display: grid; place-items: center; color: #fff; }
+.check input:checked { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 15px no-repeat; border-color: var(--accent); }
+.check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check.auto { cursor: default; background: color-mix(in srgb, var(--sunken) 55%, transparent); }
+.check.auto .box { color: #fff; }
+.check.auto.on .box { background: var(--accent); border-color: var(--accent); }
+.check.auto.on .box svg { stroke-width: 3; width: 15px; height: 15px; }
+fieldset:disabled .check { cursor: default; }
+
+/* ---------- zakat & sharing ---------- */
+.zakat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.zakat-head .v { font-family: var(--font-display); font-size: clamp(24px, 6vw, 32px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.viewer-banner { display: flex; align-items: center; gap: 10px; background: var(--accent-soft); color: var(--accent); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
+.viewer-banner b { color: var(--ink); font-weight: 600; }
+.chip.ok::before, .chip.off::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }

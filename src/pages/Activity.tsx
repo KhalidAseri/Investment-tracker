@@ -13,7 +13,7 @@ const OUT: TxKind[] = ['withdrawal', 'fee', 'tax', 'zakat', 'sell']
 type Filter = 'all' | 'in' | 'dividend' | 'trade'
 
 export default function Activity() {
-  const { transactions, holdings, accounts } = useStore()
+  const { transactions, holdings, accounts, readOnly } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<Partial<Transaction> | null>(null)
   const year = String(new Date().getFullYear())
@@ -44,7 +44,7 @@ export default function Activity() {
           { value: 'all', label: 'الكل' }, { value: 'in', label: 'إيداع وسحب' }, { value: 'dividend', label: 'توزيعات' }, { value: 'trade', label: 'شراء وبيع' },
         ]} />
         <span className="grow" />
-        <button className="btn primary small" onClick={() => setEditing({ kind: 'deposit', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' })}><IconPlus /> عملية</button>
+        {!readOnly && <button className="btn primary small" onClick={() => setEditing({ kind: 'deposit', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' })}><IconPlus /> عملية</button>}
       </div>
       {groups.length === 0 && <div className="panel empty" style={{ marginTop: 16 }}><h3>لا عمليات بعد</h3><p>تُسجَّل الإيداعات من صفحة الإيداع، وتصل عمليات IBKR تلقائياً بعد الربط.</p></div>}
       {groups.map(([k, items]) => {
@@ -54,7 +54,7 @@ export default function Activity() {
             <div className="section-head"><h2>{monthName(m - 1)} {y}</h2></div>
             <div className="panel flush">
               {items.map((t) => (
-                <button key={t.id} className="list-item" onClick={() => t.source !== 'ibkr' && setEditing(t)} style={{ cursor: t.source === 'ibkr' ? 'default' : 'pointer' }}>
+                <button key={t.id} className="list-item" onClick={() => !readOnly && t.source !== 'ibkr' && setEditing(t)} style={{ cursor: readOnly || t.source === 'ibkr' ? 'default' : 'pointer' }}>
                   <div className="grow">
                     <div className="row" style={{ gap: 8 }}>{TX_LABEL[t.kind]}{t.source === 'ibkr' && <span className="chip accent">IBKR</span>}</div>
                     <div className="meta">{dateShort(t.tx_date)}{hName(t.holding_id) ? `، ${hName(t.holding_id)}` : aName(t.account_id) ? `، ${aName(t.account_id)}` : ''}{t.note && !t.note.startsWith('إيداع موزّع') ? `، ${t.note}` : ''}</div>

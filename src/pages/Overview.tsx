@@ -4,13 +4,14 @@ import { sleeveColors, useDerived } from '../lib/derived'
 import { ageAt, plannedPath, yearFrac } from '../lib/calc'
 import { ago, dateShort, pct, relativeDays, sar, sarShort } from '../lib/format'
 import { MixBar, PathChart } from '../components/charts'
-import { IconAlert, IconCalendar, IconCheck, IconLink, IconScale, IconWallet } from '../components/icons'
+import { IconAlert, IconCalendar, IconCheck, IconEye, IconLink, IconScale, IconWallet } from '../components/icons'
+import { buyPrice, conditionsMet } from './Watchlist'
 import type { Go } from '../App'
 
 const yearsText = (n: number) => (n === 1 ? 'بسنة' : n === 2 ? 'بسنتين' : n <= 10 ? `بـ ${n} سنوات` : `بـ ${n} سنة`)
 
 export default function Overview({ go }: { go: Go }) {
-  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings } = useStore()
+  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const history = useMemo(() => snapshots.map((s) => ({ year: yearFrac(new Date(s.snap_date + 'T12:00:00')), value: Number(s.total_sar) })), [snapshots])
@@ -27,7 +28,7 @@ export default function Overview({ go }: { go: Go }) {
   else if (d.aheadBy > 0) headline = <>أنت متقدم على خطتك بـ <span className="ahead">{sarShort(d.aheadBy)}</span></>
   else headline = <>أنت متأخر عن خطتك بـ <span className="behind">{sarShort(-d.aheadBy)}</span></>
 
-  const alerts: Array<{ tone: 'warn' | 'accent' | 'plain'; icon: JSX.Element; body: JSX.Element; action?: () => void }> = []
+  const alerts: Array<{ tone: 'warn' | 'accent' | 'plain'; icon: JSX.Element; body: JSX.Element; action?: () => void; owner?: boolean }> = []
   if (d.outOfBand.length > 2) {
     const short = d.outOfBand.filter((x) => x.diff < 0).reduce((a, x) => a + x.gapValue, 0)
     alerts.push({
@@ -41,7 +42,7 @@ export default function Overview({ go }: { go: Go }) {
     })
   }
   if (Math.round(d.targetSum.now) !== 100 || Math.round(d.targetSum.fi) !== 100) {
-    alerts.push({ tone: 'warn', icon: <IconAlert />, action: () => go('plan'), body: <>مجموع الأوزان المستهدفة لا يساوي 100% (الآن {pct(d.targetSum.now)}، عند الاستقلال {pct(d.targetSum.fi)}).</> })
+    alerts.push({ owner: true, tone: 'warn', icon: <IconAlert />, action: () => go('plan'), body: <>مجموع الأوزان المستهدفة لا يساوي 100% (الآن {pct(d.targetSum.now)}، عند الاستقلال {pct(d.targetSum.fi)}).</> })
   }
   for (const o of d.soon.slice(0, 4)) {
     alerts.push({
@@ -50,16 +51,29 @@ export default function Overview({ go }: { go: Go }) {
     })
   }
   if (d.unassigned.length) {
-    alerts.push({ tone: 'warn', icon: <IconWallet />, action: () => go('holdings'), body: <>{d.unassigned.length === 1 ? `«${d.unassigned[0].name}» بلا طبقة` : `${d.unassigned.length} أصول بلا طبقة`}؛ حدّد طبقتها لتُحسب في التوزيع.</> })
+    alerts.push({ owner: true, tone: 'warn', icon: <IconWallet />, action: () => go('holdings'), body: <>{d.unassigned.length === 1 ? `«${d.unassigned[0].name}» بلا طبقة` : `${d.unassigned.length} أصول بلا طبقة`}؛ حدّد طبقتها لتُحسب في التوزيع.</> })
   }
   for (const h of d.staleManual.slice(0, 3)) {
-    alerts.push({ tone: 'plain', icon: <IconWallet />, action: () => go('holdings'), body: <>حدّث سعر «{h.name}»؛ آخر تحديث {ago(h.price_updated_at)}.</> })
+    alerts.push({ owner: true, tone: 'plain', icon: <IconWallet />, action: () => go('holdings'), body: <>حدّث سعر «{h.name}»؛ آخر تحديث {ago(h.price_updated_at)}.</> })
   }
-  if (!ibkr?.query_id) {
+  for (const w of watchlist.filter((x) => conditionsMet(x).priceOk).slice(0, 2)) {
+    const ready = conditionsMet(w).count === 5
+    alerts.push({
+      tone: ready ? 'accent' : 'plain', icon: <IconEye />, action: () => go('watch'),
+      body: <><b>{w.name}</b> تحت سعر الشراء ({buyPrice(w)?.toFixed(2)}).{ready ? ' الشروط الخمسة مكتملة.' : ` اكتمل ${conditionsMet(w).count} من 5 شروط.`}</>,
+    })
+  }
+  if (readOnly) {
+    // viewers only see informational items, not to-dos meant for the owner
+  } else if (!ibkr?.query_id) {
     alerts.push({ tone: 'plain', icon: <IconLink />, action: () => go('settings'), body: <>اربط حساب IBKR ليتحدث الجزء العالمي من محفظتك تلقائياً كل صباح.</> })
   } else if (ibkr.last_status === 'error') {
     alerts.push({ tone: 'warn', icon: <IconLink />, action: () => go('settings'), body: <>تعذّرت آخر مزامنة مع IBKR: {ibkr.last_message}</> })
   }
+
+  const shownAlerts = readOnly
+    ? alerts.filter((a) => !a.owner).map((a) => (a.icon.type === IconScale ? { ...a, action: undefined } : a))
+    : alerts
 
   const mixParts = sleeves.map((s) => ({ key: s.id, value: d.totals.bySleeve[s.id] ?? 0, color: colors[s.id]?.color, opacity: colors[s.id]?.opacity ?? 1, label: s.name }))
   const hasHoldingsValue = holdings.some((h) => Number(h.quantity) * Number(h.price) > 0)
@@ -97,7 +111,7 @@ export default function Overview({ go }: { go: Go }) {
       <section className="section">
         <div className="section-head">
           <h2>التوزيع الآن</h2>
-          <button className="btn quiet small" onClick={() => go('plan')}>عدّل الأوزان</button>
+          <button className="btn quiet small" onClick={() => go('plan')}>{readOnly ? 'الأوزان' : 'عدّل الأوزان'}</button>
         </div>
         <div className="panel">
           {hasHoldingsValue ? <MixBar parts={mixParts} /> : <p className="muted small">لا قيم بعد؛ أدخل أرصدتك من صفحة المحفظة.</p>}
@@ -126,7 +140,7 @@ export default function Overview({ go }: { go: Go }) {
       <section className="section">
         <div className="section-head"><h2>ما يحتاج انتباهك</h2></div>
         <div className="panel flush">
-          {alerts.length ? alerts.map((a, i) => (
+          {shownAlerts.length ? shownAlerts.map((a, i) => (
             <div key={i} className={`alert ${a.tone}`} role={a.action ? 'button' : undefined} tabIndex={a.action ? 0 : undefined}
               style={{ cursor: a.action ? 'pointer' : undefined }} onClick={a.action} onKeyDown={(e) => e.key === 'Enter' && a.action?.()}>
               <div className="ico">{a.icon}</div><p className="grow">{a.body}</p>

@@ -33,7 +33,7 @@ export function NumberField({ label, value, onChange, suffix, hint, decimals = 0
   label: string; value: number | null | undefined; onChange: (v: number) => void; suffix?: string; hint?: string; decimals?: number; min?: number; max?: number; plain?: boolean
 }) {
   const id = useId()
-  const fmt = (v: number | null | undefined) => (v == null || Number.isNaN(v) ? '' : plain ? String(Math.round(v)) : decimals ? num2(v) : num0(v))
+  const fmt = (v: number | null | undefined) => (v == null || Number.isNaN(v) ? '' : plain ? String(Math.round(v)) : decimals > 2 ? v.toLocaleString('en-US', { maximumFractionDigits: decimals }) : decimals ? num2(v) : num0(v))
   const [text, setText] = useState(fmt(value))
   const [focus, setFocus] = useState(false)
   useEffect(() => { if (!focus) setText(fmt(value)) }, [value, focus])

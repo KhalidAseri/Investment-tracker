@@ -1,17 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { sleeveColors, useDerived } from '../lib/derived'
-import { LAYER_NAMES, LAYER_ORDER, holdingValue, rateOf } from '../lib/calc'
+import { LAYER_NAMES, LAYER_ORDER, ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
 import { ago, num2, pct, sar } from '../lib/format'
 import type { Holding } from '../lib/types'
 import { NumberField, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
 
 const CURRENCIES = ['SAR', 'USD', 'GBP', 'EUR', 'AED', 'HKD', 'SGD', 'JPY']
-const SOURCE_LABEL = { manual: 'يدوي', yahoo: 'آلي من السوق', ibkr: 'من IBKR' } as const
+const SOURCE_LABEL = { manual: 'يدوي', yahoo: 'آلي من السوق', ibkr: 'من IBKR', nav: 'آلي من تقرير الصندوق' } as const
 
 export default function Holdings() {
-  const { holdings, sleeves, accounts, fx, refreshMarket, refreshing, notify } = useStore()
+  const { holdings, sleeves, accounts, fx, refreshMarket, refreshing, notify, readOnly, upsert } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const [editing, setEditing] = useState<Partial<Holding> | null>(null)
@@ -26,15 +26,16 @@ export default function Holdings() {
 
   const row = (h: Holding) => {
     const v = holdingValue(h, fx)
-    const stale = h.price_source === 'manual' && Number(h.quantity) > 0 && (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000)
+    const stale = (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0 && (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000)
     return (
-      <button key={h.id} className="list-item" onClick={() => setEditing(h)}>
+      <button key={h.id} className="list-item" onClick={() => !readOnly && setEditing(h)} style={readOnly ? { cursor: 'default' } : undefined}>
         <div className="grow">
           <div>{h.name}</div>
           <div className="meta">
             {accountName(h.account_id)}، {SOURCE_LABEL[h.price_source]}
             {h.price_source !== 'manual' || Number(h.quantity) !== 1 ? <>، {num2(Number(h.quantity))} وحدة بسعر <span className="ltr">{num2(Number(h.price))} {h.currency}</span></> : null}
             {' '}<span className={stale ? 'stale' : ''}>({ago(h.price_updated_at)})</span>
+            {h.zakatable === false && <span className="chip" style={{ marginInlineStart: 6, padding: '1px 8px', fontSize: 11.5 }}>بلا زكاة</span>}
           </div>
         </div>
         <div className="amount">{Number(h.quantity) === 0 ? <span className="chip">لم يُشترَ بعد</span> : sar(v)}</div>
@@ -46,12 +47,14 @@ export default function Holdings() {
     <>
       <div className="row wrap" style={{ gap: 10, marginBottom: 14 }}>
         <p className="grow muted">إجمالي المحفظة <b className="figure" style={{ color: 'var(--ink)' }}>{sar(d.totals.total)}</b></p>
-        <button className="btn ghost small" disabled={refreshing} onClick={async () => notify((await refreshMarket('prices')).message)}>
-          <IconRefresh className={refreshing ? 'spin' : ''} /> حدّث الأسعار
-        </button>
-        <button className="btn primary small" onClick={() => setEditing({ name: '', price_source: 'manual', currency: 'SAR', quantity: 0, price: 0, account_id: accounts[0]?.id ?? null, sleeve_id: sleeves[0]?.id ?? null })}>
-          <IconPlus /> أصل جديد
-        </button>
+        {!readOnly && <>
+          <button className="btn ghost small" disabled={refreshing} onClick={async () => notify((await refreshMarket('prices')).message)}>
+            <IconRefresh className={refreshing ? 'spin' : ''} /> حدّث الأسعار
+          </button>
+          <button className="btn primary small" onClick={() => setEditing({ name: '', price_source: 'manual', currency: 'SAR', quantity: 0, price: 0, zakatable: true, account_id: accounts[0]?.id ?? null, sleeve_id: sleeves[0]?.id ?? null })}>
+            <IconPlus /> أصل جديد
+          </button>
+        </>}
       </div>
 
       {LAYER_ORDER.map((layer) => {
@@ -70,8 +73,10 @@ export default function Holdings() {
                       <h3>{s.name}</h3>
                       <span className="figure">{sar(d.totals.bySleeve[s.id] ?? 0)}</span>
                     </div>
-                    {items.length ? items.map(row) : (
-                      <button className="list-item" onClick={() => setEditing({ name: '', price_source: 'manual', currency: 'SAR', quantity: 0, price: 0, sleeve_id: s.id, account_id: accounts[0]?.id ?? null })}>
+                    {items.length ? items.map(row) : readOnly ? (
+                      <div className="list-item" style={{ cursor: 'default' }}><span className="muted small">لا أصول هنا بعد</span></div>
+                    ) : (
+                      <button className="list-item" onClick={() => setEditing({ name: '', price_source: 'manual', currency: 'SAR', quantity: 0, price: 0, zakatable: true, sleeve_id: s.id, account_id: accounts[0]?.id ?? null })}>
                         <span className="muted small">لا أصول هنا بعد. أضف أصلاً</span>
                       </button>
                     )}
@@ -96,6 +101,28 @@ export default function Holdings() {
         </section>
       )}
 
+      <section className="section">
+        <div className="section-head"><h2>الزكاة التقديرية</h2><p>{pct(ZAKAT_RATE)} من الأصول التي عليها زكاة</p></div>
+        <div className="panel stack">
+          <div className="zakat-head">
+            <span className="v">{sar(d.zakat.amount)}</span>
+            <span className="small muted">على {sar(d.zakat.base)}{d.zakat.exempt > 0 ? `، ومستثنى ${sar(d.zakat.exempt)}` : ''}</span>
+          </div>
+          <p className="small muted">كل الأصول عليها زكاة افتراضياً، والأسهم السعودية تحدّد أنت حكمها. التقدير على القيمة الحالية؛ احسب المبلغ النهائي في يوم حولك.</p>
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{readOnly ? 'الأصول وحكم زكاتها' : 'حدّد الأصول التي عليها زكاة'}</summary>
+            <div className="stack" style={{ marginTop: 10, gap: 0 }}>
+              {visible.filter((h) => holdingValue(h, fx) > 0).sort((a, b) => holdingValue(b, fx) - holdingValue(a, fx)).map((h) => (
+                <div key={h.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                  <Switch label={h.name} hint={`${sar(holdingValue(h, fx))}${h.zakatable !== false ? `، زكاته ${sar((holdingValue(h, fx) * ZAKAT_RATE) / 100)}` : ''}`}
+                    checked={h.zakatable !== false} onChange={(v) => { if (!readOnly) upsert('holdings', { id: h.id, zakatable: v }) }} />
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
+      </section>
+
       {editing && <HoldingSheet initial={editing} onClose={() => setEditing(null)} />}
     </>
   )
@@ -115,8 +142,8 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
     const row: Partial<Holding> = {
       id: h.id, name: h.name.trim(), account_id: h.account_id ?? null, sleeve_id: h.sleeve_id ?? null, symbol: h.symbol?.trim() || null,
       price_source: h.price_source ?? 'manual', currency: h.currency ?? 'SAR', quantity: Number(h.quantity ?? 0), price: Number(h.price ?? 0),
-      note: h.note ?? null, sort: h.sort ?? holdings.length + 1,
-      ...(priceChanged && h.price_source === 'manual' ? { price_updated_at: new Date().toISOString() } : {}),
+      note: h.note ?? null, sort: h.sort ?? holdings.length + 1, zakatable: h.zakatable !== false,
+      ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
     }
     const ok = await upsert('holdings', row)
     if (ok) { notify('حُفظ الأصل'); onClose() }
@@ -136,8 +163,13 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
         </div>
         {!isIbkr && (
           <SelectField label="كيف يُحدَّث السعر؟" value={h.price_source ?? 'manual'} onChange={(v) => set({ price_source: v })}
-            options={[{ value: 'manual', label: 'أُدخله بنفسي' }, { value: 'yahoo', label: 'آلياً من السوق برمز التداول' }]} />
+            options={[{ value: 'manual', label: 'أُدخله بنفسي' }, { value: 'yahoo', label: 'آلياً من السوق برمز التداول' }, { value: 'nav', label: 'آلياً لصناديق الاستثمار السعودية' }]} />
         )}
+        {h.price_source === 'nav' && <>
+          <TextField label="رقم الصندوق في موقع مباشر" value={h.symbol ?? ''} onChange={(v) => set({ symbol: v.replace(/[^0-9]/g, '') })} ltr placeholder="5885"
+            hint="صندوق الراجحي للتوزيعات الشهرية 5885، والصندوق 2 رقمه 6046. لغيرهما ابحث عن الصندوق في mubasher.info وخذ الرقم من رابط صفحته." />
+          <p className="small muted">يُحدَّث السعر كل صباح عند نشره. إن تأخر النشر أدخل السعر من تطبيق الراجحي المالية، ولن يُستبدل بسعر أقدم منه.</p>
+        </>}
         {isIbkr && <p className="small muted">يتحدث هذا الأصل تلقائياً من تقرير IBKR اليومي؛ يمكنك تغيير اسمه وطبقته فقط.</p>}
         {h.price_source === 'yahoo' && (
           <TextField label="رمز التداول" value={h.symbol ?? ''} onChange={(v) => set({ symbol: v.toUpperCase() })} ltr
@@ -152,7 +184,7 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
         ) : (
           <div className="grid2">
             <NumberField label="عدد الوحدات" value={h.quantity ?? 0} decimals={4} onChange={(v) => set({ quantity: v })} />
-            {h.price_source === 'manual'
+            {h.price_source === 'manual' || h.price_source === 'nav'
               ? <NumberField label="سعر الوحدة" value={h.price ?? 0} decimals={4} suffix={h.currency} onChange={(v) => set({ price: v })} />
               : <div className="field"><span>آخر سعر</span><div className="input num" style={{ display: 'flex', alignItems: 'center' }}>{num2(Number(h.price ?? 0))} {h.currency}</div></div>}
           </div>
@@ -161,6 +193,8 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
           <SelectField label="العملة" value={h.currency ?? 'SAR'} onChange={(v) => set({ currency: v })} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
         )}
         <p className="small">القيمة بالريال: <b className="figure">{sar(value)}</b></p>
+        <Switch label="عليه زكاة" hint={h.zakatable !== false ? `زكاته التقديرية ${sar((value * ZAKAT_RATE) / 100)}` : 'لا يدخل في حساب الزكاة'}
+          checked={h.zakatable !== false} onChange={(v) => set({ zakatable: v })} />
         <TextField label="ملاحظة" value={h.note ?? ''} onChange={(v) => set({ note: v })} />
       </div>
     </Sheet>

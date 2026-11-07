@@ -244,8 +244,20 @@ export function planDeposit(amount: number, sleeves: Sleeve[], totals: Totals, s
 }
 
 // ---------- zakat ----------
-export function zakatEstimate(sleeves: Sleeve[], totals: Totals) {
-  return sleeves.reduce((a, x) => a + (totals.bySleeve[x.id] ?? 0) * (x.zakat_rate / 100), 0)
+export const ZAKAT_RATE = 2.5
+/** 2.5% of every holding marked zakatable (the owner decides per holding; Saudi stocks are his call). */
+export function zakatEstimate(holdings: Holding[], fx: Fx) {
+  let base = 0
+  let exempt = 0
+  const items: Array<{ holding: Holding; value: number }> = []
+  for (const h of holdings) {
+    const v = holdingValue(h, fx)
+    if (v <= 0) continue
+    if (h.zakatable === false) { exempt += v; continue }
+    base += v
+    items.push({ holding: h, value: v })
+  }
+  return { amount: (base * ZAKAT_RATE) / 100, base, exempt, items: items.sort((a, b) => b.value - a.value) }
 }
 
 // ---------- calendar ----------

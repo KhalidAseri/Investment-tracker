@@ -62,7 +62,7 @@ export interface Holding {
   sleeve_id: string | null
   name: string
   symbol: string | null
-  price_source: 'manual' | 'yahoo' | 'ibkr'
+  price_source: 'manual' | 'yahoo' | 'ibkr' | 'nav'
   currency: string
   quantity: number
   price: number
@@ -71,6 +71,7 @@ export interface Holding {
   cost_basis: number | null
   note: string | null
   archived: boolean
+  zakatable: boolean
   sort: number
 }
 
@@ -125,3 +126,30 @@ export interface IbkrConnection {
 }
 
 export type Fx = Record<string, number>
+
+export interface WatchItem {
+  id: string
+  user_id?: string
+  name: string
+  symbol: string | null
+  currency: string
+  price: number | null
+  price_updated_at: string | null
+  fair_value: number | null
+  margin_pct: number
+  c_size: boolean
+  c_shariah: boolean
+  c_quality: boolean
+  c_thesis: boolean
+  thesis: string | null
+  exit_rule: string | null
+  note: string | null
+  sort: number
+}
+
+export interface Viewer {
+  id: string
+  owner_id: string
+  viewer_email: string
+  created_at: string
+}

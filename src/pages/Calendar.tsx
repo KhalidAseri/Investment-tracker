@@ -14,7 +14,7 @@ export const KIND_LABEL: Record<EventKind, string> = {
 const RECUR_LABEL = { none: 'مرة واحدة', monthly: 'كل شهر', yearly: 'كل سنة' } as const
 
 export default function Calendar() {
-  const { events } = useStore()
+  const { events, readOnly } = useStore()
   const d = useDerived()
   const [editing, setEditing] = useState<Partial<MoneyEvent> | null>(null)
   const [range, setRange] = useState(365)
@@ -34,7 +34,7 @@ export default function Calendar() {
     <>
       <div className="row wrap" style={{ gap: 10, marginBottom: 6 }}>
         <p className="grow muted">مواعيد الأموال الداخلة والخارجة. الدخل المتوقع للاستثمار خلال السنة القادمة: <b className="figure" style={{ color: 'var(--ink)' }}>{sar(inflowYear)}</b></p>
-        <button className="btn primary small" onClick={() => setEditing({ title: '', kind: 'other', event_date: todayISO(), recurrence: 'none', amount: null, done: false })}><IconPlus /> موعد جديد</button>
+        {!readOnly && <button className="btn primary small" onClick={() => setEditing({ title: '', kind: 'other', event_date: todayISO(), recurrence: 'none', amount: null, done: false })}><IconPlus /> موعد جديد</button>}
       </div>
       {d?.fi && <p className="small muted">موعد الاستقلال المتوقع حسب مسارك الحالي: <b className="num">{Math.round(d.fi)}</b>.</p>}
 
@@ -46,7 +46,7 @@ export default function Calendar() {
             <div className="section-head"><h2>{monthName(m - 1)} {y}</h2></div>
             <div className="panel flush">
               {items.map((o, i) => (
-                <button key={o.event.id + i} className="list-item" onClick={() => setEditing(o.event)}>
+                <button key={o.event.id + i} className="list-item" onClick={() => !readOnly && setEditing(o.event)} style={readOnly ? { cursor: 'default' } : undefined}>
                   <div style={{ width: 70, flex: 'none', textAlign: 'center' }}>
                     <div className="figure" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1 }}>{Number(o.date.slice(8, 10))}</div>
                     <div className="tiny muted">{relativeDays(o.date)}</div>
@@ -55,7 +55,8 @@ export default function Calendar() {
                     <div>{o.event.title}</div>
                     <div className="meta">{KIND_LABEL[o.event.kind]}، {RECUR_LABEL[o.event.recurrence]}{o.event.note ? `، ${o.event.note}` : ''}</div>
                   </div>
-                  {o.event.amount ? <div className="amount">{sar(o.event.amount)}</div> : null}
+                  {o.event.amount ? <div className="amount">{sar(o.event.amount)}</div>
+                    : o.event.kind === 'zakat' && d ? <div className="amount">{sar(d.zakat.amount)}<div className="tiny muted">تقديرياً اليوم</div></div> : null}
                 </button>
               ))}
             </div>

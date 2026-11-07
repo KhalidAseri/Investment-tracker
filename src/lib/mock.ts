@@ -28,17 +28,18 @@ function fixture() {
   const old = new Date(Date.now() - 50 * 86400000).toISOString()
   const h = (name: string, acc: number, sl: number | null, qty: number, price: number, extra: Row = {}, sort = 0) => ({
     id: id(), user_id: uid, account_id: accounts[acc].id, sleeve_id: sl == null ? null : sleeves[sl].id, name, symbol: null, price_source: 'manual',
-    currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, sort, ...extra,
+    currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true, sort, ...extra,
   })
   const holdings = [
     h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISWD.L', price_source: 'yahoo', currency: 'USD' }, 1),
-    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 10.11, { price_updated_at: old }, 2),
+    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885' }, 2),
     h('صندوق الراجحي للتوزيعات الشهرية 2', 1, 5, 2300, 9.93, {}, 3),
     h('صندوق البلاد للذهب', 1, 7, 0, 21.3, { symbol: '9405.SR', price_source: 'yahoo' }, 4),
     h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, {}, 5),
     h('برنامج الادخار: الدخل المتحفظ', 2, 3, 1, 23900, {}, 6),
     h('صندوق مرابحة', 1, 6, 1, 15000, {}, 7),
     h('حساب الطوارئ', 3, null, 1, 95000, {}, 8),
+    h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false }, 9),
   ]
   const today = new Date()
   const snapshots = Array.from({ length: 40 }, (_, i) => {
@@ -55,7 +56,7 @@ function fixture() {
     ev('اكتمال استحقاق برنامج الادخار', 'vesting', '2032-06-01', null),
   ]
   const settings = {
-    user_id: uid, monthly_income_target: 20000, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, expected_return: 6.5,
+    user_id: typeof location !== 'undefined' && /viewer/.test(location.search) ? 'owner-user' : uid, monthly_income_target: 20000, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, expected_return: 6.5,
     return_low: 5, return_high: 8, annual_contribution: 300000, contribution_growth: 4, birth_year: 1998, independence_year: 2038, glide_start_year: 2035,
     rebalance_band: 5, reserve_months: 24, guard_drawdown: 15, guard_cut: 10, guard_high_rate: 5, guard_low_rate: 3, include_mortgage: false,
     mortgage_monthly: 5029, mortgage_end_year: 2044, baseline_value: 150000, baseline_date: snapshots[0].snap_date, extra: {},
@@ -68,7 +69,17 @@ function fixture() {
     { currency: 'SAR', rate_to_sar: 1, updated_at: new Date().toISOString() }, { currency: 'USD', rate_to_sar: 3.75, updated_at: new Date().toISOString() },
     { currency: 'GBP', rate_to_sar: 5.0, updated_at: new Date().toISOString() },
   ]
-  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[] }
+  const w = (name: string, symbol: string, price: number, fair: number, c: [boolean, boolean, boolean, boolean], thesis: string | null = null, sort = 0) => ({
+    id: id(), user_id: uid, name, symbol, currency: 'SAR', price, price_updated_at: new Date().toISOString(), fair_value: fair, margin_pct: 20,
+    c_size: c[0], c_shariah: c[1], c_quality: c[2], c_thesis: c[3], thesis, exit_rule: null, note: null, sort,
+  })
+  const watchlist = [
+    w('مصرف الإنماء', '1150.SR', 26.1, 34, [true, true, true, true], 'نمو الأرباح وتوزيعات منتظمة', 1),
+    w('أرامكو السعودية', '2222.SR', 24.8, 29, [true, true, true, false], null, 2),
+    w('شركة الاتصالات السعودية', '7010.SR', 41.2, 44, [true, true, true, true], 'توزيعات ثابتة', 3),
+  ]
+  const portfolio_viewers = [{ id: id(), owner_id: uid, viewer_email: 'wife@example.com', created_at: new Date().toISOString() }]
+  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers }
 }
 
 export function createMockClient(): any {
@@ -87,6 +98,7 @@ export function createMockClient(): any {
     delete() { this.op = 'delete'; return this }
     eq(k: string, v: any) { this.filters.push((r) => r[k] === v); return this }
     is(k: string, v: any) { this.filters.push((r) => r[k] === v); return this }
+    in(k: string, v: any[]) { this.filters.push((r) => v.includes(r[k])); return this }
     order() { return this }
     limit() { return this }
     single() { this.one = 'single'; return this }
