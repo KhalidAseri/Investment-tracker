@@ -82,7 +82,7 @@ export default function Deposit() {
 
       {amount > 0 && (
         <section className="section">
-          <div className="section-head"><h2>{goalsTotal > 0 ? 'لمحفظة الاستقلال' : 'التقسيم المقترح'}</h2><p>{goalsTotal > 0 ? sar(fiAmount) : n > 1 ? `${n} دفعات شهرية` : 'دفعة واحدة'}</p></div>
+          <div className="section-head"><h2>{goalsTotal > 0 ? 'لالمحفظة الرئيسية' : 'التقسيم المقترح'}</h2><p>{goalsTotal > 0 ? sar(fiAmount) : n > 1 ? `${n} دفعات شهرية` : 'دفعة واحدة'}</p></div>
           <div className="panel">
             {lines.map((l) => (
               <div key={l.sleeve.id} className={`split-row ${l.amount === 0 ? 'zero' : ''}`}>

@@ -29,7 +29,7 @@ export default function Goals() {
 
   return (
     <>
-      <p className="muted" style={{ marginBottom: 14 }}>محافظ منفصلة عن محفظة الاستقلال لأهداف لها مبلغ وموعد: دفعة بيت، سيارة، تعليم، حج. أصول كل هدف لا تدخل في أوزان الاستقلال ولا في دخله.</p>
+      <p className="muted" style={{ marginBottom: 14 }}>محافظ منفصلة عن المحفظة الرئيسية لأهداف لها مبلغ وموعد: دفعة بيت، سيارة، تعليم، حج. أصول كل هدف لا تدخل في أوزان الاستقلال ولا في دخله.</p>
 
       {active.length > 0 && (
         <div className="facts" style={{ marginTop: 0, marginBottom: 18 }}>
@@ -156,7 +156,7 @@ function GoalSheet({ initial, onClose }: { initial: Partial<Goal>; onClose: () =
   return (
     <Sheet title={g.id ? 'تعديل هدف' : 'هدف جديد'} onClose={onClose} footer={<>
       {g.id && <button className="btn danger" onClick={async () => {
-        if (confirm(used ? `حذف الهدف؟ أصوله (${used}) تعود إلى محفظة الاستقلال.` : 'حذف الهدف؟')) { await remove('goals', g.id!); onClose() }
+        if (confirm(used ? `حذف الهدف؟ أصوله (${used}) تعود إلى المحفظة الرئيسية.` : 'حذف الهدف؟')) { await remove('goals', g.id!); onClose() }
       }}>حذف</button>}
       <button className="btn primary" onClick={saveIt}>حفظ</button>
     </>}>

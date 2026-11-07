@@ -224,7 +224,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
           <SelectField label="يتبع محفظة" value={h.goal_id ?? ''} onChange={(v) => {
             const g = goals.find((x) => x.id === v)
             set({ goal_id: v || null, goal_bucket: g?.allocation?.[0]?.key ?? null })
-          }} options={[{ value: '', label: 'الاستقلال المالي' }, ...goals.filter((g) => !g.archived || g.id === h.goal_id).map((g) => ({ value: g.id, label: `هدف: ${g.name}` }))]} />
+          }} options={[{ value: '', label: 'المحفظة الرئيسية' }, ...goals.filter((g) => !g.archived || g.id === h.goal_id).map((g) => ({ value: g.id, label: `هدف: ${g.name}` }))]} />
         )}
         <div className="grid2">
           <SelectField label="الحساب" value={h.account_id ?? ''} onChange={(v) => set({ account_id: v || null })}

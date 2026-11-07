@@ -12,7 +12,7 @@ type StreamRow = { kind: IncomeStream['kind']; name: string; amount: number; fre
 type ObligationRow = { name: string; monthly_amount: number; end_year: number | null }
 type AssetRow = { name: string; value: number; type: AssetType; platform: string }
 
-const STEPS = ['عنك وهدفك', 'ما تستثمره', 'التزاماتك', 'ما تملكه الآن', 'أسلوب المحفظة']
+const STEPS = ['ما تستثمره', 'التزاماتك', 'ما تملكه الآن', 'أسلوب المحفظة']
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
 const PLATFORMS = ['الراجحي المالية', 'Interactive Brokers', 'دراية المالية', 'الأهلي المالية', 'الإنماء للاستثمار', 'الجزيرة كابيتال', 'برنامج ادخار جهة العمل', 'حساب بنكي']
 const OBLIGATION_CHIPS = ['تمويل عقاري', 'قرض شخصي', 'تمويل سيارة', 'قسط سلفة']
@@ -22,10 +22,6 @@ export default function Onboarding() {
   const thisYear = new Date().getFullYear()
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [birthYear, setBirthYear] = useState(thisYear - 30)
-  const [target, setTarget] = useState(15000)
-  const [includesObligations, setIncludesObligations] = useState(true)
-  const [targetAge, setTargetAge] = useState(45)
   const [varies, setVaries] = useState(false)
   const [monthly, setMonthly] = useState(3000)
   const [depositDay, setDepositDay] = useState(27)
@@ -39,7 +35,6 @@ export default function Onboarding() {
     const v = r.amount * (r.invest_pct / 100)
     return a + (r.frequency === 'monthly' ? v * 12 : r.frequency === 'once' ? 0 : v)
   }, 0), [monthly, streams])
-  const independence = birthYear + targetAge
   const tpl = TEMPLATES.find((t) => t.key === template)!
 
   const finish = async () => {
@@ -58,9 +53,7 @@ export default function Onboarding() {
     if (emergency > 0) holdings.push({ name: 'صندوق الطوارئ', value: emergency, sort: holdings.length + 1, account: accounts.length - 1 } as never)
     const ok = await createPlan({
       settings: {
-        monthly_income_target: target, birth_year: birthYear, independence_year: independence, glide_start_year: Math.max(thisYear, independence - 3),
-        include_mortgage: !includesObligations, monthly_invest: monthly, deposit_day: depositDay, annual_contribution: Math.round(yearly),
-        contribution_growth: 3, expected_return: tpl.expected, extra: { monthly_varies: varies, template },
+        monthly_invest: monthly, deposit_day: depositDay, annual_contribution: Math.round(yearly), extra: { monthly_varies: varies, template },
       },
       accounts,
       sleeves: tpl.sleeves.map(({ asset: _a, ...s }) => s),
@@ -80,7 +73,7 @@ export default function Onboarding() {
       <header className="onboard-head">
         <img src="./icons/icon-192.png" width={36} height={36} alt="" style={{ borderRadius: 10 }} />
         <div className="grow">
-          <b>لنبنِ خطتك</b>
+          <b>لنجهّز محفظتك</b>
           <div className="tiny muted">{STEPS.length} أسئلة قصيرة، وكل شيء قابل للتعديل لاحقاً</div>
         </div>
         <button className="btn quiet small" onClick={() => { if (confirm('تسجيل الخروج؟')) signOut() }}>خروج</button>
@@ -91,21 +84,6 @@ export default function Onboarding() {
 
       <main className="onboard-body">
         {step === 0 && (
-          <section className="stack">
-            <h2>عنك وهدفك</h2>
-            <p className="muted">كم دخلاً شهرياً من استثماراتك يكفيك لتعيش دون الاعتماد على الراتب؟</p>
-            <div className="grid2">
-              <NumberField plain label="سنة ميلادك" value={birthYear} min={1940} max={thisYear - 16} onChange={(v) => setBirthYear(Math.round(v))} />
-              <NumberField label="الدخل الشهري المستهدف" value={target} suffix="ريال" onChange={setTarget} hint="بقيمة ريال اليوم" />
-            </div>
-            <Switch label="المبلغ يشمل التزاماتك الشهرية" hint="مثل أقساط التمويل العقاري والقروض. أطفئه إن كنت تريد المبلغ صافياً بعد الأقساط"
-              checked={includesObligations} onChange={setIncludesObligations} />
-            <NumberField plain label="في أي عمر تريد الوصول؟" value={targetAge} min={Math.max(25, thisYear - birthYear + 2)} max={75} onChange={(v) => setTargetAge(Math.round(v))}
-              hint={`أي في سنة ${independence}. سيحسب التطبيق هل يصل مسارك في هذا الموعد.`} />
-          </section>
-        )}
-
-        {step === 1 && (
           <section className="stack">
             <h2>ما تستثمره</h2>
             <Segmented label="الإيداع من الراتب" value={varies ? 'varies' : 'fixed'} onChange={(v) => setVaries(v === 'varies')}
@@ -148,10 +126,10 @@ export default function Onboarding() {
           </section>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <section className="stack">
             <h2>التزاماتك الشهرية</h2>
-            <p className="muted">الأقساط التي تستمر سنوات. {includesObligations ? 'دخلك المستهدف يشملها، فهي للعرض وللتخطيط بعد انتهائها.' : 'ستُضاف فوق دخلك المستهدف حتى تنتهي.'}</p>
+            <p className="muted">الأقساط التي تستمر سنوات، مثل التمويل العقاري أو الشخصي. يمكنك لاحقاً إضافة المبلغ المتبقي لكل دين من «صافي الثروة».</p>
             <div className="chips">
               {OBLIGATION_CHIPS.map((n) => (
                 <button key={n} type="button" className="btn ghost small" onClick={() => setObligations((r) => [...r, { name: n, monthly_amount: 0, end_year: null }])}><IconPlus /> {n}</button>
@@ -176,7 +154,7 @@ export default function Onboarding() {
           </section>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <section className="stack">
             <h2>ما تملكه الآن</h2>
             <p className="muted">الأرصدة الحالية بالقيمة التقريبية. التفاصيل (الوحدات، الرموز، الربط الآلي) تضيفها لاحقاً من صفحة المحفظة.</p>
@@ -199,24 +177,22 @@ export default function Onboarding() {
               )
             })}
             <button className="btn ghost" onClick={() => setAssets((r) => [...r, { name: '', value: 0, type: 'income_fund', platform: r[r.length - 1]?.platform ?? '' }])}><IconPlus /> أضف أصلاً</button>
-            <NumberField label="صندوق الطوارئ" value={emergency} suffix="ريال" onChange={setEmergency} hint="يظهر لكنه خارج المحفظة: لا يدخل في الأوزان ولا في الهدف" />
+            <NumberField label="صندوق الطوارئ" value={emergency} suffix="ريال" onChange={setEmergency} hint="يظهر لكنه خارج المحفظة: لا يدخل في الأوزان" />
           </section>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <section className="stack">
             <h2>أسلوب المحفظة</h2>
-            <p className="muted">نقطة بداية للأوزان. تغيّر أي وزن أو تضيف طبقة متى شئت من صفحة الخطة.</p>
+            <p className="muted">نقطة بداية للأوزان. تغيّر أي وزن أو تضيف طبقة متى شئت من صفحة الأوزان.</p>
             {TEMPLATES.map((t) => (
               <button key={t.key} type="button" className={`template ${template === t.key ? 'on' : ''}`} onClick={() => setTemplate(t.key)} aria-pressed={template === t.key}>
-                <div className="row between"><b>{t.name}</b><span className="small muted">عائد متوقع {t.expected}%</span></div>
+                <b>{t.name}</b>
                 <div className="small muted" style={{ margin: '4px 0 10px' }}>{t.desc}</div>
                 <MixBar parts={t.sleeves.map((s, i) => ({ key: String(i), value: s.target_now, color: LAYER_VAR[s.layer], opacity: 1 - (i % 3) * 0.25, label: s.name }))} />
               </button>
             ))}
             <div className="panel stack" style={{ gap: 6 }}>
-              <div className="row between small"><span>الدخل المستهدف</span><b className="figure">{sar(target)} شهرياً</b></div>
-              <div className="row between small"><span>الموعد</span><b>{independence} (سن {targetAge})</b></div>
               <div className="row between small"><span>تستثمر سنوياً</span><b className="figure">{sar(yearly)}</b></div>
               <div className="row between small"><span>تملك الآن</span><b className="figure">{sar(assets.reduce((a, x) => a + x.value, 0))}</b></div>
             </div>
@@ -229,7 +205,7 @@ export default function Onboarding() {
         <div className="grow" />
         {step < STEPS.length - 1
           ? <button className="btn primary" onClick={next}>التالي</button>
-          : <button className="btn primary" disabled={busy} onClick={finish}>{busy ? 'نجهّز خطتك…' : 'أنشئ خطتي'}</button>}
+          : <button className="btn primary" disabled={busy} onClick={finish}>{busy ? 'نجهّز محفظتك…' : 'ابدأ'}</button>}
       </footer>
       <p className="tiny muted" style={{ textAlign: 'center', paddingBottom: 18 }}>الخطوة {num0(step + 1)} من {num0(STEPS.length)} · <span className="ltr">{session?.user.email}</span></p>
     </div>

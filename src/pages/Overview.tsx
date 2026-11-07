@@ -1,23 +1,19 @@
 import { useMemo } from 'react'
 import { useStore } from '../lib/store'
 import { sleeveColors, useDerived } from '../lib/derived'
-import { ageAt, plannedPath, yearFrac } from '../lib/calc'
 import { ago, dateShort, pct, relativeDays, sar, sarShort } from '../lib/format'
-import { MixBar, PathChart } from '../components/charts'
+import { MixBar } from '../components/charts'
 import { IconAlert, IconCalendar, IconCheck, IconEye, IconLink, IconScale, IconWallet } from '../components/icons'
 import { buyPrice, conditionsMet } from './Watchlist'
 import type { Go, Route } from '../App'
 import { netWorth, performance } from '../lib/wealth'
 import { todayISO } from '../lib/format'
 
-const yearsText = (n: number) => (n === 1 ? 'بسنة' : n === 2 ? 'بسنتين' : n <= 10 ? `بـ ${n} سنوات` : `بـ ${n} سنة`)
 
 export default function Overview({ go }: { go: Go }) {
   const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly, accounts, otherAssets, obligations, transactions } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
-  const history = useMemo(() => snapshots.map((s) => ({ year: yearFrac(new Date(s.snap_date + 'T12:00:00')), value: Number(s.total_sar) })), [snapshots])
-  const planned = useMemo(() => (settings ? plannedPath(settings, settings.independence_year + 2) : []), [settings])
   const wealth = useMemo(() => {
     if (!d) return null
     const goalIds = new Set(holdings.filter((h) => h.goal_id).map((h) => h.id))
@@ -31,14 +27,7 @@ export default function Overview({ go }: { go: Go }) {
   if (!settings || !d || !wealth) return null
 
   const total = d.totals.total
-  const fiRounded = d.fi ? Math.round(d.fi) : null
-  const tolerance = Math.max(2000, (d.planned ?? 0) * 0.01)
-  let headline: JSX.Element
-  if (total <= 0) headline = <>ابدأ بإدخال أرصدتك الحالية لنرسم مسارك</>
-  else if (d.aheadBy == null) headline = <>بدأ مسارك اليوم، وستظهر مقارنتك بالخطة بعد أول تحديث</>
-  else if (Math.abs(d.aheadBy) <= tolerance) headline = <>أنت على خطتك تماماً</>
-  else if (d.aheadBy > 0) headline = <>أنت متقدم على خطتك بـ <span className="ahead">{sarShort(d.aheadBy)}</span></>
-  else headline = <>أنت متأخر عن خطتك بـ <span className="behind">{sarShort(-d.aheadBy)}</span></>
+  const payoutsYear = d.payouts.filter((p) => p.kind === 'payout').reduce((a, p) => a + (p.amount ?? 0), 0)
 
   const alerts: Array<{ tone: 'warn' | 'accent' | 'plain'; icon: JSX.Element; body: JSX.Element; action?: () => void; owner?: boolean }> = []
   if (d.outOfBand.length > 2) {
@@ -53,8 +42,8 @@ export default function Overview({ go }: { go: Go }) {
       body: <><b>{x.sleeve.name}</b> {x.diff > 0 ? 'أعلى' : 'أقل'} من هدفها بـ {Math.abs(x.diff).toFixed(1)} نقطة. {x.diff > 0 ? 'وجّه الإيداعات القادمة إلى غيرها.' : `ينقصها ${sarShort(x.gapValue)} لتعود لوزنها.`}</>,
     })
   }
-  if (Math.round(d.targetSum.now) !== 100 || Math.round(d.targetSum.fi) !== 100) {
-    alerts.push({ owner: true, tone: 'warn', icon: <IconAlert />, action: () => go('plan'), body: <>مجموع الأوزان المستهدفة لا يساوي 100% (الآن {pct(d.targetSum.now)}، عند الاستقلال {pct(d.targetSum.fi)}).</> })
+  if (Math.round(d.targetSum.now) !== 100) {
+    alerts.push({ owner: true, tone: 'warn', icon: <IconAlert />, action: () => go('plan'), body: <>مجموع الأوزان المستهدفة {pct(d.targetSum.now)} ولا يساوي 100%.</> })
   }
   for (const o of d.soon.slice(0, 4)) {
     alerts.push({
@@ -93,39 +82,23 @@ export default function Overview({ go }: { go: Go }) {
   return (
     <>
       <section className="status" aria-live="polite">
-        <p className="kicker">محفظتك اليوم <span className="figure">{sar(total)}</span>{d.change != null && d.change !== 0 && (
-          <span className={d.change > 0 ? 'good' : 'bad'}> ({d.change > 0 ? '+' : '−'}{sarShort(Math.abs(d.change))} منذ آخر قراءة)</span>
-        )}</p>
-        <p className="headline">{headline}</p>
+        <p className="kicker">قيمة محفظتك اليوم</p>
+        <p className="headline"><span className="figure">{sar(total)}</span></p>
         <p className="muted" style={{ marginTop: 6 }}>
-          {fiRounded
-            ? <>بهذا المسار تبلغ هدفك عام <b className="num">{fiRounded}</b> في سن <b className="num">{ageAt(settings, fiRounded)}</b>{fiRounded > settings.independence_year ? `، بعد موعدك المستهدف (${settings.independence_year}) ${yearsText(fiRounded - settings.independence_year)}` : fiRounded < settings.independence_year ? `، قبل موعدك المستهدف ${yearsText(settings.independence_year - fiRounded)}` : ''}.</>
-            : <>لا يبلغ المسار الحالي هدفك خلال 24 سنة؛ ارفع الإيداع أو عدّل الهدف من صفحة المستقبل.</>}
+          {total <= 0 ? 'ابدأ بإدخال أرصدتك من صفحة المحفظة.' : d.change != null && d.change !== 0
+            ? <><span className={d.change > 0 ? 'good' : 'bad'}>{d.change > 0 ? '+' : '−'}{sar(Math.abs(d.change))}</span> منذ آخر قراءة</>
+            : 'تتحدث الأسعار كل صباح تلقائياً.'}
         </p>
       </section>
 
       <div className="facts">
-        <a className="fact" href="#/income" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(d.incomeNow)}</div><div className="l">دخل شهري ممكن الآن بنسبة {pct(settings.withdrawal_rate)}</div></a>
-        <div className="fact"><div className="v">{sarShort(d.capitalToday)}</div><div className="l">المحفظة المطلوبة بقيمة اليوم</div></div>
-        <div className="fact"><div className="v">{pct(Math.min(999, d.progress * 100))}</div><div className="l">قطعتها من الطريق</div></div>
-      </div>
-      <div className="facts" style={{ marginTop: 10 }}>
         <a className="fact" href="#/networth" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(wealth.nw.net)}</div><div className="l">صافي ثروتك بعد الديون</div></a>
         <a className="fact" href="#/performance" style={{ color: 'inherit', textDecoration: 'none' }}>
           <div className={`v ${wealth.perf.gain < 0 ? 'bad' : ''}`}>{wealth.perf.points.length > 1 ? `${wealth.perf.gain >= 0 ? '+' : ''}${sarShort(wealth.perf.gain)}` : '—'}</div>
           <div className="l">{wealth.perf.points.length > 1 ? `ربحك منذ ${dateShort(wealth.perf.start)} (${wealth.perf.twr >= 0 ? '+' : ''}${pct(wealth.perf.twr)})` : 'يظهر ربحك بعد أيام من البيانات'}</div>
         </a>
+        <a className="fact" href="#/payouts" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(payoutsYear)}</div><div className="l">توزيعات متوقعة خلال 12 شهراً</div></a>
       </div>
-
-      <section className="section" aria-label="مسار المحفظة">
-        <PathChart settings={settings} proj={d.proj} history={history} planned={planned} fi={d.fi} title="مسار المحفظة حتى الاستقلال" />
-        <div className="legend">
-          <span><i style={{ background: 'var(--ink)' }} />ما حققته</span>
-          <span><i style={{ background: 'var(--accent)' }} />المتوقع بعائد {pct(settings.expected_return)}</span>
-          <span><i style={{ background: 'var(--accent)', opacity: 0.25, height: 8 }} />المدى بين {pct(settings.return_low)} و{pct(settings.return_high)}</span>
-          <span><i style={{ background: 'var(--horizon)' }} />الهدف مع التضخم</span>
-        </div>
-      </section>
 
       <section className="section">
         <div className="section-head">
@@ -152,7 +125,7 @@ export default function Overview({ go }: { go: Go }) {
               )
             })}
           </div>
-          <p className="tiny muted" style={{ marginTop: 10 }}>الخط الداكن على كل شريط هو الوزن المستهدف لهذا العام{d.totals.unassigned > 0 ? `؛ ${sarShort(d.totals.unassigned)} بلا طبقة غير محسوبة` : ''}.</p>
+          <p className="tiny muted" style={{ marginTop: 10 }}>الخط الداكن على كل شريط هو الوزن المستهدف{d.totals.unassigned > 0 ? `؛ ${sarShort(d.totals.unassigned)} بلا طبقة غير محسوبة` : ''}.</p>
         </div>
       </section>
 
@@ -182,7 +155,7 @@ export default function Overview({ go }: { go: Go }) {
               <div className="ico">{a.icon}</div><p className="grow">{a.body}</p>
             </div>
           )) : (
-            <div className="alert accent"><div className="ico"><IconCheck /></div><p>لا شيء يحتاج تدخلك اليوم. استمر في الإيداع حسب الخطة.</p></div>
+            <div className="alert accent"><div className="ico"><IconCheck /></div><p>لا شيء يحتاج تدخلك اليوم.</p></div>
           )}
         </div>
         <p className="tiny muted" style={{ marginTop: 8 }}>آخر تحديث للأسعار وأسعار الصرف: {ago(fxUpdatedAt)}.</p>

@@ -16,13 +16,6 @@ export default function Profile() {
   const [stream, setStream] = useState<Partial<IncomeStream> | null>(null)
   const [obligation, setObligation] = useState<Partial<Obligation> | null>(null)
   const total = d?.contribution.total ?? 0
-  const auto = settings?.contribution_mode !== 'manual'
-
-  // keep the projection's yearly contribution in step with the situation
-  useEffect(() => {
-    if (!settings || readOnly || !auto) return
-    if (Math.abs(Math.round(total) - Number(settings.annual_contribution)) >= 1) updateSettings({ annual_contribution: Math.round(total) })
-  }, [total, auto, settings?.annual_contribution, readOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!settings || !d) return null
   const s = settings
@@ -32,7 +25,7 @@ export default function Profile() {
 
   return (
     <>
-      <p className="muted" style={{ marginBottom: 14 }}>هذا ما يبني عليه التطبيق خطتك: ما تستثمره ومتى، والتزاماتك، وهدفك. غيّر أي شيء ويتحدث كل حساب فوراً.</p>
+      <p className="muted" style={{ marginBottom: 14 }}>ما تستثمره ومتى، ودخلك الإضافي، والتزاماتك. منها تأتي تذكيرات الإيداع ومبالغه المقترحة.</p>
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <section className="status" style={{ paddingTop: 0 }}>
           <p className="kicker">تستثمر سنوياً نحو</p>
@@ -50,11 +43,6 @@ export default function Profile() {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 12 }}>
-          <Switch label="استخدم هذا المبلغ في التوقعات" hint={auto ? 'يتحدث الإيداع السنوي في «المستقبل» تلقائياً من وضعك' : `التوقعات تستخدم مبلغاً تحدده بنفسك: ${sar(s.annual_contribution)}`}
-            checked={auto} onChange={(v) => updateSettings({ contribution_mode: v ? 'auto' : 'manual', ...(v ? { annual_contribution: Math.round(total) } : {}) })} />
-        </div>
-
         <section className="section">
           <div className="section-head"><h2>الإيداع من الراتب</h2></div>
           <div className="panel stack">
@@ -64,7 +52,6 @@ export default function Profile() {
               <NumberField label={varies ? 'متوسطه الشهري' : 'المبلغ الشهري'} value={s.monthly_invest ?? 0} suffix="ريال" onChange={(v) => updateSettings({ monthly_invest: v })} />
               <NumberField plain label="يوم الإيداع" value={s.deposit_day} min={1} max={28} onChange={(v) => updateSettings({ deposit_day: Math.round(v) })} hint="يصلك تذكير في هذا اليوم" />
             </div>
-            <NumberField label="نمو إيداعاتك سنوياً" value={s.contribution_growth} suffix="%" decimals={1} onChange={(v) => updateSettings({ contribution_growth: v })} hint="مع زيادة الراتب السنوية" />
           </div>
         </section>
 
@@ -106,23 +93,9 @@ export default function Profile() {
               </div>
             )}
             <div className="row between small"><span>مجموعها الآن</span><b className="figure">{sar(obligationsNow)} شهرياً</b></div>
-            <Switch label="أضفها فوق الدخل المستهدف" hint={s.include_mortgage ? 'الدخل المطلوب = الهدف + الالتزامات حتى تنتهي' : 'دخلك المستهدف يشملها'}
-              checked={s.include_mortgage} onChange={(v) => updateSettings({ include_mortgage: v })} />
           </div>
         </section>
 
-        <section className="section">
-          <div className="section-head"><h2>الهدف</h2></div>
-          <div className="panel stack">
-            <div className="grid2">
-              <NumberField label="الدخل الشهري المستهدف" value={s.monthly_income_target} suffix="ريال" onChange={(v) => updateSettings({ monthly_income_target: v })} hint="بقيمة ريال اليوم" />
-              <NumberField plain label="سنة الميلاد" value={s.birth_year} onChange={(v) => updateSettings({ birth_year: Math.round(v) })} />
-              <NumberField plain label="سنة الاستقلال المستهدفة" value={s.independence_year} min={thisYear + 1} max={thisYear + 50} onChange={(v) => updateSettings({ independence_year: Math.round(v), glide_start_year: Math.min(s.glide_start_year, Math.round(v) - 1) })} hint={`في سن ${s.independence_year - s.birth_year}`} />
-              <SelectField label="حساب احتياطي الدخل" value={s.reserve_account_id ?? ''} onChange={(v) => updateSettings({ reserve_account_id: v || null })}
-                options={[{ value: '', label: 'لم يُحدَّد' }, ...accounts.filter((a) => !a.exclude_from_portfolio).map((a) => ({ value: a.id, label: a.name }))]} />
-            </div>
-          </div>
-        </section>
       </fieldset>
 
       {stream && <StreamSheet initial={stream} onClose={() => setStream(null)} />}

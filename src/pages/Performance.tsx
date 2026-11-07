@@ -17,6 +17,8 @@ const BENCHMARKS = [
   { value: 'HLAL', label: 'الأسهم الأمريكية المتوافقة (HLAL)' },
 ]
 type Period = 'all' | 'ytd' | '12m'
+/** growth assumed only to show what fees cost over ten years */
+const FEE_GROWTH = 6
 
 const signedSar = (v: number) => `${v >= 0 ? '+' : '−'}${sar(Math.abs(v))}`
 
@@ -57,8 +59,6 @@ export default function Performance() {
   const dates = perf.points.map((p) => p.date)
   const benchPts = bench ? benchmarkSeries(bench.points, dates) : []
   const benchPct = benchPts.length ? benchPts[benchPts.length - 1].pct : null
-  const planPct = (Math.pow(1 + settings.expected_return / 100, perf.days / 365) - 1) * 100
-  const planPts = dates.map((dt) => ({ date: dt, pct: (Math.pow(1 + settings.expected_return / 100, (new Date(dt).getTime() - new Date(dates[0]).getTime()) / (365 * 86400000)) - 1) * 100 }))
   const tooShort = perf.points.length < 2
 
   // per holding
@@ -69,7 +69,7 @@ export default function Performance() {
   const gainTotal = withCost.reduce((s, x) => s + (x.gain ?? 0), 0)
 
   // fees
-  const fees = live.filter((h) => Number(h.fee_pct) > 0).map((h) => ({ h, value: holdingValue(h, fx), ...feeDrag(holdingValue(h, fx), Number(h.fee_pct), settings.expected_return + Number(h.fee_pct)) }))
+  const fees = live.filter((h) => Number(h.fee_pct) > 0).map((h) => ({ h, value: holdingValue(h, fx), ...feeDrag(holdingValue(h, fx), Number(h.fee_pct), FEE_GROWTH + Number(h.fee_pct)) }))
     .sort((a, b) => b.yearly - a.yearly)
   const feeYearly = fees.reduce((s, f) => s + f.yearly, 0)
   const feeDragTotal = fees.reduce((s, f) => s + f.drag, 0)
@@ -96,10 +96,9 @@ export default function Performance() {
         </section>
 
         <div className="panel">
-          <ReturnChart title="العائد مقارنة بالمؤشر والخطة" series={[
+          <ReturnChart title="العائد مقارنة بالمؤشر" series={[
             { key: 'me', label: 'محفظتك', color: 'var(--accent)', points: perf.points.map((p) => ({ date: p.date, pct: p.twr })) },
             ...(benchPts.length ? [{ key: 'b', label: 'المؤشر', color: 'var(--growth)', points: benchPts }] : []),
-            { key: 'plan', label: `الخطة (${pct(settings.expected_return)} سنوياً)`, color: 'var(--horizon)', dashed: true, points: planPts },
           ]} />
         </div>
 
@@ -112,17 +111,13 @@ export default function Performance() {
             <div className="grow"><div>المؤشر</div><div className="meta">{benchState === 'loading' ? 'نجلب بياناته…' : benchState === 'error' ? 'تعذّر جلب بياناته الآن' : bench?.name ?? symbol}</div></div>
             <div className="amount">{benchPct == null ? '—' : signedPct(benchPct)}</div>
           </div>
-          <div className="list-item" style={{ cursor: 'default' }}>
-            <div className="grow"><div>ما تفترضه الخطة</div><div className="meta">{pct(settings.expected_return)} سنوياً عن المدة نفسها</div></div>
-            <div className="amount">{signedPct(planPct)}</div>
-          </div>
         </div>
         {vsBench != null && (
           <p className="small" style={{ marginTop: 10 }}>
-            {Math.abs(vsBench) < 0.3 ? 'أداؤك مماثل للمؤشر تقريباً.' : vsBench > 0 ? <>تفوقت على المؤشر بـ <b className="good">{pct(vsBench)}</b>.</> : <>المؤشر سبقك بـ <b className="bad">{pct(-vsBench)}</b>. هذا طبيعي إن كان جزء من محفظتك في صكوك ومرابحة وذهب؛ المهم أن تبقى قريباً من عائد خطتك.</>}
+            {Math.abs(vsBench) < 0.3 ? 'أداؤك مماثل للمؤشر تقريباً.' : vsBench > 0 ? <>تفوقت على المؤشر بـ <b className="good">{pct(vsBench)}</b>.</> : <>المؤشر سبقك بـ <b className="bad">{pct(-vsBench)}</b>. هذا طبيعي إن كان جزء من محفظتك في صكوك ومرابحة وذهب، فالمؤشر أسهم كله.</>}
           </p>
         )}
-        <p className="tiny muted" style={{ marginTop: 6 }}>يشمل محفظة الاستقلال فقط، دون محافظ الأهداف والحسابات المستبعدة. عائد المؤشر بعملته، والريال مربوط بالدولار.</p>
+        <p className="tiny muted" style={{ marginTop: 6 }}>يشمل المحفظة الرئيسية فقط، دون محافظ الأهداف والحسابات المستبعدة. عائد المؤشر بعملته، والريال مربوط بالدولار.</p>
       </>}
 
       <div style={{ marginTop: 12 }}>
@@ -165,7 +160,7 @@ export default function Performance() {
           <section className="status" style={{ paddingTop: 0 }}>
             <p className="kicker">تدفع رسوماً سنوية نحو</p>
             <p className="headline"><span className="figure">{sar(feeYearly)}</span></p>
-            <p className="muted small">متوسطها {pct(feeValue ? (feeYearly / feeValue) * 100 : 0, 2)} من قيمة هذه الصناديق. على 10 سنوات تنقص محفظتك بسببها نحو <b>{sar(feeDragTotal)}</b> إن بقيت المبالغ كما هي.</p>
+            <p className="muted small">متوسطها {pct(feeValue ? (feeYearly / feeValue) * 100 : 0, 2)} من قيمة هذه الصناديق. على 10 سنوات تنقص محفظتك بسببها نحو <b>{sar(feeDragTotal)}</b>، بافتراض نمو {FEE_GROWTH}% سنوياً.</p>
           </section>
           <div className="panel flush">
             {fees.map((f) => (

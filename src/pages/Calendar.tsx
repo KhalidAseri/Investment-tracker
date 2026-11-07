@@ -37,7 +37,6 @@ export default function Calendar() {
         <p className="grow muted">مواعيد الأموال الداخلة والخارجة. الدخل المتوقع للاستثمار خلال السنة القادمة: <b className="figure" style={{ color: 'var(--ink)' }}>{sar(inflowYear)}</b></p>
         {!readOnly && <button className="btn primary small" onClick={() => setEditing({ title: '', kind: 'other', event_date: todayISO(), recurrence: 'none', amount: null, done: false })}><IconPlus /> موعد جديد</button>}
       </div>
-      {d?.fi && <p className="small muted">موعد الاستقلال المتوقع حسب مسارك الحالي: <b className="num">{Math.round(d.fi)}</b>.</p>}
 
       {groups.length === 0 && <div className="panel empty" style={{ marginTop: 20 }}><h3>لا مواعيد خلال هذه الفترة</h3><p>أضف موعد المكافأة أو تجديد السلفة أو الزكاة.</p></div>}
       {groups.map(([k, items]) => {

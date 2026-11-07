@@ -64,9 +64,9 @@ export function glideProgress(s: PlanSettings, at = yearFrac()) {
   return (at - a) / (b - a)
 }
 
-export function currentTarget(sl: Sleeve, s: PlanSettings, at = yearFrac()) {
-  const p = glideProgress(s, at)
-  return sl.target_now + (sl.target_fi - sl.target_now) * p
+/** The target weight; one set of weights, no gradual shift over the years. */
+export function currentTarget(sl: Sleeve, _s?: PlanSettings, _at?: number) {
+  return Number(sl.target_now)
 }
 
 export interface Drift {

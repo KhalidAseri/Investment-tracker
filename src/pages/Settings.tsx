@@ -70,8 +70,7 @@ export default function Settings() {
       <section className="section" style={{ marginTop: 0 }}>
         <div className="section-head"><h2>وضع المتابعة</h2></div>
         <div className="panel stack">
-          <p className="small">أنت تتابع هذه المحفظة للاطلاع فقط: ترى الأرقام والخطة والتقدم كما هي، ولا يمكنك تعديل شيء. أي تغيير يجريه صاحبها يظهر لك فوراً.</p>
-          <p className="small muted">في صفحة «المستقبل» يمكنك تجربة الأرقام بحرية؛ تجاربك لا تُحفظ ولا تغيّر خطته.</p>
+          <p className="small">أنت تتابع هذه المحفظة للاطلاع فقط: ترى الأرقام كما هي، ولا يمكنك تعديل شيء. أي تغيير يجريه صاحبها يظهر لك فوراً.</p>
         </div>
       </section>
       {appearance}
@@ -132,16 +131,6 @@ export default function Settings() {
               <div className="amount">{sar(d?.totals.byAccount[a.id] ?? 0)}</div>
             </button>
           ))}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section-head"><h2>المقارنة بالخطة</h2></div>
-        <div className="panel stack">
-          <p className="small">تُقاس «متقدم أو متأخر» من نقطة بداية: {settings?.baseline_value ? <><b className="figure">{sar(settings.baseline_value)}</b> بتاريخ {dateLong(settings.baseline_date)}</> : 'لم تُحدَّد بعد'}.</p>
-          <button className="btn ghost" onClick={() => { if (d && confirm('اعتماد قيمة اليوم نقطة بداية جديدة للمقارنة؟')) { updateSettings({ baseline_value: Math.round(d.totals.total), baseline_date: todayISO() }); notify('اعتُمدت قيمة اليوم نقطة بداية') } }}>
-            ابدأ المقارنة من اليوم
-          </button>
         </div>
       </section>
 

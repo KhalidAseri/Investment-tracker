@@ -4,13 +4,11 @@ import { supabase } from './lib/supabase'
 import Overview from './pages/Overview'
 import Holdings from './pages/Holdings'
 import Deposit from './pages/Deposit'
-import Outlook from './pages/Outlook'
 import Plan from './pages/Plan'
 import Calendar from './pages/Calendar'
 import Activity from './pages/Activity'
 import Settings from './pages/Settings'
 import Watchlist from './pages/Watchlist'
-import Income from './pages/Income'
 import Payouts from './pages/Payouts'
 import Goals from './pages/Goals'
 import Profile from './pages/Profile'
@@ -21,28 +19,26 @@ import Import from './pages/Import'
 import Report from './pages/Report'
 import { LockGate } from './components/LockGate'
 import { markUnlocked } from './lib/lock'
-import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
+import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconHome, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
+export type Route = 'home' | 'holdings' | 'deposit' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
-  home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', outlook: 'المستقبل والدخل', plan: 'الخطة والأوزان',
-  income: 'الدخل الشهري', payouts: 'التوزيعات', goals: 'الأهداف', profile: 'وضعي المالي', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', plan: 'الأوزان المستهدفة',
+  payouts: 'التوزيعات', goals: 'الأهداف', profile: 'وضعي المالي', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
   performance: 'الأداء', networth: 'صافي الثروة', import: 'الاستيراد من دراهم', report: 'التقرير السنوي',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
   { r: 'holdings', label: 'المحفظة', icon: IconWallet },
   { r: 'deposit', label: 'الإيداع', icon: IconDeposit },
-  { r: 'outlook', label: 'المستقبل', icon: IconHorizon },
   { r: 'performance', label: 'الأداء', icon: IconChart, desc: 'ربحك الحقيقي ومقارنته بالمؤشر، وربح كل أصل، والرسوم' },
   { r: 'networth', label: 'صافي الثروة', icon: IconScale, desc: 'كل ما تملك وما عليك: العقار والديون وتوزيع أموالك' },
-  { r: 'income', label: 'الدخل', icon: IconIncome, desc: 'حساب دخلك السنوي، ومصادره، وما تبيعه، ومواعيد التحويل' },
   { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
   { r: 'goals', label: 'الأهداف', icon: IconFlag, desc: 'محافظ منفصلة لدفعة بيت أو سيارة أو تعليم' },
   { r: 'profile', label: 'وضعي المالي', icon: IconUser, desc: 'ما تستثمره ومتى، والتزاماتك، وهدفك' },
-  { r: 'plan', label: 'الخطة', icon: IconTarget, desc: 'الأوزان المستهدفة وقواعد المتابعة والسحب' },
+  { r: 'plan', label: 'الأوزان', icon: IconTarget, desc: 'الأوزان المستهدفة لكل طبقة وحد التنبيه' },
   { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
   { r: 'activity', label: 'العمليات', icon: IconList, desc: 'الإيداعات والتوزيعات وعمليات IBKR' },
@@ -50,8 +46,8 @@ const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?
   { r: 'report', label: 'التقرير السنوي', icon: IconDoc, desc: 'ملخص السنة للطباعة أو الحفظ PDF' },
   { r: 'settings', label: 'الإعدادات', icon: IconSettings, desc: 'ربط IBKR والإشعارات والمتابعة العائلية والمظهر' },
 ]
-const OWNER_TABS: Route[] = ['home', 'holdings', 'deposit', 'outlook', 'more']
-const VIEWER_TABS: Route[] = ['home', 'holdings', 'outlook', 'calendar', 'more']
+const OWNER_TABS: Route[] = ['home', 'holdings', 'deposit', 'performance', 'more']
+const VIEWER_TABS: Route[] = ['home', 'holdings', 'performance', 'calendar', 'more']
 const VIEWER_HIDDEN: Route[] = ['deposit', 'import']
 
 const readRoute = (): Route => {
@@ -86,7 +82,7 @@ export default function App() {
   const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
 
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, income: <Income />, payouts: <Payouts />, goals: <Goals />, profile: <Profile />, plan: <Plan />, watch: <Watchlist />,
+    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, payouts: <Payouts />, goals: <Goals />, profile: <Profile />, plan: <Plan />, watch: <Watchlist />,
     calendar: <Calendar />, activity: <Activity />, settings: <Settings />, performance: <Performance />, networth: <NetWorth />, import: <Import />, report: <Report />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
   const activeTab = TABS.includes(current) ? current : 'more'
@@ -209,7 +205,7 @@ function Auth() {
       <form className="auth-card" onSubmit={submit}>
         <img className="mark" src="./icons/icon-192.png" alt="" />
         <h1>مسار</h1>
-        <p className="lead">خطتك نحو الاستقلال المالي: أين أنت، وأين تضع ريالك القادم، ومتى تصل.</p>
+        <p className="lead">محفظتك في مكان واحد: قيمتها وأداؤها، وتوزيعاتها، وأين تضع ريالك القادم.</p>
         <div className="stack">
           <label className="field"><span>البريد الإلكتروني</span>
             <input className="input" type="email" dir="ltr" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>

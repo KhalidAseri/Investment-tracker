@@ -39,7 +39,7 @@ export default function NetWorth() {
 
   const goalsValue = Object.values(d.totals.goals).reduce((a, b) => a + b, 0)
   const lines = [
-    { label: 'محفظة الاستقلال', value: d.totals.total },
+    { label: 'المحفظة الرئيسية', value: d.totals.total },
     ...(goalsValue > 0 ? [{ label: 'محافظ الأهداف', value: goalsValue }] : []),
     ...(d.totals.outside > 0 ? [{ label: 'حسابات خارج الخطة', value: d.totals.outside }] : []),
     ...(nw.other > 0 ? [{ label: 'العقار والأصول الأخرى', value: nw.other }] : []),
@@ -69,7 +69,7 @@ export default function NetWorth() {
           {!readOnly && <button className="btn primary small" onClick={() => setAsset({ name: '', kind: 'real_estate', value: 0 })}><IconPlus /> أصل</button>}
         </div>
         {otherAssets.length === 0 ? (
-          <Empty title="أضف بيتك أو أرضك أو سيارتك"><p className="muted small">تدخل في صافي ثروتك فقط، ولا تؤثر على خطة الاستقلال أو أوزان المحفظة.</p></Empty>
+          <Empty title="أضف بيتك أو أرضك أو سيارتك"><p className="muted small">تدخل في صافي ثروتك فقط، ولا تؤثر على أوزان المحفظة.</p></Empty>
         ) : (
           <div className="panel flush">
             {otherAssets.map((a) => (
@@ -119,7 +119,7 @@ export default function NetWorth() {
               <p className="small">ينتهي «{target.debt.name}» قبل موعده بـ <b>{monthsText(faster.saved)}</b>{faster.interestSaved > 1 ? <> وتوفّر أرباحاً نحو <b className="good">{sar(faster.interestSaved)}</b></> : null}.
                 {!target.debt.rate_pct && ' (بلا نسبة ربح مسجّلة، فالتوفير في الوقت فقط.)'}</p>
             ) : <p className="small muted">حرّك المؤشر لترى أثر الزيادة.</p>}
-            <p className="tiny muted">قارن نسبة ربح الدين بعائد خطتك المتوقع ({pct(settings?.expected_return ?? 0)}): سداد دين بربح أعلى من عائدك المتوقع أجدى من استثمار المبلغ.</p>
+            <p className="tiny muted">إن كانت نسبة ربح الدين أعلى مما تتوقعه من استثماراتك، فسداده أولاً أجدى من استثمار المبلغ.</p>
           </div>
         )}
       </section>

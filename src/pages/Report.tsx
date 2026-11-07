@@ -32,7 +32,7 @@ export default function Report() {
     const pur = purification(transactions, holdings, from, to)
     const live = holdings.filter((h) => !h.archived && holdingValue(h, fx) > 0)
     const totalAll = live.reduce((s, h) => s + holdingValue(h, fx), 0)
-    const fundFees = live.filter((h) => Number(h.fee_pct) > 0).reduce((s, h) => s + feeDrag(holdingValue(h, fx), Number(h.fee_pct), settings.expected_return).yearly, 0)
+    const fundFees = live.filter((h) => Number(h.fee_pct) > 0).reduce((s, h) => s + holdingValue(h, fx) * Number(h.fee_pct) / 100, 0)
     const zakatNext = zakatSchedule(holdings, fx, today, 365)
     const nw = netWorth({ invested: d.totals.total, goals: Object.values(d.totals.goals).reduce((a, b) => a + b, 0), outside: d.totals.outside, otherAssets, obligations })
     return { perf, deposits: sumKind('deposit'), withdrawals: sumKind('withdrawal') + sumKind('income'), fees: sumKind('fee'), zakatPaid: sumKind('zakat'), dividends,
@@ -61,12 +61,12 @@ export default function Report() {
         <table className="report-table">
           <tbody>
             <tr><td>صافي الثروة اليوم</td><td>{sar(r.nw.net)}</td></tr>
-            <tr><td>قيمة محفظة الاستقلال في بداية الفترة</td><td>{r.perf.start ? sar(r.perf.startValue) : '—'}</td></tr>
+            <tr><td>قيمة المحفظة الرئيسية في بداية الفترة</td><td>{r.perf.start ? sar(r.perf.startValue) : '—'}</td></tr>
             <tr><td>قيمتها في نهاية الفترة</td><td>{sar(r.perf.endValue || d.totals.total)}</td></tr>
             <tr><td>أودعت</td><td>{sar(r.deposits)}</td></tr>
             <tr><td>سحبت</td><td>{sar(r.withdrawals)}</td></tr>
             <tr><td>الربح بعد استبعاد الإيداع والسحب</td><td className={r.perf.gain >= 0 ? 'good' : 'bad'}>{signedSar(r.perf.gain)}</td></tr>
-            <tr><td>العائد</td><td>{r.perf.points.length > 1 ? signedPct(r.perf.twr) : '—'} <span className="muted">(الخطة تفترض {pct(settings.expected_return)} سنوياً)</span></td></tr>
+            <tr><td>العائد</td><td>{r.perf.points.length > 1 ? signedPct(r.perf.twr) : '—'}</td></tr>
           </tbody>
         </table>
       </section>
@@ -132,11 +132,7 @@ export default function Report() {
         </section>
       )}
 
-      <section className="report-sec">
-        <h3>الطريق إلى الاستقلال</h3>
-        <p className="small">التقدم نحو هدفك {pct(d.progress * 100, 0)}. {d.fi ? `بالمعدل الحالي تصل نحو ${Math.round(d.fi)}، وهدفك ${settings.independence_year}.` : 'أكمل بياناتك لتقدير سنة الوصول.'}</p>
-      </section>
-      <p className="tiny muted report-foot">مسار · تقرير للاطلاع الشخصي، والأرقام التقديرية مبنية على ما أدخلته.</p>
+      <p className="tiny muted report-foot">مسار · تقرير للاطلاع الشخصي، والأرقام مبنية على ما أدخلته.</p>
     </div>
   )
 }

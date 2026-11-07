@@ -76,16 +76,16 @@ const base = (now: number[], fi: number[]): TemplateSleeve[] => [
   { name: 'صكوك', layer: 'income', target_now: now[3], target_fi: fi[3], expected_return: 5, yield_pct: 5, note: 'صكوك حكومية أو صندوق صكوك', asset: 'sukuk' },
   { name: 'صناديق ريت', layer: 'income', target_now: now[4], target_fi: fi[4], expected_return: 6.5, yield_pct: 6.5, note: 'موزعة على أكثر من صندوق', asset: 'reit' },
   { name: 'صناديق التوزيعات', layer: 'income', target_now: now[5], target_fi: fi[5], expected_return: 6, yield_pct: 7, note: 'صناديق توزيع شهري أو ربع سنوي', asset: 'income_fund' },
-  { name: 'سيولة ومرابحة', layer: 'safety', target_now: now[6], target_fi: fi[6], expected_return: 4.5, yield_pct: 4.5, note: 'تصبح احتياطي الدخل عند الاستقلال', asset: 'cash' },
+  { name: 'سيولة ومرابحة', layer: 'safety', target_now: now[6], target_fi: fi[6], expected_return: 4.5, yield_pct: 4.5, note: 'احتياطي سيولة', asset: 'cash' },
   { name: 'ذهب', layer: 'hedge', target_now: now[7], target_fi: fi[7], expected_return: 4, yield_pct: 0, note: 'صندوق ذهب متداول', asset: 'gold' },
 ]
 
 export const TEMPLATES: Array<{ key: string; name: string; desc: string; sleeves: TemplateSleeve[]; expected: number }> = [
-  { key: 'balanced', name: 'متوازن', desc: 'نمو اليوم، ويتحول تدريجياً إلى دخل قبل الاستقلال', expected: 6.5,
+  { key: 'balanced', name: 'متوازن', desc: 'مزيج من النمو والتوزيعات النقدية والسيولة', expected: 6.5,
     sleeves: base([45, 12, 8, 10, 5, 5, 5, 10], [33, 9, 5, 22, 8, 5, 10, 8]) },
   { key: 'income', name: 'يميل للدخل', desc: 'توزيعات نقدية أعلى من البداية، ونمو أبطأ', expected: 5.5,
     sleeves: base([25, 10, 5, 20, 10, 15, 7, 8], [20, 8, 4, 28, 10, 12, 10, 8]) },
-  { key: 'growth', name: 'يميل للنمو', desc: 'أعلى نمو متوقع، وتذبذب أكبر في الطريق', expected: 7.5,
+  { key: 'growth', name: 'يميل للنمو', desc: 'نمو أعلى، وتذبذب أكبر', expected: 7.5,
     sleeves: base([55, 15, 8, 5, 3, 2, 4, 8], [40, 10, 5, 18, 7, 5, 8, 7]) },
 ]
 
