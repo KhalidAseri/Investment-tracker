@@ -7,16 +7,28 @@ import { MixBar, PathChart } from '../components/charts'
 import { IconAlert, IconCalendar, IconCheck, IconEye, IconLink, IconScale, IconWallet } from '../components/icons'
 import { buyPrice, conditionsMet } from './Watchlist'
 import type { Go, Route } from '../App'
+import { netWorth, performance } from '../lib/wealth'
+import { todayISO } from '../lib/format'
 
 const yearsText = (n: number) => (n === 1 ? 'بسنة' : n === 2 ? 'بسنتين' : n <= 10 ? `بـ ${n} سنوات` : `بـ ${n} سنة`)
 
 export default function Overview({ go }: { go: Go }) {
-  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly, accounts } = useStore()
+  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly, accounts, otherAssets, obligations, transactions } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const history = useMemo(() => snapshots.map((s) => ({ year: yearFrac(new Date(s.snap_date + 'T12:00:00')), value: Number(s.total_sar) })), [snapshots])
   const planned = useMemo(() => (settings ? plannedPath(settings, settings.independence_year + 2) : []), [settings])
-  if (!settings || !d) return null
+  const wealth = useMemo(() => {
+    if (!d) return null
+    const goalIds = new Set(holdings.filter((h) => h.goal_id).map((h) => h.id))
+    const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
+    const flows = transactions.filter((t) => !(t.holding_id && goalIds.has(t.holding_id)) && !(t.account_id && excluded.has(t.account_id)) && !/لهدف/.test(t.note ?? ''))
+    return {
+      nw: netWorth({ invested: d.totals.total, goals: Object.values(d.totals.goals).reduce((a, b) => a + b, 0), outside: d.totals.outside, otherAssets, obligations }),
+      perf: performance(snapshots, flows, undefined, d.totals.total, todayISO()),
+    }
+  }, [d, holdings, accounts, transactions, otherAssets, obligations, snapshots])
+  if (!settings || !d || !wealth) return null
 
   const total = d.totals.total
   const fiRounded = d.fi ? Math.round(d.fi) : null
@@ -96,6 +108,13 @@ export default function Overview({ go }: { go: Go }) {
         <a className="fact" href="#/income" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(d.incomeNow)}</div><div className="l">دخل شهري ممكن الآن بنسبة {pct(settings.withdrawal_rate)}</div></a>
         <div className="fact"><div className="v">{sarShort(d.capitalToday)}</div><div className="l">المحفظة المطلوبة بقيمة اليوم</div></div>
         <div className="fact"><div className="v">{pct(Math.min(999, d.progress * 100))}</div><div className="l">قطعتها من الطريق</div></div>
+      </div>
+      <div className="facts" style={{ marginTop: 10 }}>
+        <a className="fact" href="#/networth" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(wealth.nw.net)}</div><div className="l">صافي ثروتك بعد الديون</div></a>
+        <a className="fact" href="#/performance" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <div className={`v ${wealth.perf.gain < 0 ? 'bad' : ''}`}>{wealth.perf.points.length > 1 ? `${wealth.perf.gain >= 0 ? '+' : ''}${sarShort(wealth.perf.gain)}` : '—'}</div>
+          <div className="l">{wealth.perf.points.length > 1 ? `ربحك منذ ${dateShort(wealth.perf.start)} (${wealth.perf.twr >= 0 ? '+' : ''}${pct(wealth.perf.twr)})` : 'يظهر ربحك بعد أيام من البيانات'}</div>
+        </a>
       </div>
 
       <section className="section" aria-label="مسار المحفظة">

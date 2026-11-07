@@ -56,7 +56,7 @@ export default function Activity() {
               {items.map((t) => (
                 <button key={t.id} className="list-item" onClick={() => !readOnly && t.source !== 'ibkr' && setEditing(t)} style={{ cursor: readOnly || t.source === 'ibkr' ? 'default' : 'pointer' }}>
                   <div className="grow">
-                    <div className="row" style={{ gap: 8 }}>{TX_LABEL[t.kind]}{t.source === 'ibkr' && <span className="chip accent">IBKR</span>}</div>
+                    <div className="row" style={{ gap: 8 }}>{TX_LABEL[t.kind]}{t.source === 'ibkr' && <span className="chip accent">IBKR</span>}{t.source === 'import' && <span className="chip">مستورد</span>}</div>
                     <div className="meta">{dateShort(t.tx_date)}{hName(t.holding_id) ? `، ${hName(t.holding_id)}` : aName(t.account_id) ? `، ${aName(t.account_id)}` : ''}{t.note && !t.note.startsWith('إيداع موزّع') ? `، ${t.note}` : ''}</div>
                   </div>
                   <div className={`amount ${OUT.includes(t.kind) ? '' : 'good'}`}>{OUT.includes(t.kind) ? '−' : '+'}{sar(Number(t.amount_sar))}</div>

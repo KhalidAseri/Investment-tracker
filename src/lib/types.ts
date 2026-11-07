@@ -40,6 +40,8 @@ export interface PlanSettings {
   contribution_mode: 'auto' | 'manual'
   reserve_account_id: string | null
   stock_cap: number
+  /** Yahoo symbol of the index the portfolio is compared against */
+  benchmark_symbol: string | null
   updated_at?: string
 }
 
@@ -65,9 +67,13 @@ export interface Account {
   kind: 'broker' | 'bank' | 'savings_program' | 'other'
   is_ibkr: boolean
   exclude_from_portfolio: boolean
+  /** where the custodian sits: inside Saudi Arabia or abroad */
+  country: 'SA' | 'INTL'
   note: string | null
   sort: number
 }
+
+export type Region = 'SA' | 'GCC' | 'US' | 'GLOBAL' | 'EM' | 'OTHER'
 
 export interface Holding {
   id: string
@@ -82,7 +88,13 @@ export interface Holding {
   price: number
   price_updated_at: string | null
   ibkr_conid: string | null
+  /** total paid for the current units, in SAR */
   cost_basis: number | null
+  /** yearly management fee, % of value */
+  fee_pct: number | null
+  /** share of dividends that must be given away for purification, % */
+  purification_pct: number | null
+  region: Region | null
   note: string | null
   archived: boolean
   zakatable: boolean
@@ -117,7 +129,7 @@ export interface Transaction {
   price: number | null
   currency: string
   note: string | null
-  source: 'manual' | 'ibkr' | 'planner'
+  source: 'manual' | 'ibkr' | 'planner' | 'import'
   external_id: string | null
   created_at?: string
 }
@@ -196,12 +208,31 @@ export interface IncomeStream {
   sort: number
 }
 
+export type DebtKind = 'mortgage' | 'personal_loan' | 'advance' | 'car' | 'card' | 'other'
 export interface Obligation {
   id: string
   user_id?: string
   name: string
+  kind: DebtKind
   monthly_amount: number
   end_year: number | null
+  /** remaining balance owed, SAR; null = a recurring commitment with no balance */
+  balance: number | null
+  balance_date: string | null
+  rate_pct: number | null
+  note: string | null
+  sort: number
+}
+
+export type OtherAssetKind = 'real_estate' | 'land' | 'vehicle' | 'business' | 'other'
+export interface OtherAsset {
+  id: string
+  user_id?: string
+  name: string
+  kind: OtherAssetKind
+  value: number
+  value_date: string | null
+  appreciation_pct: number | null
   note: string | null
   sort: number
 }

@@ -6,6 +6,7 @@ import { dateLong, monthName, num2, pct, relativeDays, sar, todayISO } from '../
 import { FREQ_LABEL, isIncomeTx, isoOf, nextPayoutAfter, payoutAnnual, utc, type PayoutItem } from '../lib/income'
 import type { Holding } from '../lib/types'
 import { MonthBars } from '../components/charts'
+import { purification } from '../lib/wealth'
 import { Empty, NumberField, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus } from '../components/icons'
 import { HoldingSheet } from './Holdings'
@@ -168,6 +169,8 @@ export default function Payouts() {
         )}
       </section>
 
+      <Purification />
+
       <section className="section">
         <div className="section-head"><h2>ما وصلك</h2><p>آخر 12 شهراً</p></div>
         {data.receivedGroups.length === 0 ? (
@@ -240,5 +243,38 @@ function RecordPayoutSheet({ initial, onClose }: { initial: Partial<PayoutItem>;
         <p className="tiny muted">إن بقي المبلغ نقداً في حسابك فأضفه إلى رصيد السيولة من صفحة المحفظة.</p>
       </div>
     </Sheet>
+  )
+}
+
+/** Share of dividends to give away, by the purification ratio each fund or company announces. */
+function Purification() {
+  const { transactions, holdings, readOnly } = useStore()
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [editing, setEditing] = useState<Partial<Holding> | null>(null)
+  const p = purification(transactions, holdings, `${year}-01-01`, `${year}-12-31`)
+  const missing = p.rows.filter((r) => !r.pct)
+  return (
+    <section className="section">
+      <div className="section-head"><h2>التطهير</h2>
+        <div className="segmented" role="group" aria-label="السنة" style={{ width: 'auto' }}>
+          {[year - 1, year, year + 1].filter((y) => y <= new Date().getFullYear()).map((y) => <button key={y} type="button" aria-pressed={y === year} onClick={() => setYear(y)}>{y}</button>)}
+        </div>
+      </div>
+      {p.rows.length === 0 ? (
+        <div className="panel"><Empty title={`لا توزيعات مسجّلة في ${year}`}><p className="small" style={{ marginTop: 6 }}>يُحسب التطهير من التوزيعات التي وصلتك فعلاً، بنسبة كل صندوق أو شركة.</p></Empty></div>
+      ) : <>
+        <div className="panel flush">
+          {p.rows.map((r) => (
+            <button key={r.holding.id} className="list-item" onClick={() => !readOnly && setEditing(r.holding)} style={readOnly ? { cursor: 'default' } : undefined}>
+              <div className="grow"><div>{r.holding.name}</div><div className="meta">توزيعات {sar(r.dividends)}، {r.pct ? `نسبة التطهير ${+r.pct.toFixed(2)}%` : 'لم تُحدَّد نسبة التطهير'}</div></div>
+              <div className="amount">{r.pct ? num2(r.due) + ' ريال' : <span className="small warn">حدّد النسبة</span>}</div>
+            </button>
+          ))}
+        </div>
+        <div className="row between small" style={{ marginTop: 10 }}><span>المطلوب إخراجه عن {year}</span><b className="figure">{num2(p.total)} ريال</b></div>
+        {missing.length > 0 && <p className="small muted" style={{ marginTop: 6 }}>النسبة تعلنها الهيئة الشرعية للصندوق في تقاريره، ولصناديق المرابحة والصكوك تكون عادةً صفراً.</p>}
+      </>}
+      {editing && <HoldingSheet initial={editing} onClose={() => setEditing(null)} />}
+    </section>
   )
 }

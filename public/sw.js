@@ -1,5 +1,5 @@
 // Masar service worker: app shell cache, network-first for pages, never caches API calls.
-const CACHE = 'masar-v2';
+const CACHE = 'masar-v3';
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest'])).catch(() => {}));

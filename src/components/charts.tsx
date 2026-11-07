@@ -230,3 +230,48 @@ export function MonthBars({ data, title }: { data: Array<{ key: string; label: s
     </div>
   )
 }
+
+/** Cumulative return lines (%), dated x axis, zero line; handles gains and losses. */
+export function ReturnChart({ series, title, height = 250 }: {
+  series: Array<{ key: string; label: string; color: string; dashed?: boolean; points: Array<{ date: string; pct: number }> }>; title: string; height?: number
+}) {
+  const [box, W] = useWidth()
+  const H = Math.round(Math.max(200, Math.min(height, W * 0.56)))
+  const m = { l: 46, r: 12, t: 16, b: 28 }
+  const all = series.flatMap((s) => s.points)
+  if (all.length < 2) return <div ref={box} />
+  const t = (d: string) => new Date(d + 'T12:00:00').getTime()
+  const minX = Math.min(...all.map((p) => t(p.date))), maxX = Math.max(...all.map((p) => t(p.date)))
+  const lo = Math.min(0, ...all.map((p) => p.pct)), hi = Math.max(0, ...all.map((p) => p.pct))
+  const pad = Math.max(0.5, (hi - lo) * 0.12)
+  const minY = lo - (lo < 0 ? pad : 0), maxY = hi + pad
+  const step = niceStep(maxY - minY)
+  const X = (x: number) => m.l + ((x - minX) / (maxX - minX || 1)) * (W - m.l - m.r)
+  const Y = (v: number) => H - m.b - ((v - minY) / (maxY - minY || 1)) * (H - m.t - m.b)
+  const ticks: number[] = []
+  for (let v = Math.ceil(minY / step) * step; v <= maxY; v += step) ticks.push(Number(v.toFixed(6)))
+  const months = ['ينا', 'فبر', 'مار', 'أبر', 'ماي', 'يون', 'يول', 'أغس', 'سبت', 'أكت', 'نوف', 'ديس']
+  const nX = Math.max(2, Math.min(6, Math.floor((W - m.l - m.r) / 70)))
+  const xs = Array.from({ length: nX }, (_, i) => minX + ((maxX - minX) * i) / (nX - 1))
+  const lab = (ms: number) => { const d = new Date(ms); return (maxX - minX) > 400 * 86400000 ? `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : `${d.getDate()} ${months[d.getMonth()]}` }
+  return (
+    <div ref={box}>
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={title} direction="ltr">
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={m.l} x2={W - m.r} y1={Y(v)} y2={Y(v)} stroke={v === 0 ? 'var(--ink-3)' : 'var(--line)'} strokeWidth={v === 0 ? 1.2 : 1} />
+            <text x={m.l - 8} y={Y(v) + 4} textAnchor="end">{`${v > 0 ? '+' : ''}${Number(v.toFixed(1))}%`}</text>
+          </g>
+        ))}
+        {xs.map((x, i) => <text key={i} x={X(x)} y={H - 8} textAnchor={i === 0 ? 'start' : i === xs.length - 1 ? 'end' : 'middle'}>{lab(x)}</text>)}
+        {series.map((s) => (
+          <path key={s.key} d={pathOf(s.points.map((p) => [X(t(p.date)), Y(p.pct)]))} fill="none" stroke={s.color}
+            strokeWidth={s.dashed ? 1.8 : 2.6} strokeDasharray={s.dashed ? '5 4' : undefined} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
+      </svg>
+      <div className="legend">
+        {series.map((s) => <span key={s.key}><i style={{ background: s.color, opacity: s.dashed ? 0.7 : 1 }} />{s.label}</span>)}
+      </div>
+    </div>
+  )
+}

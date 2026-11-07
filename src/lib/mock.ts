@@ -18,9 +18,9 @@ function fixture() {
     s('سيولة ومرابحة', 'safety', 5, 10, true, '', 7),
     s('ذهب', 'hedge', 10, 8, true, 'صندوق البلاد للذهب', 8),
   ]
-  const a = (name: string, kind: string, extra: Row = {}, sort = 0) => ({ id: id(), user_id: uid, name, kind, is_ibkr: false, exclude_from_portfolio: false, note: null, sort, ...extra })
+  const a = (name: string, kind: string, extra: Row = {}, sort = 0) => ({ id: id(), user_id: uid, name, kind, is_ibkr: false, exclude_from_portfolio: false, country: 'SA', note: null, sort, ...extra })
   const accounts = [
-    a('Interactive Brokers', 'broker', { is_ibkr: true, note: 'الأصول العالمية' }, 1),
+    a('Interactive Brokers', 'broker', { is_ibkr: true, country: 'INTL', note: 'الأصول العالمية' }, 1),
     a('الراجحي المالية', 'broker', { note: 'الأصول المحلية واحتياطي الدخل' }, 2),
     a('برنامج الادخار', 'savings_program', { note: 'الأهلي المالية' }, 3),
     a('صندوق الطوارئ', 'bank', { exclude_from_portfolio: true, note: 'خارج المحفظة' }, 4),
@@ -33,15 +33,15 @@ function fixture() {
   })
   const holdings = [
     h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISWD.L', price_source: 'yahoo', currency: 'USD' }, 1),
-    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885', payout_freq: 'monthly', payout_rate: 7.5, payout_next: iso(new Date(Date.now() + 12 * 86400000)), zakat_start: '2025-03-01' }, 2),
+    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885', cost_basis: 88000, fee_pct: 1, purification_pct: 1.2, payout_freq: 'monthly', payout_rate: 7.5, payout_next: iso(new Date(Date.now() + 12 * 86400000)), zakat_start: '2025-03-01' }, 2),
     h('صندوق الراجحي للتوزيعات الشهرية 2', 1, 5, 2300, 9.93, { payout_freq: 'monthly', payout_next: iso(new Date(Date.now() + 14 * 86400000)) }, 3),
-    h('صكوك الحكومة 2029', 1, 3, 20, 985, { payout_freq: 'semiannual', payout_rate: 5.2, payout_nominal: 1000, payout_next: iso(new Date(Date.now() + 40 * 86400000)), maturity_date: '2029-06-30', zakat_start: '2026-01-15' }, 10),
+    h('صكوك الحكومة 2029', 1, 3, 20, 985, { cost_basis: 19900, payout_freq: 'semiannual', payout_rate: 5.2, payout_nominal: 1000, payout_next: iso(new Date(Date.now() + 40 * 86400000)), maturity_date: '2029-06-30', zakat_start: '2026-01-15' }, 10),
     h('صندوق البلاد للذهب', 1, 7, 0, 21.3, { symbol: '9405.SR', price_source: 'yahoo' }, 4),
-    h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, {}, 5),
+    h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, { fee_pct: 0.75 }, 5),
     h('برنامج الادخار: الدخل المتحفظ', 2, 3, 1, 23900, {}, 6),
     h('صندوق مرابحة', 1, 6, 1, 15000, {}, 7),
     h('حساب الطوارئ', 3, null, 1, 95000, {}, 8),
-    h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false }, 9),
+    h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false, cost_basis: 12600, purification_pct: 0.8 }, 9),
   ]
   const today = new Date()
   const snapshots = Array.from({ length: 40 }, (_, i) => {
@@ -64,7 +64,7 @@ function fixture() {
     user_id: typeof location !== 'undefined' && /viewer/.test(location.search) ? 'owner-user' : uid, monthly_income_target: 20000, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, expected_return: 6.5,
     return_low: 5, return_high: 8, annual_contribution: 300000, contribution_growth: 4, birth_year: 1998, independence_year: 2038, glide_start_year: 2035,
     rebalance_band: 5, reserve_months: 24, guard_drawdown: 15, guard_cut: 10, guard_high_rate: 5, guard_low_rate: 3, include_mortgage: false,
-    mortgage_monthly: 5029, mortgage_end_year: 2044, baseline_value: 150000, baseline_date: snapshots[0].snap_date, extra: {},
+    mortgage_monthly: 5029, mortgage_end_year: 2044, benchmark_symbol: 'ISWD.L', baseline_value: 150000, baseline_date: snapshots[0].snap_date, extra: {},
   }
   const transactions = [
     { id: id(), user_id: uid, account_id: accounts[1].id, holding_id: holdings[1].id, sleeve_id: sleeves[5].id, tx_date: iso(new Date(today.getTime() - 6 * 86400000)), kind: 'dividend', amount_sar: 820, quantity: null, price: null, currency: 'SAR', note: 'توزيع شهري', source: 'manual', external_id: null },
@@ -93,11 +93,16 @@ function fixture() {
     { id: id(), user_id: uid, name: 'المكافأة السنوية', kind: 'bonus', amount: 120000, frequency: 'yearly', month: 3, next_date: null, invest_pct: 70, note: null, sort: 1 },
     { id: id(), user_id: uid, name: 'سلفة جهة العمل', kind: 'advance', amount: 200000, frequency: 'irregular', month: null, next_date: '2027-05-15', invest_pct: 100, note: null, sort: 2 },
   ]
-  const obligations = [{ id: id(), user_id: uid, name: 'تمويل عقاري', monthly_amount: 4500, end_year: 2044, note: null, sort: 1 }]
+  const obligations = [
+    { id: id(), user_id: uid, name: 'تمويل عقاري', kind: 'mortgage', monthly_amount: 4500, end_year: 2044, balance: 610000, balance_date: iso(new Date(Date.now() - 60 * 86400000)), rate_pct: 4.2, note: null, sort: 1 },
+    { id: id(), user_id: uid, name: 'سلفة جهة العمل', kind: 'advance', monthly_amount: 3500, end_year: 2029, balance: 98000, balance_date: iso(today), rate_pct: null, note: null, sort: 2 },
+  ]
+  const other_assets = [{ id: id(), user_id: uid, name: 'البيت', kind: 'real_estate', value: 1250000, value_date: iso(new Date(Date.now() - 200 * 86400000)), appreciation_pct: 2, note: null, sort: 1 },
+    { id: id(), user_id: uid, name: 'السيارة', kind: 'vehicle', value: 95000, value_date: iso(new Date(Date.now() - 300 * 86400000)), appreciation_pct: -12, note: null, sort: 2 }]
   if (typeof location !== 'undefined' && /onboard/.test(location.search)) {
-    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [] }
+    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [], other_assets: [] }
   }
-  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals }
+  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals, other_assets }
 }
 
 export function createMockClient(): any {
@@ -169,6 +174,14 @@ export function createMockClient(): any {
         { symbol: 'ISWD.L', name: 'iShares MSCI World Islamic UCITS ETF USD (Dist)', exchange: 'London', type: 'ETF' },
         { symbol: '4340.SR', name: 'Al Rajhi REIT Fund', exchange: 'Saudi Stock Exchange', type: 'EQUITY' },
       ] }, error: null }
+      if (mode === 'history') {
+        const pts = Array.from({ length: 45 }, (_, i) => ({ d: iso(new Date(Date.now() - (44 - i) * 86400000)), c: 38 * (1 + i * 0.0011 + Math.sin(i / 4) * 0.006) }))
+        return { data: { ok: true, name: 'iShares MSCI World Islamic UCITS ETF', points: pts }, error: null }
+      }
+      if (mode === 'parse-drahim') return { data: { ok: true, provider: 'drahim', period: '2026-10', periodLabel: 'أكتوبر 2026', total: 15530.74,
+        holdings: [{ portfolio: 'محفظة التوزيعات', name: 'صندوق الراجحي للتوزيعات الشهرية', units: 1337.5, value: 12417.06 }, { portfolio: 'محفظة التوزيعات', name: 'صندوق الراجحي للتوزيعات الشهرية 2', units: 336.85, value: 3113.68 }],
+        operations: [{ portfolio: 'محفظة التوزيعات', date: '2026-10-22', kind: 'withdrawal', label: 'سحب', amount: 127.09 }, { portfolio: 'محفظة التوزيعات', date: '2026-10-18', kind: 'dividend', label: 'أرباح موزعة', amount: 101.5 }, { portfolio: 'محفظة التوزيعات', date: '2026-10-18', kind: 'dividend', label: 'أرباح موزعة', amount: 25.59 }],
+        fees: [{ portfolio: 'محفظة التوزيعات', amount: 6.7, label: 'مشاركة أرباح' }] }, error: null }
       if (mode === 'quote') return { data: { quote: { price: 38.42, currency: 'USD', name: 'iShares MSCI World Islamic UCITS ETF USD (Dist)', type: 'ETF', exchange: 'London' } }, error: null }
       return { data: { results: [{ prices: { updated: 2, failed: [] }, snapshot: {} }] }, error: null }
     } },

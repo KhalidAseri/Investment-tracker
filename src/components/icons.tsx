@@ -27,3 +27,6 @@ export const IconEye = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path 
 export const IconBell = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>)
 export const IconFlag = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" /></svg>)
 export const IconUser = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></svg>)
+export const IconChart = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M4 19.5h16" /><path d="m5 15 4.5-4.5 3.5 3 6-6.5" /><path d="M15 7h4v4" /></svg>)
+export const IconImport = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M4.5 16v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V16" /></svg>)
+export const IconDoc = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M6.5 3.5h7l4 4v13h-11Z" /><path d="M13.5 3.5v4h4" /><path d="M9 12h6M9 15.5h6" /></svg>)

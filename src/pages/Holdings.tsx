@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { sleeveColors, useDerived } from '../lib/derived'
 import { LAYER_NAMES, LAYER_ORDER, ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
-import { ago, dateLong, num2, pct, relativeDays, sar, todayISO } from '../lib/format'
+import { ago, dateLong, num2, pct, relativeDays, sar, signedPct, todayISO } from '../lib/format'
 import { FREQ_LABEL, PER_YEAR, hijriLabel, nextHaul, payoutPerPayment } from '../lib/income'
-import type { Holding } from '../lib/types'
+import type { Holding, Region } from '../lib/types'
+import { REGION_LABEL, guessRegion } from '../lib/wealth'
 import { NumberField, Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
 import { SymbolSearch } from '../components/SymbolSearch'
@@ -154,7 +155,7 @@ export default function Holdings() {
 }
 
 export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose: () => void }) {
-  const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals, refreshMarket } = useStore()
+  const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals, refreshMarket, insertMany } = useStore()
   const [h, setH] = useState<Partial<Holding>>(initial)
   const [lumpSum, setLumpSum] = useState(initial.price_source === 'manual' && Number(initial.quantity) === 1 && Number(initial.price) > 50)
   const set = (patch: Partial<Holding>) => setH((x) => ({ ...x, ...patch }))
@@ -173,6 +174,14 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
     else notify('تعذّر جلب السعر الآن؛ يتحدث مع التحديث القادم')
   }
   const value = Number(h.quantity ?? 0) * Number(h.price ?? 0) * rateOf(h.currency, fx)
+  /** adding an asset you already own (or deleting one) moves the portfolio value without a gain or loss */
+  const recordTransfer = async (x: Holding, sign: 1 | -1) => {
+    const v = holdingValue(x, fx)
+    const outside = x.goal_id || (x.account_id && accounts.find((a) => a.id === x.account_id)?.exclude_from_portfolio)
+    if (v < 1 || outside || x.price_source === 'ibkr') return
+    await insertMany('transactions', [{ tx_date: todayISO(), kind: 'transfer', amount_sar: Math.round(sign * v * 100) / 100, holding_id: sign > 0 ? x.id : null, account_id: x.account_id,
+      sleeve_id: x.sleeve_id, quantity: null, price: null, currency: 'SAR', source: 'manual', external_id: null, note: sign > 0 ? `إضافة أصل قائم: ${x.name}` : `حذف أصل: ${x.name}` }])
+  }
   const saveIt = async () => {
     if (!h.name?.trim()) { notify('اكتب اسم الأصل'); return }
     const priceChanged = Number(h.price) !== Number(initial.price) || Number(h.quantity) !== Number(initial.quantity)
@@ -182,11 +191,14 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
       note: h.note ?? null, sort: h.sort ?? holdings.length + 1, zakatable: h.zakatable !== false, zakat_start: h.zakatable !== false ? h.zakat_start || null : null,
       payout_freq: h.payout_freq ?? 'none', payout_next: h.payout_next || null, payout_basis: h.payout_basis ?? 'rate',
       payout_rate: h.payout_rate ?? null, payout_per_unit: h.payout_per_unit ?? null, payout_nominal: h.payout_nominal || null, maturity_date: h.maturity_date || null,
+      cost_basis: h.cost_basis != null && Number(h.cost_basis) > 0 ? Number(h.cost_basis) : null, fee_pct: h.fee_pct || null,
+      purification_pct: h.purification_pct || null, region: h.region ?? null,
       goal_id: h.goal_id || null, goal_bucket: h.goal_id ? h.goal_bucket ?? null : null, ...(h.goal_id ? { sleeve_id: null } : {}),
       ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
       ...(h.price_source === 'yahoo' && h.price_updated_at && h.price_updated_at !== initial.price_updated_at ? { price_updated_at: h.price_updated_at } : {}),
     }
-    const ok = await upsert('holdings', row)
+    const ok = await upsert<Partial<Holding>>('holdings', row)
+    if (ok && !h.id) await recordTransfer(ok as Holding, 1)
     if (ok) {
       notify('حُفظ الأصل')
       onClose()
@@ -196,7 +208,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
   }
   return (
     <Sheet title={h.id ? 'تعديل أصل' : 'أصل جديد'} onClose={onClose} footer={<>
-      {h.id && <button className="btn danger" onClick={async () => { if (confirm('حذف هذا الأصل نهائياً؟')) { await remove('holdings', h.id!); onClose() } }}>حذف</button>}
+      {h.id && <button className="btn danger" onClick={async () => { if (confirm('حذف هذا الأصل نهائياً؟')) { await recordTransfer(initial as Holding, -1); await remove('holdings', h.id!); onClose() } }}>حذف</button>}
       <button className="btn primary" onClick={saveIt}>حفظ</button>
     </>}>
       <div className="stack">
@@ -257,6 +269,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
           <SelectField label="العملة" value={h.currency ?? 'SAR'} onChange={(v) => set({ currency: v })} options={[...new Set([...CURRENCIES, h.currency ?? 'SAR'])].map((c) => ({ value: c, label: c }))} />
         )}
         <p className="small">القيمة بالريال: <b className="figure">{sar(value)}</b></p>
+        <CostFields h={h} set={set} value={value} />
         <PayoutFields h={h} set={set} />
         <div className="panel inset stack" style={{ gap: 10 }}>
           <Switch label="عليه زكاة" hint={h.zakatable !== false ? `زكاته التقديرية ${sar((value * ZAKAT_RATE) / 100)}` : 'لا يدخل في حساب الزكاة'}
@@ -266,6 +279,27 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
         <TextField label="ملاحظة" value={h.note ?? ''} onChange={(v) => set({ note: v })} />
       </div>
     </Sheet>
+  )
+}
+
+function CostFields({ h, set, value }: { h: Partial<Holding>; set: (p: Partial<Holding>) => void; value: number }) {
+  const cost = Number(h.cost_basis) || 0
+  const gain = cost > 0 ? value - cost : null
+  const guessed = guessRegion({ symbol: h.symbol ?? null, name: h.name ?? '', currency: h.currency ?? 'SAR' })
+  return (
+    <div className="panel inset stack" style={{ gap: 10 }}>
+      <h3 style={{ margin: 0 }}>التكلفة والرسوم</h3>
+      <NumberField label="إجمالي ما دفعته فيه" value={h.cost_basis ?? null} suffix="ريال" decimals={2} onChange={(v) => set({ cost_basis: v || null })}
+        hint={gain == null ? 'يظهر به ربحك أو خسارتك. تزيده الإيداعات المسجّلة تلقائياً' : <>الربح حتى الآن <b className={gain >= 0 ? 'good' : 'bad'}>{gain >= 0 ? '+' : '−'}{sar(Math.abs(gain))}</b> ({signedPct((gain / cost) * 100)})</>} />
+      <div className="grid2">
+        <NumberField label="رسوم الإدارة السنوية" value={h.fee_pct ?? null} suffix="%" decimals={2} onChange={(v) => set({ fee_pct: v || null })}
+          hint={Number(h.fee_pct) > 0 ? `نحو ${sar((value * Number(h.fee_pct)) / 100)} في السنة` : 'من نشرة الصندوق أو موقعه'} />
+        <NumberField label="نسبة التطهير" value={h.purification_pct ?? null} suffix="%" decimals={2} onChange={(v) => set({ purification_pct: v || null })}
+          hint="من التوزيعات المستلمة، كما تعلنها الهيئة الشرعية" />
+      </div>
+      <SelectField label="السوق الذي يستثمر فيه" value={h.region ?? ''} onChange={(v) => set({ region: (v || null) as Region | null })}
+        options={[{ value: '', label: `تلقائي: ${REGION_LABEL[guessed]}` }, ...(Object.keys(REGION_LABEL) as Region[]).map((r) => ({ value: r, label: REGION_LABEL[r] }))]} />
+    </div>
   )
 }
 

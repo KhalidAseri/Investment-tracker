@@ -15,20 +15,29 @@ import Payouts from './pages/Payouts'
 import Goals from './pages/Goals'
 import Profile from './pages/Profile'
 import Onboarding from './pages/Onboarding'
-import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
+import Performance from './pages/Performance'
+import NetWorth from './pages/NetWorth'
+import Import from './pages/Import'
+import Report from './pages/Report'
+import { LockGate } from './components/LockGate'
+import { markUnlocked } from './lib/lock'
+import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
+export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
   home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', outlook: 'المستقبل والدخل', plan: 'الخطة والأوزان',
   income: 'الدخل الشهري', payouts: 'التوزيعات', goals: 'الأهداف', profile: 'وضعي المالي', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  performance: 'الأداء', networth: 'صافي الثروة', import: 'الاستيراد من دراهم', report: 'التقرير السنوي',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
   { r: 'holdings', label: 'المحفظة', icon: IconWallet },
   { r: 'deposit', label: 'الإيداع', icon: IconDeposit },
   { r: 'outlook', label: 'المستقبل', icon: IconHorizon },
+  { r: 'performance', label: 'الأداء', icon: IconChart, desc: 'ربحك الحقيقي ومقارنته بالمؤشر، وربح كل أصل، والرسوم' },
+  { r: 'networth', label: 'صافي الثروة', icon: IconScale, desc: 'كل ما تملك وما عليك: العقار والديون وتوزيع أموالك' },
   { r: 'income', label: 'الدخل', icon: IconIncome, desc: 'حساب دخلك السنوي، ومصادره، وما تبيعه، ومواعيد التحويل' },
   { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
   { r: 'goals', label: 'الأهداف', icon: IconFlag, desc: 'محافظ منفصلة لدفعة بيت أو سيارة أو تعليم' },
@@ -37,11 +46,13 @@ const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?
   { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
   { r: 'activity', label: 'العمليات', icon: IconList, desc: 'الإيداعات والتوزيعات وعمليات IBKR' },
+  { r: 'import', label: 'استيراد', icon: IconImport, desc: 'تحديث أصولك وعملياتك من تقرير دراهم أو ملف عملياته' },
+  { r: 'report', label: 'التقرير السنوي', icon: IconDoc, desc: 'ملخص السنة للطباعة أو الحفظ PDF' },
   { r: 'settings', label: 'الإعدادات', icon: IconSettings, desc: 'ربط IBKR والإشعارات والمتابعة العائلية والمظهر' },
 ]
 const OWNER_TABS: Route[] = ['home', 'holdings', 'deposit', 'outlook', 'more']
 const VIEWER_TABS: Route[] = ['home', 'holdings', 'outlook', 'calendar', 'more']
-const VIEWER_HIDDEN: Route[] = ['deposit']
+const VIEWER_HIDDEN: Route[] = ['deposit', 'import']
 
 const readRoute = (): Route => {
   const h = location.hash.replace(/^#\/?/, '') as Route
@@ -76,11 +87,12 @@ export default function App() {
 
   const page: Record<Route, ReactNode> = {
     home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, income: <Income />, payouts: <Payouts />, goals: <Goals />, profile: <Profile />, plan: <Plan />, watch: <Watchlist />,
-    calendar: <Calendar />, activity: <Activity />, settings: <Settings />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
+    calendar: <Calendar />, activity: <Activity />, settings: <Settings />, performance: <Performance />, networth: <NetWorth />, import: <Import />, report: <Report />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
   const activeTab = TABS.includes(current) ? current : 'more'
 
   return (
+    <LockGate>
     <div className="app">
       <nav className="sidebar" aria-label="التنقل">
         <div className="brand"><img src="./icons/icon-192.png" width={34} height={34} alt="" style={{ borderRadius: 9 }} /><b>مسار</b></div>
@@ -124,6 +136,7 @@ export default function App() {
       </nav>
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
+    </LockGate>
   )
 }
 
@@ -179,6 +192,7 @@ function Auth() {
       }
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
       if (error) throw error
+      markUnlocked()
     } catch (err: any) {
       const m = String(err?.message ?? '')
       setMsg(

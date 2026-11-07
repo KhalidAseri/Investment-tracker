@@ -123,6 +123,8 @@ function RecordSheet({ lines, goalLines, divisor, onClose }: { lines: DepositLin
     if (!h || h.price_source === 'ibkr' || !(Number(h.price) > 0) || isLump(h)) return null
     return amount / (Number(h.price) * rateOf(h.currency, fx))
   }
+  /** what was paid grows with each deposit; unknown stays unknown unless the holding started empty */
+  const costAfter = (h: Holding, amount: number) => (h.cost_basis != null || Number(h.quantity) === 0 ? (Number(h.cost_basis) || 0) + amount : null)
   const confirm = async () => {
     setBusy(true)
     const rows = lines.map((l) => {
@@ -149,16 +151,16 @@ function RecordSheet({ lines, goalLines, divisor, onClose }: { lines: DepositLin
         if (!h || h.price_source === 'ibkr') continue
         const amount = Math.round(l.amount / divisor)
         const units = unitsFor(h, amount)
-        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units })
-        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString() })
+        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units, cost_basis: costAfter(h, amount) })
+        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString(), cost_basis: costAfter(h, amount) })
       }
       for (const l of lines) {
         const h = byId.get(choice[l.sleeve.id])
         if (!h || h.price_source === 'ibkr') continue
         const amount = Math.round(l.amount / divisor)
         const units = unitsFor(h, amount)
-        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units })
-        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString() })
+        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units, cost_basis: costAfter(h, amount) })
+        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString(), cost_basis: costAfter(h, amount) })
       }
       notify('سُجّل الإيداع وحُدّثت الأصول')
       onClose()

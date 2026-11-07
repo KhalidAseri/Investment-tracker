@@ -7,6 +7,8 @@ import { todayISO } from '../lib/format'
 import type { IncomeStream, Obligation } from '../lib/types'
 import { Empty, NumberField, Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus } from '../components/icons'
+import { ObligationSheet } from '../components/WealthSheets'
+import { DEBT_LABEL, debtView } from '../lib/wealth'
 
 export default function Profile() {
   const { settings, updateSettings, streams, obligations, accounts, readOnly } = useStore()
@@ -89,15 +91,15 @@ export default function Profile() {
         </section>
 
         <section className="section">
-          <div className="section-head"><h2>الالتزامات الشهرية</h2>
-            {!readOnly && <button className="btn primary small" onClick={() => setObligation({ name: '', monthly_amount: 0, end_year: null, sort: obligations.length + 1 })}><IconPlus /> التزام</button>}
+          <div className="section-head"><h2>الالتزامات والديون</h2>
+            {!readOnly && <button className="btn primary small" onClick={() => setObligation({ name: '', kind: 'other', monthly_amount: 0, end_year: null, balance: null, sort: obligations.length + 1 })}><IconPlus /> التزام</button>}
           </div>
           <div className="panel stack">
             {obligations.length > 0 && (
               <div className="panel flush">
                 {obligations.map((o) => (
                   <button key={o.id} className="list-item" onClick={() => !readOnly && setObligation(o)} style={readOnly ? { cursor: 'default' } : undefined}>
-                    <div className="grow"><div>{o.name}</div><div className="meta">{o.end_year ? `حتى ${o.end_year}` : 'بلا تاريخ انتهاء'}{o.end_year && o.end_year < thisYear ? '، انتهى' : ''}</div></div>
+                    <div className="grow"><div>{o.name}</div><div className="meta">{DEBT_LABEL[o.kind ?? 'other']}، {o.end_year ? `حتى ${o.end_year}` : 'بلا تاريخ انتهاء'}{o.end_year && o.end_year < thisYear ? '، انتهى' : ''}{o.balance != null ? `، المتبقي ${sar(debtView(o).balance)}` : ''}</div></div>
                     <div className="amount">{sar(Number(o.monthly_amount))}</div>
                   </button>
                 ))}
@@ -168,37 +170,6 @@ function StreamSheet({ initial, onClose }: { initial: Partial<IncomeStream>; onC
             <small>{x.frequency === 'irregular' ? 'مثل موعد تجديد السلفة المتوقع.' : 'إن عرفت اليوم بالتحديد؛ وإلا يُستخدم أول الشهر.'}</small>
           </label>
         )}
-        <TextField label="ملاحظة" value={x.note ?? ''} onChange={(v) => set({ note: v })} />
-      </div>
-    </Sheet>
-  )
-}
-
-function ObligationSheet({ initial, onClose }: { initial: Partial<Obligation>; onClose: () => void }) {
-  const { upsert, remove, notify, obligations, updateSettings } = useStore()
-  const [x, setX] = useState<Partial<Obligation>>(initial)
-  const set = (p: Partial<Obligation>) => setX((v) => ({ ...v, ...p }))
-  const syncCache = (list: Obligation[]) => updateSettings(obligationsCache(list))
-  const saveIt = async () => {
-    if (!x.name?.trim()) { notify('اكتب اسم الالتزام'); return }
-    const saved = await upsert('obligations', { id: x.id, name: x.name.trim(), monthly_amount: Number(x.monthly_amount ?? 0), end_year: x.end_year || null, note: x.note || null, sort: x.sort ?? 99 })
-    if (saved) {
-      syncCache([...obligations.filter((o) => o.id !== saved.id), saved as Obligation])
-      notify('حُفظ')
-      onClose()
-    }
-  }
-  return (
-    <Sheet title={x.id ? 'تعديل التزام' : 'التزام شهري'} onClose={onClose} footer={<>
-      {x.id && <button className="btn danger" onClick={async () => { if (confirm('حذف هذا الالتزام؟')) { await remove('obligations', x.id!); syncCache(obligations.filter((o) => o.id !== x.id)); onClose() } }}>حذف</button>}
-      <button className="btn primary" onClick={saveIt}>حفظ</button>
-    </>}>
-      <div className="stack">
-        <TextField label="الاسم" value={x.name ?? ''} onChange={(v) => set({ name: v })} placeholder="مثال: تمويل عقاري" />
-        <div className="grid2">
-          <NumberField label="القسط الشهري" value={x.monthly_amount ?? 0} suffix="ريال" onChange={(v) => set({ monthly_amount: v })} />
-          <NumberField plain label="ينتهي سنة" value={x.end_year ?? null} onChange={(v) => set({ end_year: Math.round(v) || null })} />
-        </div>
         <TextField label="ملاحظة" value={x.note ?? ''} onChange={(v) => set({ note: v })} />
       </div>
     </Sheet>

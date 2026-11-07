@@ -30,7 +30,7 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
 
 /** Number input that shows grouped digits, accepts Arabic digits, and commits on blur/enter. */
 export function NumberField({ label, value, onChange, suffix, hint, decimals = 0, min, max, plain }: {
-  label: string; value: number | null | undefined; onChange: (v: number) => void; suffix?: string; hint?: string; decimals?: number; min?: number; max?: number; plain?: boolean
+  label: string; value: number | null | undefined; onChange: (v: number) => void; suffix?: string; hint?: ReactNode; decimals?: number; min?: number; max?: number; plain?: boolean
 }) {
   const id = useId()
   const fmt = (v: number | null | undefined) => (v == null || Number.isNaN(v) ? '' : plain ? String(Math.round(v)) : decimals > 2 ? v.toLocaleString('en-US', { maximumFractionDigits: decimals }) : decimals ? num2(v) : num0(v))

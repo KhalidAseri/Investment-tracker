@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { disablePush, enablePush, pushState, testPush, type PushState } from '../lib/push'
 import { Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
+import { disableLock, enableLock, lockAvailable, lockConfig, setLockMinutes } from '../lib/lock'
 
 type Theme = 'auto' | 'light' | 'dark'
 export const applyTheme = (t: Theme) => {
@@ -144,6 +145,7 @@ export default function Settings() {
         </div>
       </section>
 
+      <AppLock />
       <Notifications />
       <Sharing />
       {appearance}
@@ -196,6 +198,37 @@ const PUSH_TEXT: Record<PushState, string> = {
   denied: 'محظورة من المتصفح',
   unsupported: 'غير مدعومة في هذا المتصفح',
   'needs-install': 'ثبّت التطبيق أولاً',
+}
+
+function AppLock() {
+  const { notify, session } = useStore()
+  const [available, setAvailable] = useState<boolean | null>(null)
+  const [cfg, setCfg] = useState(lockConfig())
+  const [minutes, setMinutes] = useState(String(cfg?.minutes ?? 5))
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { lockAvailable().then(setAvailable) }, [])
+  const toggle = async (on: boolean) => {
+    if (!on) { disableLock(); setCfg(null); notify('أُلغي القفل على هذا الجهاز'); return }
+    setBusy(true)
+    const r = await enableLock(session?.user.email ?? '', Number(minutes))
+    setBusy(false)
+    if (r.ok) { setCfg(lockConfig()); notify('فُعّل القفل بالبصمة') } else notify(r.error ?? 'تعذّر التفعيل')
+  }
+  return (
+    <section className="section">
+      <div className="section-head"><h2>القفل بالبصمة</h2>{cfg && <span className="chip accent ok">مفعّل</span>}</div>
+      <div className="panel stack">
+        {available === false ? (
+          <p className="small muted">هذا الجهاز أو المتصفح لا يدعم بصمة الوجه أو الإصبع للمواقع. على الآيفون أضف التطبيق إلى الشاشة الرئيسية، وعلى الماك استخدم Safari أو Chrome مع Touch ID.</p>
+        ) : <>
+          <Switch label="اطلب Face ID أو البصمة عند فتح التطبيق" hint="يخص هذا الجهاز فقط؛ فعّله على كل جهاز تستخدمه" checked={!!cfg} onChange={(v) => { if (!busy) toggle(v) }} />
+          <SelectField label="أقفله بعد مغادرته" value={minutes} onChange={(v) => { setMinutes(v); if (cfg) { setLockMinutes(Number(v)); setCfg(lockConfig()) } }}
+            options={[{ value: '0', label: 'فوراً' }, { value: '1', label: 'بعد دقيقة' }, { value: '5', label: 'بعد 5 دقائق' }, { value: '15', label: 'بعد 15 دقيقة' }]} />
+          <p className="tiny muted">إن تعذّرت البصمة يمكنك الدخول بكلمة المرور دائماً.</p>
+        </>}
+      </div>
+    </section>
+  )
 }
 
 function Notifications() {

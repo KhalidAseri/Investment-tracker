@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { Account, Fx, Goal, Holding, IbkrConnection, IncomeStream, MoneyEvent, Obligation, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
+import type { Account, Fx, Goal, Holding, IbkrConnection, IncomeStream, MoneyEvent, Obligation, OtherAsset, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions' | 'watchlist' | 'income_streams' | 'obligations' | 'goals'
+type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions' | 'watchlist' | 'income_streams' | 'obligations' | 'goals' | 'other_assets'
 
 interface Store {
   session: Session | null
@@ -22,6 +22,7 @@ interface Store {
   streams: IncomeStream[]
   obligations: Obligation[]
   goals: Goal[]
+  otherAssets: OtherAsset[]
   /** signed in, no plan yet, not a viewer: show the first-run questions */
   needsSetup: boolean
   createPlan: (payload: Record<string, unknown>) => Promise<boolean>
@@ -70,6 +71,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [streams, setStreams] = useState<IncomeStream[]>([])
   const [obligations, setObligations] = useState<Obligation[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
+  const [otherAssets, setOtherAssets] = useState<OtherAsset[]>([])
   const [needsSetup, setNeedsSetup] = useState(false)
   const [fx, setFx] = useState<Fx>({ SAR: 1, USD: 3.75 })
   const [fxUpdatedAt, setFxUpdatedAt] = useState<string | null>(null)
@@ -104,7 +106,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------- load ----------
   const reload = useCallback(async (): Promise<boolean> => {
-    const [st, sl, ac, ho, tx, ev, sn, fr, ib, wl, is, ob, go] = await Promise.all([
+    const [st, sl, ac, ho, tx, ev, sn, fr, ib, wl, is, ob, go, oa] = await Promise.all([
       supabase.from('plan_settings').select('*').maybeSingle(),
       supabase.from('sleeves').select('*'),
       supabase.from('accounts').select('*'),
@@ -118,6 +120,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase.from('income_streams').select('*'),
       supabase.from('obligations').select('*'),
       supabase.from('goals').select('*'),
+      supabase.from('other_assets').select('*'),
     ])
     const firstError = [st, sl, ac, ho, tx, ev, sn, fr].find((r) => r.error)?.error
     if (firstError) throw new Error(firstError.message)
@@ -132,6 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setStreams(byKey((is.data ?? []) as IncomeStream[], 'sort'))
     setObligations(byKey((ob.data ?? []) as Obligation[], 'sort'))
     setGoals(byKey((go.data ?? []) as Goal[], 'sort'))
+    setOtherAssets(byKey((oa.data ?? []) as OtherAsset[], 'sort'))
     const rates: Fx = {}
     let latest: string | null = null
     for (const r of fr.data ?? []) {
@@ -191,6 +195,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'income_streams', filter }, apply<IncomeStream>(setStreams, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'obligations', filter }, apply<Obligation>(setObligations, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'goals', filter }, apply<Goal>(setGoals, 'sort'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'other_assets', filter }, apply<OtherAsset>(setOtherAssets, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter }, (p) => {
         setTransactions((rows) => {
           if (p.eventType === 'DELETE') return rows.filter((r) => r.id !== (p.old as Transaction).id)
@@ -229,7 +234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id, notify, readOnly])
 
   const setterFor = (table: Table): React.Dispatch<React.SetStateAction<any[]>> =>
-    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions, watchlist: setWatchlist, income_streams: setStreams, obligations: setObligations, goals: setGoals } as const)[table] as any
+    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions, watchlist: setWatchlist, income_streams: setStreams, obligations: setObligations, goals: setGoals, other_assets: setOtherAssets } as const)[table] as any
 
   const upsert = useCallback(async <T extends Record<string, any>>(table: Table, row: T): Promise<T | null> => {
     begin()
@@ -324,14 +329,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([]); setWatchlist([]); setStreams([]); setObligations([]); setGoals([]); setNeedsSetup(false); setIbkr(null)
+    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([]); setWatchlist([]); setStreams([]); setObligations([]); setGoals([]); setOtherAssets([]); setNeedsSetup(false); setIbkr(null)
   }, [])
 
   const value = useMemo<Store>(() => ({
-    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals,
+    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets,
     needsSetup, createPlan, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut,
-  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals,
+  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets,
     needsSetup, createPlan, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut])
 

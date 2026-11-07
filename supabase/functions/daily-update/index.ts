@@ -164,7 +164,7 @@ async function syncIbkr(admin: SupabaseClient, uid: string, token: string, query
     .from("accounts").select("id").eq("user_id", uid).eq("is_ibkr", true).order("sort").limit(1).maybeSingle();
   if (!acct) {
     const ins = await admin.from("accounts")
-      .insert({ user_id: uid, name: "Interactive Brokers", kind: "broker", is_ibkr: true, sort: 1 }).select("id").single();
+      .insert({ user_id: uid, name: "Interactive Brokers", kind: "broker", is_ibkr: true, country: "INTL", sort: 1 }).select("id").single();
     acct = ins.data;
   }
   const accountId = acct!.id as string;
@@ -177,14 +177,17 @@ async function syncIbkr(admin: SupabaseClient, uid: string, token: string, query
   const now = new Date().toISOString();
   const seen = new Set<string>();
   const byConid = new Map<string, Record<string, any>>();
+  // first link: positions already owned are brought in as transfers, so they don't count as profit
+  const firstSync = !holdings.some((x) => x.ibkr_conid);
+  const addRows: Array<Record<string, unknown>> = [];
 
-  const upsertPosition = async (conid: string, symbol: string, name: string, qty: number, price: number, currency: string, sleeveId: string | null) => {
+  const upsertPosition = async (conid: string, symbol: string, name: string, qty: number, price: number, currency: string, sleeveId: string | null, costSar: number | null = null) => {
     seen.add(conid);
     let h = holdings.find((x) => x.ibkr_conid === conid);
     if (!h && symbol) {
       h = holdings.find((x) => !x.ibkr_conid && x.account_id === accountId && x.symbol && baseSymbol(x.symbol) === baseSymbol(symbol));
     }
-    const patch = { ibkr_conid: conid, quantity: qty, price, currency, price_source: "ibkr", price_updated_at: now, archived: false };
+    const patch: Record<string, unknown> = { ibkr_conid: conid, quantity: qty, price, currency, price_source: "ibkr", price_updated_at: now, archived: false, ...(costSar != null && costSar > 0 ? { cost_basis: Math.round(costSar * 100) / 100 } : {}) };
     if (h) {
       await admin.from("holdings").update(patch).eq("id", h.id);
       byConid.set(conid, { ...h, ...patch });
@@ -193,12 +196,17 @@ async function syncIbkr(admin: SupabaseClient, uid: string, token: string, query
         user_id: uid, account_id: accountId, sleeve_id: sleeveId, name, symbol, ...patch,
       }).select("*").single();
       if (ins.data) byConid.set(conid, ins.data);
+      if (ins.data && firstSync && Math.abs(qty * price) > 0) {
+        addRows.push({ user_id: uid, account_id: accountId, holding_id: ins.data.id, sleeve_id: sleeveId, tx_date: riyadhDate(), kind: "transfer",
+          amount_sar: round2(qty * price * rate(currency)), currency: "SAR", note: `إضافة أصل قائم: ${name}`, source: "ibkr", external_id: `A${conid}` });
+      }
     }
   };
 
   for (const p of positions) {
     if (!p.conid) continue;
-    await upsertPosition(p.conid, p.symbol ?? "", p.description || p.symbol || p.conid, num(p.position), num(p.markPrice), (p.currency || "USD").toUpperCase(), null);
+    await upsertPosition(p.conid, p.symbol ?? "", p.description || p.symbol || p.conid, num(p.position), num(p.markPrice), (p.currency || "USD").toUpperCase(), null,
+      p.costBasisMoney != null && p.costBasisMoney !== "" ? Math.abs(num(p.costBasisMoney)) * rate(p.currency || "USD") : null);
   }
   for (const c of cash) {
     const cur = c.currency.toUpperCase();
@@ -243,6 +251,7 @@ async function syncIbkr(admin: SupabaseClient, uid: string, token: string, query
       note: [c.symbol, c.description].filter(Boolean).join(" · ") || type, source: "ibkr", external_id: `C${id}`,
     });
   }
+  txRows.push(...addRows);
   if (txRows.length) {
     const { error } = await admin.from("transactions").upsert(txRows, { onConflict: "user_id,external_id", ignoreDuplicates: true });
     if (error) throw new Error(`تعذّر حفظ العمليات: ${error.message}`);
