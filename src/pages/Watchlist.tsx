@@ -6,6 +6,8 @@ import { ago, num2, pct, sar } from '../lib/format'
 import type { WatchItem } from '../lib/types'
 import { Empty, NumberField, SelectField, Sheet, TextField } from '../components/ui'
 import { IconCheck, IconPlus, IconRefresh } from '../components/icons'
+import { SymbolSearch } from '../components/SymbolSearch'
+import { quoteSymbol } from '../lib/market'
 
 const CONDITIONS: Array<{ key: 'c_size' | 'c_shariah' | 'c_quality' | 'c_thesis'; label: string; hint: string }> = [
   { key: 'c_size', label: 'شركة كبيرة وقيادية', hint: 'من أكبر الشركات في قطاعها، وسيولة سهمها عالية' },
@@ -138,11 +140,11 @@ function WatchSheet({ initial, readOnly, perStock, room, directSleeveId, onClose
       fair_value: w.fair_value ? Number(w.fair_value) : null, margin_pct: Number(w.margin_pct ?? 20),
       c_size: !!w.c_size, c_shariah: !!w.c_shariah, c_quality: !!w.c_quality, c_thesis: !!w.c_thesis,
       thesis: w.thesis?.trim() || null, exit_rule: w.exit_rule?.trim() || null, note: w.note?.trim() || null, sort: w.sort ?? 99,
-      ...(symbolChanged ? { price: null, price_updated_at: null } : {}),
+      ...(symbolChanged ? { price: w.price ?? null, price_updated_at: w.price_updated_at ?? null } : {}),
     })
     if (!saved) return
     onClose()
-    if (saved.symbol && (symbolChanged || saved.price == null)) {
+    if (saved.symbol && saved.price == null) {
       notify('حُفظ السهم؛ جارٍ جلب سعره…')
       const r = await refreshMarket('prices')
       notify(r.ok ? 'حُدّث السعر' : r.message)
@@ -165,6 +167,11 @@ function WatchSheet({ initial, readOnly, perStock, room, directSleeveId, onClose
       <button className="btn primary" onClick={saveIt}>حفظ</button>
     </>}>
       <fieldset className="stack" disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}>
+        {!readOnly && <SymbolSearch label={w.symbol ? 'غيّر السهم بالبحث' : 'ابحث عن السهم'} onPick={async (r) => {
+          set({ name: w.name?.trim() ? w.name : r.name, symbol: r.symbol, price: null, price_updated_at: null })
+          const q = await quoteSymbol(r.symbol)
+          if (q) set({ price: q.price, currency: q.currency, price_updated_at: new Date().toISOString() })
+        }} />}
         <div className="grid2">
           <TextField label="اسم الشركة" value={w.name ?? ''} onChange={(v) => set({ name: v })} placeholder="مثال: مصرف الراجحي" />
           <TextField label="رمز التداول" value={w.symbol ?? ''} onChange={(v) => set({ symbol: v.toUpperCase() })} ltr placeholder="1120.SR"

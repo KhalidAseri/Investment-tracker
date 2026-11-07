@@ -65,7 +65,7 @@ export function TextField({ label, value, onChange, placeholder, hint, ltr }: { 
   return (
     <label className="field" htmlFor={id}>
       <span>{label}</span>
-      <input id={id} className="input" value={value} placeholder={placeholder} dir={ltr ? 'ltr' : undefined} onChange={(e) => onChange(e.target.value)} />
+      <input id={id} className="input" value={value} placeholder={placeholder} dir={ltr ? 'ltr' : 'auto'} onChange={(e) => onChange(e.target.value)} />
       {hint && <small>{hint}</small>}
     </label>
   )

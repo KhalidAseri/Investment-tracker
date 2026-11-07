@@ -29,7 +29,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const riyadhDate = (d = new Date()) => new Date(d.getTime() + 3 * 3600e3).toISOString().slice(0, 10);
 
 // ---------- market data ----------
-async function yahooQuote(symbol: string): Promise<{ price: number; currency: string } | null> {
+async function yahooQuote(symbol: string): Promise<{ price: number; currency: string; name: string; type: string; exchange: string } | null> {
   for (const host of ["query1", "query2"]) {
     try {
       const r = await fetch(
@@ -46,7 +46,10 @@ async function yahooQuote(symbol: string): Promise<{ price: number; currency: st
         price = price / 100;
         currency = "GBP";
       }
-      return { price, currency: currency.toUpperCase() };
+      return {
+        price, currency: currency.toUpperCase(), name: String(meta?.longName ?? meta?.shortName ?? symbol),
+        type: String(meta?.instrumentType ?? ""), exchange: String(meta?.fullExchangeName ?? meta?.exchangeName ?? ""),
+      };
     } catch (_) {
       // try next host
     }
@@ -54,9 +57,37 @@ async function yahooQuote(symbol: string): Promise<{ price: number; currency: st
   return null;
 }
 
+/** Symbol search: tickers like 2222 or ISWD, or names in English. */
+async function yahooSearch(q: string) {
+  for (const host of ["query2", "query1"]) {
+    try {
+      const r = await fetch(
+        `https://${host}.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=12&newsCount=0&listsCount=0`,
+        { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } },
+      );
+      if (!r.ok) continue;
+      const j = await r.json();
+      return ((j?.quotes ?? []) as Array<Record<string, unknown>>)
+        .filter((x) => x.symbol && ["EQUITY", "ETF", "MUTUALFUND", "INDEX", "CURRENCY", "CRYPTOCURRENCY"].includes(String(x.quoteType)))
+        .map((x) => ({
+          symbol: String(x.symbol), name: String(x.longname ?? x.shortname ?? x.symbol),
+          exchange: String(x.exchDisp ?? x.exchange ?? ""), type: String(x.quoteType),
+        }));
+    } catch (_) {
+      // try the other host
+    }
+  }
+  return [];
+}
+
 async function refreshFx(admin: SupabaseClient): Promise<Fx> {
   const fx: Fx = { SAR: 1, USD: 3.75, AED: 3.75 / 3.6725 };
   const pairs: Record<string, string> = { GBP: "GBPUSD=X", EUR: "EURUSD=X", HKD: "HKDUSD=X", SGD: "SGDUSD=X", JPY: "JPYUSD=X" };
+  // any other currency a holding is priced in (e.g. CHF, KWD from a market search)
+  const { data: held } = await admin.from("holdings").select("currency");
+  for (const c of new Set((held ?? []).map((r) => String(r.currency ?? "").toUpperCase()))) {
+    if (/^[A-Z]{3}$/.test(c) && !(c in pairs) && !(c in fx)) pairs[c] = `${c}USD=X`;
+  }
   const now = new Date().toISOString();
   const rows = [
     { currency: "SAR", rate_to_sar: 1, updated_at: now },
@@ -553,7 +584,7 @@ async function writeSnapshot(admin: SupabaseClient, uid: string, fx: Fx) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-  let body: { mode?: string } = {};
+  let body: { mode?: string; q?: string; symbol?: string } = {};
   try { body = await req.json(); } catch (_) { /* empty body */ }
   const mode = body.mode ?? "all";
 
@@ -572,6 +603,15 @@ Deno.serve(async (req) => {
     if (mode === "vapid") {
       const v = await ensureVapid(admin);
       return json({ ok: true, publicKey: v.public_key });
+    }
+    if (mode === "search") {
+      const q = String(body.q ?? "").trim().slice(0, 60);
+      return json({ ok: true, results: q ? await yahooSearch(q) : [] });
+    }
+    if (mode === "quote") {
+      const sym = String(body.symbol ?? "").trim().toUpperCase().slice(0, 30);
+      const quote = sym ? await yahooQuote(sym) : null;
+      return json({ ok: !!quote, quote });
     }
     if (mode === "push-test") {
       const sent = await sendPush(admin, uid, { title: "مسار", body: "الإشعارات تعمل على هذا الجهاز. ستصلك تنبيهات المواعيد والأوزان وفرص المراقبة هنا.", tag: "test" });

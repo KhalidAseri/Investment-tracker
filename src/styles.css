@@ -362,3 +362,13 @@ fieldset:disabled .check { cursor: default; }
 .stepper li:not([aria-current='step']) em { display: none; }
 .stepper li:not([aria-current='step']) { padding: 6px; }
 @media (min-width: 720px) { .stepper li:not([aria-current='step']) em { display: inline; } .stepper li:not([aria-current='step']) { padding: 6px 10px 6px 12px; } }
+
+/* ---------- symbol search ---------- */
+.symbol-search { display: flex; flex-direction: column; gap: 8px; }
+.symbol-results { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; max-height: 320px; overflow-y: auto; background: var(--surface); }
+.symbol-results li + li { border-top: 1px solid var(--line); }
+.symbol-results button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px; cursor: pointer; }
+.symbol-results button:hover, .symbol-results button:focus-visible { background: color-mix(in srgb, var(--sunken) 70%, transparent); }
+.symbol-results .name { display: block; }
+.symbol-results .meta { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.symbol-results .pick { color: var(--accent); font-size: 13px; font-weight: 600; }

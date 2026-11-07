@@ -7,6 +7,8 @@ import { FREQ_LABEL, PER_YEAR, hijriLabel, nextHaul, payoutPerPayment } from '..
 import type { Holding } from '../lib/types'
 import { NumberField, Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
+import { SymbolSearch } from '../components/SymbolSearch'
+import { guessSleeve, quoteSymbol, type SymbolResult } from '../lib/market'
 
 const CURRENCIES = ['SAR', 'USD', 'GBP', 'EUR', 'AED', 'HKD', 'SGD', 'JPY']
 const SOURCE_LABEL = { manual: 'يدوي', yahoo: 'آلي من السوق', ibkr: 'من IBKR', nav: 'آلي من تقرير الصندوق' } as const
@@ -152,11 +154,24 @@ export default function Holdings() {
 }
 
 export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose: () => void }) {
-  const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals } = useStore()
+  const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals, refreshMarket } = useStore()
   const [h, setH] = useState<Partial<Holding>>(initial)
   const [lumpSum, setLumpSum] = useState(initial.price_source === 'manual' && Number(initial.quantity) === 1 && Number(initial.price) > 50)
   const set = (patch: Partial<Holding>) => setH((x) => ({ ...x, ...patch }))
   const isIbkr = h.price_source === 'ibkr'
+  const [showSearch, setShowSearch] = useState(!initial.id)
+  const [quoting, setQuoting] = useState(false)
+  const pick = async (r: SymbolResult) => {
+    const keepName = !!h.name?.trim()
+    set({ symbol: r.symbol, price_source: 'yahoo', ...(keepName ? {} : { name: r.name }), ...(h.sleeve_id || h.goal_id ? {} : { sleeve_id: guessSleeve(r, sleeves) }) })
+    setLumpSum(false)
+    setShowSearch(false)
+    setQuoting(true)
+    const q = await quoteSymbol(r.symbol)
+    setQuoting(false)
+    if (q) set({ price: q.price, currency: q.currency, price_updated_at: new Date().toISOString() })
+    else notify('تعذّر جلب السعر الآن؛ يتحدث مع التحديث القادم')
+  }
   const value = Number(h.quantity ?? 0) * Number(h.price ?? 0) * rateOf(h.currency, fx)
   const saveIt = async () => {
     if (!h.name?.trim()) { notify('اكتب اسم الأصل'); return }
@@ -169,9 +184,15 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
       payout_rate: h.payout_rate ?? null, payout_per_unit: h.payout_per_unit ?? null, payout_nominal: h.payout_nominal || null, maturity_date: h.maturity_date || null,
       goal_id: h.goal_id || null, goal_bucket: h.goal_id ? h.goal_bucket ?? null : null, ...(h.goal_id ? { sleeve_id: null } : {}),
       ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
+      ...(h.price_source === 'yahoo' && h.price_updated_at && h.price_updated_at !== initial.price_updated_at ? { price_updated_at: h.price_updated_at } : {}),
     }
     const ok = await upsert('holdings', row)
-    if (ok) { notify('حُفظ الأصل'); onClose() }
+    if (ok) {
+      notify('حُفظ الأصل')
+      onClose()
+      // a currency the app has no rate for yet: fetch it now rather than at the next daily run
+      if (row.currency && !(row.currency in fx)) refreshMarket('prices')
+    }
   }
   return (
     <Sheet title={h.id ? 'تعديل أصل' : 'أصل جديد'} onClose={onClose} footer={<>
@@ -179,6 +200,13 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
       <button className="btn primary" onClick={saveIt}>حفظ</button>
     </>}>
       <div className="stack">
+        {!isIbkr && (showSearch
+          ? <SymbolSearch onPick={pick} hint="الأسهم والصناديق المتداولة في تداول والأسواق العالمية. صناديق الاستثمار غير المدرجة (مثل صناديق الراجحي) أضفها يدوياً." />
+          : <button type="button" className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setShowSearch(true)}>{h.price_source === 'yahoo' ? 'غيّر الرمز من السوق' : 'اربطه بسعر السوق بالبحث'}</button>)}
+        {quoting && <p className="small muted" role="status">نجلب السعر…</p>}
+        {!quoting && h.price_source === 'yahoo' && h.symbol && Number(h.price) > 0 && (
+          <div className="callout small">مرتبط بالرمز <b className="ltr">{h.symbol}</b> بسعر <b className="ltr">{num2(Number(h.price))} {h.currency}</b>، ويتحدث يومياً.</div>
+        )}
         <TextField label="الاسم" value={h.name ?? ''} onChange={(v) => set({ name: v })} placeholder="مثال: صندوق البلاد للذهب" />
         {goals.some((g) => !g.archived) && (
           <SelectField label="يتبع محفظة" value={h.goal_id ?? ''} onChange={(v) => {
@@ -209,7 +237,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
         {isIbkr && <p className="small muted">يتحدث هذا الأصل تلقائياً من تقرير IBKR اليومي؛ يمكنك تغيير اسمه وطبقته فقط.</p>}
         {h.price_source === 'yahoo' && (
           <TextField label="رمز التداول" value={h.symbol ?? ''} onChange={(v) => set({ symbol: v.toUpperCase() })} ltr
-            hint="لتداول أضف .SR (مثل 9405.SR)، ولسوق لندن أضف .L (مثل ISWD.L)، والأمريكي بلا إضافة" />
+            hint="يُملأ تلقائياً عند اختيار الأصل من البحث" />
         )}
         {!isIbkr && h.price_source === 'manual' && (
           <Switch label="أعرف القيمة الإجمالية فقط" hint="مناسب لبرنامج الادخار أو الحسابات التي لا تعرض الوحدات"
@@ -226,7 +254,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
           </div>
         ))}
         {!isIbkr && (
-          <SelectField label="العملة" value={h.currency ?? 'SAR'} onChange={(v) => set({ currency: v })} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
+          <SelectField label="العملة" value={h.currency ?? 'SAR'} onChange={(v) => set({ currency: v })} options={[...new Set([...CURRENCIES, h.currency ?? 'SAR'])].map((c) => ({ value: c, label: c }))} />
         )}
         <p className="small">القيمة بالريال: <b className="figure">{sar(value)}</b></p>
         <PayoutFields h={h} set={set} />

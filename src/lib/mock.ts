@@ -161,7 +161,17 @@ export function createMockClient(): any {
       db.obligations = p.obligations.map((x: Row) => ({ id: id(), user_id: uid, note: null, ...x }))
       return { data: true, error: null }
     },
-    functions: { invoke: async () => ({ data: { results: [{ prices: { updated: 2, failed: [] }, snapshot: {} }] }, error: null }) },
+    functions: { invoke: async (_name: string, opts?: { body?: Row }) => {
+      const mode = opts?.body?.mode
+      if (mode === 'search') return { data: { results: [
+        { symbol: '2222.SR', name: 'Saudi Arabian Oil Company', exchange: 'Saudi Stock Exchange', type: 'EQUITY' },
+        { symbol: '9405.SR', name: 'Albilad Gold ETF', exchange: 'Saudi Stock Exchange', type: 'ETF' },
+        { symbol: 'ISWD.L', name: 'iShares MSCI World Islamic UCITS ETF USD (Dist)', exchange: 'London', type: 'ETF' },
+        { symbol: '4340.SR', name: 'Al Rajhi REIT Fund', exchange: 'Saudi Stock Exchange', type: 'EQUITY' },
+      ] }, error: null }
+      if (mode === 'quote') return { data: { quote: { price: 38.42, currency: 'USD', name: 'iShares MSCI World Islamic UCITS ETF USD (Dist)', type: 'ETF', exchange: 'London' } }, error: null }
+      return { data: { results: [{ prices: { updated: 2, failed: [] }, snapshot: {} }] }, error: null }
+    } },
     channel: () => { const c: any = { on: () => c, subscribe: () => c }; return c },
     removeChannel: () => {},
   }
