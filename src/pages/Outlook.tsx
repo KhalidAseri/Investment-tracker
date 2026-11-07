@@ -50,16 +50,16 @@ export default function Outlook() {
 
       <section className="section">
         <div className="section-head"><h2>خصّص خطتك</h2><button className="btn quiet small" onClick={() => {
-          updateSettings({ monthly_income_target: 20000, withdrawal_rate: 4, expected_return: 6.5, return_low: 5, return_high: 8, inflation_rate: 2.5, annual_contribution: 300000, contribution_growth: 4, independence_year: 2038, include_mortgage: false })
-          notify('أُعيدت قيم الدليل')
-        }}>قيم الدليل</button></div>
+          updateSettings({ withdrawal_rate: 4, expected_return: 6.5, return_low: 5, return_high: 8, inflation_rate: 2.5 })
+          notify('أُعيدت افتراضات السوق العامة')
+        }}>الافتراضات العامة</button></div>
         <div className="panel knobs">
           <Knob label="الدخل الشهري الذي تريده" value={s.monthly_income_target} min={5000} max={60000} step={500}
             display={sar(s.monthly_income_target)} hint="بقيمة ريال اليوم" onChange={(v) => updateSettings({ monthly_income_target: v })} />
           <Knob label="نسبة السحب السنوية" value={s.withdrawal_rate} min={3} max={5.5} step={0.1}
             display={pct(s.withdrawal_rate)} hint="3.5% آمنة جداً لعمر طويل، و4% مع قواعد الحماية" onChange={(v) => updateSettings({ withdrawal_rate: Math.round(v * 10) / 10 })} />
           <Knob label="الإيداع السنوي" value={s.annual_contribution} min={0} max={900000} step={10000}
-            display={sar(s.annual_contribution)} hint={`يزيد ${pct(s.contribution_growth)} كل عام`} onChange={(v) => updateSettings({ annual_contribution: v })} />
+            display={sar(s.annual_contribution)} hint={`${s.contribution_mode !== 'manual' ? 'محسوب من وضعك المالي؛ تحريكه يجعله يدوياً. ' : ''}يزيد ${pct(s.contribution_growth)} كل عام`} onChange={(v) => updateSettings({ annual_contribution: v, contribution_mode: 'manual' })} />
           <Knob label="نمو الإيداع السنوي" value={s.contribution_growth} min={0} max={10} step={0.5}
             display={pct(s.contribution_growth)} onChange={(v) => updateSettings({ contribution_growth: v })} />
           <Knob label="العائد المتوقع" value={s.expected_return} min={3} max={10} step={0.25}
@@ -69,7 +69,7 @@ export default function Outlook() {
             display={pct(s.inflation_rate, 2)} onChange={(v) => updateSettings({ inflation_rate: v })} />
           <Knob label="سنة الاستقلال المستهدفة" value={s.independence_year} min={thisYear + 3} max={thisYear + 25} step={1}
             display={`${s.independence_year} (سن ${s.independence_year - birth})`} onChange={(v) => updateSettings({ independence_year: v, glide_start_year: Math.min(s.glide_start_year, v - 1) })} />
-          <Switch label="أضف قسط التمويل العقاري للدخل المطلوب" hint={`${sar(s.mortgage_monthly)} شهرياً حتى ${s.mortgage_end_year}`}
+          <Switch label="أضف التزاماتك الشهرية فوق الدخل المستهدف" hint={s.mortgage_monthly > 0 ? `${sar(s.mortgage_monthly)} شهرياً حتى ${s.mortgage_end_year}؛ تعدّلها من «وضعي المالي»` : 'لا التزامات مسجلة في «وضعي المالي»'}
             checked={s.include_mortgage} onChange={(v) => updateSettings({ include_mortgage: v })} />
         </div>
         <p className="tiny muted" style={{ marginTop: 8 }}>{readOnly ? 'جرّب الأرقام بحرية؛ تجاربك لا تُحفظ ولا تغيّر الخطة.' : 'كل تغيير يُحفظ ويظهر فوراً على أجهزتك الأخرى.'}</p>

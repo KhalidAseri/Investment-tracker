@@ -391,6 +391,16 @@ function payoutAmount(h: Record<string, any>, fx: Fx): number | null {
   const unit = h.payout_nominal ? Number(h.payout_nominal) : Number(h.price) || 0;
   return (q * unit * r * Number(h.payout_rate) / 100) / per;
 }
+function nextStreamDate(st: Record<string, any>, fromISO: string): string | null {
+  if (st.next_date && st.next_date >= fromISO) return st.next_date;
+  if (st.frequency !== "yearly" || (!st.month && !st.next_date)) return null;
+  const from = utcNoon(fromISO);
+  const m = st.month ?? Number(String(st.next_date).slice(5, 7));
+  const day = st.next_date ? Number(String(st.next_date).slice(8, 10)) : 1;
+  let d = new Date(Date.UTC(from.getUTCFullYear(), m - 1, day, 12));
+  if (d < from) d = new Date(Date.UTC(from.getUTCFullYear() + 1, m - 1, day, 12));
+  return isoOf(d);
+}
 const daysUntil = (from: string, to: string) => Math.round((utcNoon(to).getTime() - utcNoon(from).getTime()) / DAY);
 const whenText = (days: number) => (days <= 0 ? "اليوم" : days === 1 ? "غداً" : `بعد ${days} أيام`);
 
@@ -454,6 +464,23 @@ async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean, 
         }
       }
     }
+    // the monthly deposit day, and expected extra income
+    if (s && s.deposit_day && Number(today.slice(8, 10)) === Number(s.deposit_day)) {
+      const varies = (s.extra as Record<string, unknown> | null)?.monthly_varies;
+      alerts.push({ key: `dep:${today.slice(0, 7)}`, tag: "deposit", title: "موعد إيداعك الشهري",
+        body: varies || !s.monthly_invest ? "اكتب مبلغ هذا الشهر في مخطط الإيداع ليقسّمه على الطبقات والأهداف." : `أودع ${fmt0(Number(s.monthly_invest))} ريال، ومخطط الإيداع يقسّمه على الطبقات والأهداف.` });
+    }
+    const { data: streams } = await admin.from("income_streams").select("*").eq("user_id", uid);
+    for (const st of streams ?? []) {
+      if (st.frequency === "monthly") continue;
+      const due = nextStreamDate(st, today);
+      if (!due) continue;
+      const days = daysUntil(today, due);
+      if (days < 0 || days > 3) continue;
+      const invest = (Number(st.amount) * Number(st.invest_pct)) / 100;
+      alerts.push({ key: `st:${st.id}:${due}`, tag: `st-${st.id}`, title: `${st.name} ${whenText(days)}`,
+        body: invest ? `المخطط له للاستثمار ${fmt0(invest)} ريال. عند وصوله افتح مخطط الإيداع ليقسّمه لك.` : "عند وصوله افتح مخطط الإيداع ليقسّمه لك." });
+    }
     // monthly income transfer, once income has started
     if (s && s.income_start_year && Number(s.income_start_year) <= Number(today.slice(0, 4))) {
       const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
@@ -494,7 +521,7 @@ async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean, 
 
 async function writeSnapshot(admin: SupabaseClient, uid: string, fx: Fx) {
   const [{ data: holdings }, { data: accounts }] = await Promise.all([
-    admin.from("holdings").select("account_id, sleeve_id, quantity, price, currency, archived").eq("user_id", uid),
+    admin.from("holdings").select("account_id, sleeve_id, goal_id, quantity, price, currency, archived").eq("user_id", uid),
     admin.from("accounts").select("id, exclude_from_portfolio").eq("user_id", uid),
   ]);
   const excluded = new Set((accounts ?? []).filter((a) => a.exclude_from_portfolio).map((a) => a.id));
@@ -502,7 +529,7 @@ async function writeSnapshot(admin: SupabaseClient, uid: string, fx: Fx) {
   const byAccount: Record<string, number> = {};
   let total = 0;
   for (const h of holdings ?? []) {
-    if (h.archived || (h.account_id && excluded.has(h.account_id))) continue;
+    if (h.archived || h.goal_id || (h.account_id && excluded.has(h.account_id))) continue;
     const v = Number(h.quantity) * Number(h.price) * (fx[String(h.currency).toUpperCase()] ?? 1);
     if (!Number.isFinite(v)) continue;
     total += v;

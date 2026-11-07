@@ -255,7 +255,7 @@ function Sharing() {
     setBusy(false)
     if (error) { notify(/duplicate|unique/i.test(error.message) ? 'هذا البريد مضاف مسبقاً' : 'تعذّرت الإضافة: ' + error.message); return }
     setEmail('')
-    notify('أُضيف. أرسل لها رابط التطبيق لتنشئ حسابها بهذا البريد.')
+    notify('أُضيف. أرسل له رابط التطبيق لينشئ حسابه بهذا البريد.')
     load()
   }
   const removeViewer = async (v: Viewer) => {
@@ -268,7 +268,7 @@ function Sharing() {
     <section className="section">
       <div className="section-head"><h2>المتابعة العائلية</h2></div>
       <div className="panel stack">
-        <p className="small">أضف بريد زوجتك لتتابع التقدم من جهازها: ترى المحفظة والخطة والتوقعات والتقويم، ولا تستطيع التعديل. لا ترى رمز IBKR.</p>
+        <p className="small">أضف بريد من تريد أن يتابع التقدم من جهازه، مثل زوجتك أو أحد أفراد أسرتك: يرى المحفظة والخطة والتوقعات والتقويم، ولا يستطيع التعديل، ولا يرى رمز IBKR.</p>
         {viewers && viewers.length > 0 && (
           <div className="panel flush">
             {viewers.map((v) => (
@@ -286,9 +286,9 @@ function Sharing() {
           <button className="btn primary" disabled={busy} onClick={add}>أضف</button>
         </div>
         <ol className="steps small" style={{ margin: 0 }}>
-          <li>أضف بريدها هنا.</li>
-          <li>أرسل لها رابط التطبيق، وتختار «أول مرة؟ أنشئ حسابك» بالبريد نفسه وكلمة مرور خاصة بها.</li>
-          <li>تثبّت التطبيق على جوالها مثلك، فترى التقدم أولاً بأول.</li>
+          <li>أضف بريده هنا.</li>
+          <li>أرسل له رابط التطبيق، ويختار «أول مرة؟ أنشئ حسابك» بالبريد نفسه وكلمة مرور خاصة به.</li>
+          <li>يثبّت التطبيق على جواله، فيرى التقدم أولاً بأول.</li>
         </ol>
       </div>
     </section>

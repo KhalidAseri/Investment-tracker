@@ -299,8 +299,8 @@ export function incomeEngine(args: {
     { key: 'review', kind: 'review', date: d(rm, 5), title: 'راجع واعتمد دخل السنة', detail: 'احسب الدخل بالقاعدة، وقارن الأوزان، وحدّد ما يُباع' },
   ]
   if (sellAmount > 0 || !started) {
-    steps.push({ key: 'sell', kind: 'sell', date: d(rm, 7), title: 'البيع لتعبئة احتياطي الدخل', amount: sellAmount || undefined, detail: 'من الطبقات الأعلى من وزنها، في IBKR غالباً' })
-    steps.push({ key: 'move', kind: 'transfer', date: d(rm, 10), title: 'تحويل حصيلة البيع إلى الراجحي المالية', detail: 'تُحفظ في صندوق مرابحة أو سيولة ضمن الاحتياطي' })
+    steps.push({ key: 'sell', kind: 'sell', date: d(rm, 7), title: 'البيع لتعبئة احتياطي الدخل', amount: sellAmount || undefined, detail: 'من الطبقات الأعلى من وزنها المستهدف' })
+    steps.push({ key: 'move', kind: 'transfer', date: d(rm, 10), title: 'تحويل حصيلة البيع إلى حساب الاحتياطي', detail: 'تُحفظ في صندوق مرابحة أو سيولة' })
   }
   for (let k = 0; k < 12; k++) {
     steps.push({ key: `m${k}`, kind: 'monthly', date: d(rm + k, s.income_transfer_day), title: 'التحويل الشهري', amount: monthly })
@@ -341,7 +341,7 @@ export function virtualOccurrences(args: { holdings: Holding[]; fx: Fx; s: PlanS
       const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + k, s.income_transfer_day, 12))
       if (d < from || d > to) continue
       const date = isoOf(d)
-      out.push({ route: 'income', date, event: vEvent(`t:${date}`, 'التحويل الشهري إلى حسابك', 'withdrawal', date, Math.round(engine.monthly), 'من احتياطي الدخل في الراجحي المالية') })
+      out.push({ route: 'income', date, event: vEvent(`t:${date}`, 'التحويل الشهري إلى حسابك', 'withdrawal', date, Math.round(engine.monthly), 'من احتياطي الدخل') })
     }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))

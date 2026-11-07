@@ -3,24 +3,42 @@ import { useStore } from '../lib/store'
 import { sleeveColors, useDerived } from '../lib/derived'
 import { planDeposit, rateOf, type DepositLine } from '../lib/calc'
 import { num0, num2, parseNum, pct, sar, todayISO } from '../lib/format'
-import type { Holding } from '../lib/types'
-import { Segmented, Sheet } from '../components/ui'
+import type { Goal, Holding } from '../lib/types'
+import { NumberField, Segmented, Sheet, Switch } from '../components/ui'
 
 export default function Deposit() {
-  const { settings, sleeves, holdings } = useStore()
+  const { settings, sleeves, holdings, streams, accounts } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const [text, setText] = useState('10,000')
   const [mode, setMode] = useState<'gaps' | 'weights'>('gaps')
   const [months, setMonths] = useState<'1' | '3' | '6'>('1')
   const [recording, setRecording] = useState(false)
+  const [useGoals, setUseGoals] = useState(true)
+  const [goalOverride, setGoalOverride] = useState<Record<string, number>>({})
   const amount = parseNum(text)
-  const lines = useMemo(() => (d && settings && amount > 0 ? planDeposit(amount, sleeves, d.totals, settings, mode) : []), [amount, sleeves, d, settings, mode])
-  if (!settings || !d) return null
   const n = Number(months)
+  const goalLines = useMemo(() => {
+    if (!d || !useGoals || amount <= 0) return [] as Array<{ goal: Goal; amount: number; suggested: number }>
+    let left = amount
+    return [...d.goalStats].sort((a, b) => a.goal.priority - b.goal.priority).map((g) => {
+      const gap = Math.max(0, Number(g.goal.target_amount) - g.value)
+      const suggested = Math.round(Math.min(g.need * n, gap) / 100) * 100
+      const want = goalOverride[g.goal.id] ?? suggested
+      const take = Math.max(0, Math.min(want, left))
+      left -= take
+      return { goal: g.goal, amount: take, suggested }
+    }).filter((l) => l.amount > 0 || goalOverride[l.goal.id] != null)
+  }, [d, useGoals, amount, n, goalOverride])
+  const goalsTotal = goalLines.reduce((a, l) => a + l.amount, 0)
+  const fiAmount = Math.max(0, amount - goalsTotal)
+  const lines = useMemo(() => (d && settings && fiAmount > 0 ? planDeposit(fiAmount, sleeves, d.totals, settings, mode) : []), [fiAmount, sleeves, d, settings, mode])
+  if (!settings || !d) return null
+  const monthlyQuick = Number(settings.monthly_invest) || 0
   const quick = [
-    { label: '5,000', v: 5000 }, { label: '10,000', v: 10000 },
-    { label: 'المكافأة 105,000', v: 105000 }, { label: 'السلفة 250,000', v: 250000 },
+    ...(monthlyQuick > 0 ? [{ label: `الشهري ${num0(monthlyQuick)}`, v: monthlyQuick }] : [{ label: '5,000', v: 5000 }, { label: '10,000', v: 10000 }]),
+    ...streams.filter((st) => st.frequency !== 'monthly' && Number(st.amount) > 0).slice(0, 3)
+      .map((st) => { const v = Math.round(Number(st.amount) * (Number(st.invest_pct) / 100)); return { label: `${st.name} ${num0(v)}`, v } }),
   ]
   const suggestion = (sleeveId: string) => {
     const note = sleeves.find((s) => s.id === sleeveId)?.note
@@ -37,7 +55,7 @@ export default function Deposit() {
           onChange={(e) => setText(e.target.value)}
           onBlur={() => setText(amount ? num0(amount) : '')} />
         <div className="quick">
-          {quick.map((q) => <button key={q.v} className="btn ghost small" onClick={() => setText(num0(q.v))}>{q.label}</button>)}
+          {quick.map((q) => <button key={q.label} className="btn ghost small" onClick={() => setText(num0(q.v))}>{q.label}</button>)}
         </div>
         <div className="row wrap" style={{ gap: 10, marginTop: 6 }}>
           <Segmented label="طريقة التقسيم" value={mode} onChange={setMode} options={[{ value: 'gaps', label: 'سدّ النقص أولاً' }, { value: 'weights', label: 'حسب الأوزان' }]} />
@@ -46,9 +64,25 @@ export default function Deposit() {
         <p className="tiny muted">{mode === 'gaps' ? 'يذهب المبلغ أولاً للطبقات الناقصة عن هدفها، والباقي حسب الأوزان.' : 'يُقسم المبلغ بنسب الأوزان المستهدفة كما هي.'}{n > 1 ? ' الدفعات الكبيرة على عدة أشهر تقلل أثر توقيت الشراء.' : ''}</p>
       </div>
 
+      {amount > 0 && d.goalStats.length > 0 && (
+        <section className="section">
+          <div className="section-head"><h2>نصيب الأهداف</h2><p>{sar(goalsTotal)}</p></div>
+          <div className="panel stack">
+            <Switch label="خصّص جزءاً لأهدافك أولاً" hint="المقترح لكل هدف ما يحتاجه شهرياً ليصل في موعده" checked={useGoals} onChange={setUseGoals} />
+            {useGoals && goalLines.map((l) => (
+              <div key={l.goal.id} className="row" style={{ gap: 10, alignItems: 'flex-end' }}>
+                <div className="grow"><div>{l.goal.name}</div><div className="tiny muted">المقترح {sar(l.suggested)}</div></div>
+                <div style={{ width: 150 }}><NumberField label="" value={l.amount} suffix="ريال" onChange={(v) => setGoalOverride((o) => ({ ...o, [l.goal.id]: v }))} /></div>
+              </div>
+            ))}
+            {useGoals && goalLines.length === 0 && <p className="small muted">أهدافك لا تحتاج إيداعاً الآن.</p>}
+          </div>
+        </section>
+      )}
+
       {amount > 0 && (
         <section className="section">
-          <div className="section-head"><h2>التقسيم المقترح</h2><p>{n > 1 ? `${n} دفعات شهرية` : 'دفعة واحدة'}</p></div>
+          <div className="section-head"><h2>{goalsTotal > 0 ? 'لمحفظة الاستقلال' : 'التقسيم المقترح'}</h2><p>{goalsTotal > 0 ? sar(fiAmount) : n > 1 ? `${n} دفعات شهرية` : 'دفعة واحدة'}</p></div>
           <div className="panel">
             {lines.map((l) => (
               <div key={l.sleeve.id} className={`split-row ${l.amount === 0 ? 'zero' : ''}`}>
@@ -61,24 +95,27 @@ export default function Deposit() {
             ))}
           </div>
           <div className="row" style={{ marginTop: 14, gap: 10 }}>
-            <button className="btn primary grow" onClick={() => setRecording(true)}>سجّل الإيداع{n > 1 ? ' الأول' : ''}</button>
+            <button className="btn primary grow" disabled={!lines.some((l) => l.amount > 0) && !goalLines.some((l) => l.amount > 0)} onClick={() => setRecording(true)}>سجّل الإيداع{n > 1 ? ' الأول' : ''}</button>
           </div>
-          <p className="tiny muted" style={{ marginTop: 8 }}>التسجيل يحفظ العملية ويضيف الوحدات للأصول اليدوية. أصول IBKR تتحدث تلقائياً من التقرير اليومي.</p>
+          <p className="tiny muted" style={{ marginTop: 8 }}>التسجيل يحفظ العملية ويضيف الوحدات للأصول اليدوية.{accounts.some((x) => x.is_ibkr) ? ' أصول IBKR تتحدث تلقائياً من التقرير اليومي.' : ''}</p>
         </section>
       )}
 
-      {recording && <RecordSheet lines={lines.filter((l) => l.amount > 0)} divisor={n} onClose={() => setRecording(false)} />}
+      {recording && <RecordSheet lines={lines.filter((l) => l.amount > 0)} goalLines={goalLines.filter((l) => l.amount > 0)} divisor={n} onClose={() => setRecording(false)} />}
     </>
   )
 }
 
-function RecordSheet({ lines, divisor, onClose }: { lines: DepositLine[]; divisor: number; onClose: () => void }) {
+function RecordSheet({ lines, goalLines, divisor, onClose }: { lines: DepositLine[]; goalLines: Array<{ goal: Goal; amount: number }>; divisor: number; onClose: () => void }) {
   const { holdings, accounts, fx, insertMany, upsert, notify } = useStore()
   const [date, setDate] = useState(todayISO())
   const payroll = new Set(accounts.filter((a) => a.kind === 'savings_program' || a.exclude_from_portfolio).map((a) => a.id))
   const targetsFor = (sleeveId: string) => holdings.filter((h) => h.sleeve_id === sleeveId && !h.archived && !(h.account_id && payroll.has(h.account_id)))
-  const [choice, setChoice] = useState<Record<string, string>>(() =>
-    Object.fromEntries(lines.map((l) => [l.sleeve.id, targetsFor(l.sleeve.id)[0]?.id ?? ''])))
+  const goalTargets = (goalId: string) => holdings.filter((h) => h.goal_id === goalId && !h.archived)
+  const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries([
+    ...lines.map((l) => [l.sleeve.id, targetsFor(l.sleeve.id)[0]?.id ?? '']),
+    ...goalLines.map((l) => [`g:${l.goal.id}`, goalTargets(l.goal.id)[0]?.id ?? '']),
+  ]))
   const [busy, setBusy] = useState(false)
   const byId = new Map(holdings.map((h) => [h.id, h]))
   const isLump = (h: Holding) => h.price_source === 'manual' && Number(h.quantity) === 1 && Number(h.price) > 50
@@ -97,8 +134,24 @@ function RecordSheet({ lines, divisor, onClose }: { lines: DepositLine[]; diviso
         quantity: units, price: h ? Number(h.price) : null, currency: 'SAR', source: 'planner', note: `إيداع موزّع: ${l.sleeve.name}`,
       }
     })
+    for (const l of goalLines) {
+      const amount = Math.round(l.amount / divisor)
+      const h = byId.get(choice[`g:${l.goal.id}`])
+      rows.push({
+        tx_date: date, kind: 'deposit', amount_sar: amount, sleeve_id: null as never, holding_id: h?.id ?? null, account_id: h?.account_id ?? null,
+        quantity: unitsFor(h, amount), price: h ? Number(h.price) : null, currency: 'SAR', source: 'planner', note: `إيداع لهدف: ${l.goal.name}`,
+      })
+    }
     const ok = await insertMany('transactions', rows)
     if (ok) {
+      for (const l of goalLines) {
+        const h = byId.get(choice[`g:${l.goal.id}`])
+        if (!h || h.price_source === 'ibkr') continue
+        const amount = Math.round(l.amount / divisor)
+        const units = unitsFor(h, amount)
+        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units })
+        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString() })
+      }
       for (const l of lines) {
         const h = byId.get(choice[l.sleeve.id])
         if (!h || h.price_source === 'ibkr') continue
@@ -116,6 +169,20 @@ function RecordSheet({ lines, divisor, onClose }: { lines: DepositLine[]; diviso
     <Sheet title="تسجيل الإيداع" onClose={onClose} footer={<button className="btn primary" disabled={busy} onClick={confirm}>{busy ? 'جارٍ الحفظ…' : 'تأكيد التسجيل'}</button>}>
       <div className="stack">
         <label className="field"><span>تاريخ الإيداع</span><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        {goalLines.map((l) => {
+          const amount = Math.round(l.amount / divisor)
+          const options = goalTargets(l.goal.id)
+          return (
+            <div key={l.goal.id} className="field">
+              <span>هدف {l.goal.name}: <b className="figure">{sar(amount)}</b></span>
+              <select className="select" value={choice[`g:${l.goal.id}`] ?? ''} onChange={(e) => setChoice((c) => ({ ...c, [`g:${l.goal.id}`]: e.target.value }))}>
+                <option value="">سجّل العملية فقط</option>
+                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              {!options.length && <small>لا أصول لهذا الهدف بعد؛ أضفها من صفحة الأهداف.</small>}
+            </div>
+          )
+        })}
         {lines.map((l) => {
           const amount = Math.round(l.amount / divisor)
           const options = targetsFor(l.sleeve.id)

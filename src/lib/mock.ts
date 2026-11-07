@@ -29,7 +29,7 @@ function fixture() {
   const h = (name: string, acc: number, sl: number | null, qty: number, price: number, extra: Row = {}, sort = 0) => ({
     id: id(), user_id: uid, account_id: accounts[acc].id, sleeve_id: sl == null ? null : sleeves[sl].id, name, symbol: null, price_source: 'manual',
     currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true,
-    zakat_start: null, payout_freq: 'none', payout_next: null, payout_basis: 'rate', payout_rate: null, payout_per_unit: null, payout_nominal: null, maturity_date: null, sort, ...extra,
+    goal_id: null, goal_bucket: null, zakat_start: null, payout_freq: 'none', payout_next: null, payout_basis: 'rate', payout_rate: null, payout_per_unit: null, payout_nominal: null, maturity_date: null, sort, ...extra,
   })
   const holdings = [
     h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISWD.L', price_source: 'yahoo', currency: 'USD' }, 1),
@@ -58,6 +58,7 @@ function fixture() {
     ev('اكتمال استحقاق برنامج الادخار', 'vesting', '2032-06-01', null),
   ]
   const settings = {
+    monthly_invest: 4000, deposit_day: 27, contribution_mode: 'auto', reserve_account_id: null, stock_cap: 3,
     income_method: 'value', income_profit_share: 100, income_fixed_monthly: null, income_transfer_day: 27, income_review_month: 1,
     income_start_year: /income-now/.test(typeof location !== 'undefined' ? location.search : '') ? new Date().getFullYear() : null, income_approved_annual: null, income_approved_year: null,
     user_id: typeof location !== 'undefined' && /viewer/.test(location.search) ? 'owner-user' : uid, monthly_income_target: 20000, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, expected_return: 6.5,
@@ -84,7 +85,19 @@ function fixture() {
     w('شركة الاتصالات السعودية', '7010.SR', 41.2, 44, [true, true, true, true], 'توزيعات ثابتة', 3),
   ]
   const portfolio_viewers = [{ id: id(), owner_id: uid, viewer_email: 'wife@example.com', created_at: new Date().toISOString() }]
-  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers }
+  const goalId = id()
+  const goals = [{ id: goalId, user_id: uid, name: 'الدفعة الأولى للبيت', target_amount: 300000, target_date: iso(new Date(Date.now() + 3.2 * 365 * 86400000)), expected_return: 5,
+    allocation: [{ key: 'cash', name: 'سيولة ومرابحة', weight: 60 }, { key: 'sukuk', name: 'صكوك', weight: 40 }], priority: 1, note: null, archived: false, sort: 1 }]
+  holdings.push(h('مرابحة الدفعة الأولى', 1, null, 1, 42000, { goal_id: goalId, goal_bucket: 'cash' }, 20))
+  const income_streams = [
+    { id: id(), user_id: uid, name: 'المكافأة السنوية', kind: 'bonus', amount: 120000, frequency: 'yearly', month: 3, next_date: null, invest_pct: 70, note: null, sort: 1 },
+    { id: id(), user_id: uid, name: 'سلفة جهة العمل', kind: 'advance', amount: 200000, frequency: 'irregular', month: null, next_date: '2027-05-15', invest_pct: 100, note: null, sort: 2 },
+  ]
+  const obligations = [{ id: id(), user_id: uid, name: 'تمويل عقاري', monthly_amount: 4500, end_year: 2044, note: null, sort: 1 }]
+  if (typeof location !== 'undefined' && /onboard/.test(location.search)) {
+    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [] }
+  }
+  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals }
 }
 
 export function createMockClient(): any {
@@ -131,7 +144,23 @@ export function createMockClient(): any {
       signOut: async () => ({}), signUp: async () => ({}), signInWithPassword: async () => ({ error: null }),
     },
     from: (t: string) => new Q(t),
-    rpc: async () => ({ data: false, error: null }),
+    rpc: async (name: string, args: any) => {
+      if (name !== 'create_plan') return { data: false, error: null }
+      const p = args.p
+      const y = new Date().getFullYear()
+      db.plan_settings = [{ user_id: uid, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, return_low: p.settings.expected_return - 1.5, return_high: p.settings.expected_return + 1.5,
+        rebalance_band: 5, reserve_months: 24, guard_drawdown: 15, guard_cut: 10, guard_high_rate: 5, guard_low_rate: 3, mortgage_monthly: 0, mortgage_end_year: y, baseline_value: null, baseline_date: iso(new Date()),
+        stock_cap: 3, contribution_mode: 'auto', reserve_account_id: null, income_method: 'value', income_profit_share: 100, income_fixed_monthly: null, income_transfer_day: 27, income_review_month: 1,
+        income_start_year: null, income_approved_annual: null, income_approved_year: null, ...p.settings }]
+      db.accounts = p.accounts.map((a: Row, i: number) => ({ id: id(), user_id: uid, name: a.name, kind: a.kind, is_ibkr: !!a.is_ibkr, exclude_from_portfolio: !!a.exclude, note: null, sort: i + 1 }))
+      db.sleeves = p.sleeves.map((x: Row, i: number) => ({ id: id(), user_id: uid, ...x, accepts_new_money: x.accepts ?? true, zakat_rate: 2.5, sort: i + 1 }))
+      db.holdings = p.holdings.map((x: Row) => ({ id: id(), user_id: uid, name: x.name, account_id: x.account != null ? db.accounts[x.account]?.id ?? null : null, sleeve_id: x.sleeve != null ? db.sleeves[x.sleeve]?.id ?? null : null,
+        symbol: null, price_source: 'manual', currency: 'SAR', quantity: 1, price: x.value, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true,
+        goal_id: null, goal_bucket: null, zakat_start: null, payout_freq: 'none', payout_next: null, payout_basis: 'rate', payout_rate: null, payout_per_unit: null, payout_nominal: null, maturity_date: null, sort: x.sort ?? 0 }))
+      db.income_streams = p.streams.map((x: Row) => ({ id: id(), user_id: uid, note: null, next_date: null, ...x }))
+      db.obligations = p.obligations.map((x: Row) => ({ id: id(), user_id: uid, note: null, ...x }))
+      return { data: true, error: null }
+    },
     functions: { invoke: async () => ({ data: { results: [{ prices: { updated: 2, failed: [] }, snapshot: {} }] }, error: null }) },
     channel: () => { const c: any = { on: () => c, subscribe: () => c }; return c },
     removeChannel: () => {},

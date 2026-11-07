@@ -6,6 +6,7 @@ import {
 } from './calc'
 import { todayISO } from './format'
 import { incomeEngine, payoutSchedule, virtualOccurrences, zakatSchedule } from './income'
+import { contributionFromProfile, goalStatus, profileOccurrences } from './profile'
 import type { Layer, Sleeve } from './types'
 
 export const LAYER_VAR: Record<Layer, string> = {
@@ -24,7 +25,7 @@ export function sleeveColors(sleeves: Sleeve[]): Record<string, { color: string;
 }
 
 export function useDerived() {
-  const { settings, sleeves, accounts, holdings, snapshots, events, fx, transactions } = useStore()
+  const { settings, sleeves, accounts, holdings, snapshots, events, fx, transactions, streams, goals } = useStore()
   return useMemo(() => {
     if (!settings) return null
     const totals = computeTotals(holdings, accounts, sleeves, fx)
@@ -49,8 +50,13 @@ export function useDerived() {
     const engine = incomeEngine({ s: settings, totals, sleeves, holdings, fx, snapshots, transactions, projectedAt })
     const payouts = payoutSchedule(holdings, fx, todayISO(), 365)
     const zakatDue = zakatSchedule(holdings, fx, todayISO(), 365)
-    const virtual = (fromISO: string, days: number) => virtualOccurrences({ holdings, fx, s: settings, engine, fromISO, days })
-    const soon = [...upcoming(events, todayISO(), 60), ...virtual(todayISO(), 21)].sort((a, b) => a.date.localeCompare(b.date))
+    const virtual = (fromISO: string, days: number) => [
+      ...virtualOccurrences({ holdings, fx, s: settings, engine, fromISO, days }),
+      ...profileOccurrences({ s: settings, streams, goals, fromISO, days }),
+    ].sort((a, b) => a.date.localeCompare(b.date))
+    const contribution = contributionFromProfile(settings, streams)
+    const goalStats = goals.filter((g) => !g.archived).map((g) => goalStatus(g, totals.goals[g.id] ?? 0))
+    const soon = [...upcoming(events, todayISO(), 60), ...virtual(todayISO(), 21).filter((o) => !o.event.id.startsWith('v:d:'))].sort((a, b) => a.date.localeCompare(b.date))
     const today = todayISO()
     const before = [...snapshots].reverse().find((x) => x.snap_date < today)
     const change = before && Number(before.total_sar) > 0 ? totals.total - Number(before.total_sar) : null
@@ -61,7 +67,7 @@ export function useDerived() {
     const targetSum = { now: sleeves.reduce((a, s) => a + Number(s.target_now), 0), fi: sleeves.reduce((a, s) => a + Number(s.target_fi), 0) }
     return {
       totals, drift, proj, fi, fiLow, fiHigh, capitalToday, capitalSafe, targetAtGoalYear, needContribution, planned, aheadBy,
-      incomeNow, progress, outOfBand, wd, zakat, soon, change, unassigned, staleManual, targetSum, engine, payouts, zakatDue, virtual,
+      incomeNow, progress, outOfBand, wd, zakat, soon, change, unassigned, staleManual, targetSum, engine, payouts, zakatDue, virtual, contribution, goalStats,
     }
-  }, [settings, sleeves, accounts, holdings, snapshots, events, fx, transactions])
+  }, [settings, sleeves, accounts, holdings, snapshots, events, fx, transactions, streams, goals])
 }

@@ -21,17 +21,20 @@ export interface Totals {
   byAccount: Record<string, number>
   outside: number
   unassigned: number
+  /** value held in each goal portfolio (not part of the independence total) */
+  goals: Record<string, number>
 }
 
 export function computeTotals(holdings: Holding[], accounts: Account[], sleeves: Sleeve[], fx: Fx): Totals {
   const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
   const sleeveLayer = new Map(sleeves.map((s) => [s.id, s.layer]))
   const t: Totals = {
-    total: 0, bySleeve: {}, byLayer: { growth: 0, income: 0, safety: 0, hedge: 0 }, byAccount: {}, outside: 0, unassigned: 0,
+    total: 0, bySleeve: {}, byLayer: { growth: 0, income: 0, safety: 0, hedge: 0 }, byAccount: {}, outside: 0, unassigned: 0, goals: {},
   }
   for (const h of holdings) {
     const v = holdingValue(h, fx)
     if (!v) continue
+    if (h.goal_id) { t.goals[h.goal_id] = (t.goals[h.goal_id] ?? 0) + v; continue }
     if (h.account_id && excluded.has(h.account_id)) { t.outside += v; continue }
     t.total += v
     if (h.account_id) t.byAccount[h.account_id] = (t.byAccount[h.account_id] ?? 0) + v

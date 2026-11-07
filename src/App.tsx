@@ -12,14 +12,17 @@ import Settings from './pages/Settings'
 import Watchlist from './pages/Watchlist'
 import Income from './pages/Income'
 import Payouts from './pages/Payouts'
-import { IconCalendar, IconChevron, IconCoins, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
+import Goals from './pages/Goals'
+import Profile from './pages/Profile'
+import Onboarding from './pages/Onboarding'
+import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
+export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
   home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', outlook: 'المستقبل والدخل', plan: 'الخطة والأوزان',
-  income: 'الدخل الشهري', payouts: 'التوزيعات', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  income: 'الدخل الشهري', payouts: 'التوزيعات', goals: 'الأهداف', profile: 'وضعي المالي', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
@@ -28,6 +31,8 @@ const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?
   { r: 'outlook', label: 'المستقبل', icon: IconHorizon },
   { r: 'income', label: 'الدخل', icon: IconIncome, desc: 'حساب دخلك السنوي، ومصادره، وما تبيعه، ومواعيد التحويل' },
   { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
+  { r: 'goals', label: 'الأهداف', icon: IconFlag, desc: 'محافظ منفصلة لدفعة بيت أو سيارة أو تعليم' },
+  { r: 'profile', label: 'وضعي المالي', icon: IconUser, desc: 'ما تستثمره ومتى، والتزاماتك، وهدفك' },
   { r: 'plan', label: 'الخطة', icon: IconTarget, desc: 'الأوزان المستهدفة وقواعد المتابعة والسحب' },
   { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
@@ -44,7 +49,7 @@ const readRoute = (): Route => {
 }
 
 export default function App() {
-  const { session, ready, loading, error, settings, save, refreshing, refreshMarket, notify, toast, reload, readOnly } = useStore()
+  const { session, ready, loading, error, settings, save, refreshing, refreshMarket, notify, toast, reload, readOnly, needsSetup } = useStore()
   const [route, setRoute] = useState<Route>(readRoute)
   useEffect(() => {
     const on = () => { setRoute(readRoute()); window.scrollTo({ top: 0 }) }
@@ -62,6 +67,7 @@ export default function App() {
     </div></div>
   )
   if (loading) return <Splash text="نجهّز خطتك…" />
+  if (needsSetup) return <>{<Onboarding />}{toast && <div className="toast" role="status">{toast}</div>}</>
   if (!settings) return <NoAccess />
 
   const TABS = readOnly ? VIEWER_TABS : OWNER_TABS
@@ -69,7 +75,7 @@ export default function App() {
   const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
 
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, income: <Income />, payouts: <Payouts />, plan: <Plan />, watch: <Watchlist />,
+    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, income: <Income />, payouts: <Payouts />, goals: <Goals />, profile: <Profile />, plan: <Plan />, watch: <Watchlist />,
     calendar: <Calendar />, activity: <Activity />, settings: <Settings />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
   const activeTab = TABS.includes(current) ? current : 'more'

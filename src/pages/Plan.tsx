@@ -71,10 +71,8 @@ export default function Plan() {
           <div className="grid2">
             <NumberField label="حد الانحراف قبل التنبيه" value={s.rebalance_band} suffix="نقطة" decimals={1} onChange={(v) => updateSettings({ rebalance_band: v })} />
             <NumberField plain label="سنة الميلاد" value={s.birth_year} onChange={(v) => updateSettings({ birth_year: Math.round(v) })} />
-            <NumberField label="قسط التمويل العقاري" value={s.mortgage_monthly} suffix="ريال" onChange={(v) => updateSettings({ mortgage_monthly: v })} />
-            <NumberField plain label="آخر سنة للقسط" value={s.mortgage_end_year} onChange={(v) => updateSettings({ mortgage_end_year: Math.round(v) })} />
           </div>
-          <p className="small muted">نسبة السحب والاحتياطي وقواعد الحماية في صفحة <a href="#/income">«الدخل الشهري»</a>.</p>
+          <p className="small muted">نسبة السحب والاحتياطي وقواعد الحماية في <a href="#/income">«الدخل الشهري»</a>، والتزاماتك وما تستثمره في <a href="#/profile">«وضعي المالي»</a>.</p>
         </div>
       </section>
       </fieldset>

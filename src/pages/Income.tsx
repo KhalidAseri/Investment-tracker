@@ -33,7 +33,8 @@ export default function Income() {
   const e = d.engine
   const fromDist = Math.min(e.distributions, e.annual)
   const fromReserve = Math.max(0, e.annual - fromDist)
-  const rajhi = accounts.find((a) => /راجحي/.test(a.name))
+  const reserveAcc = accounts.find((a) => a.id === s.reserve_account_id)
+  const reserveName = reserveAcc?.name ?? 'حساب الاحتياطي'
   const monthly = e.steps.filter((x) => x.kind === 'monthly')
   const upcomingMonths = monthly.filter((x) => x.date >= today).slice(0, 2).map((x) => x.key)
   const visibleSteps: EngineStep[] = !e.started
@@ -45,7 +46,7 @@ export default function Income() {
   const recordMonth = async (st: EngineStep) => {
     setBusyKey(st.key)
     const ok = await upsert('transactions', {
-      tx_date: st.date <= today ? st.date : today, kind: 'withdrawal', amount_sar: Math.round(st.amount ?? e.monthly), account_id: rajhi?.id ?? null,
+      tx_date: st.date <= today ? st.date : today, kind: 'withdrawal', amount_sar: Math.round(st.amount ?? e.monthly), account_id: reserveAcc?.id ?? null,
       currency: 'SAR', source: 'manual', note: `التحويل الشهري لشهر ${monthName(Number(st.date.slice(5, 7)) - 1)}`,
     })
     setBusyKey(null)
@@ -62,7 +63,7 @@ export default function Income() {
         </p>
         <p className="muted" style={{ marginTop: 6 }}>
           {e.started
-            ? e.approved ? `يُحوَّل يوم ${s.income_transfer_day} من كل شهر من احتياطي الدخل في الراجحي المالية.` : 'هذا ما تعطيه قاعدتك الآن. اعتمده في مراجعة يناير ليصبح دخل السنة الثابت.'
+            ? e.approved ? `يُحوَّل يوم ${s.income_transfer_day} من كل شهر من احتياطي الدخل في ${reserveName}.` : 'هذا ما تعطيه قاعدتك الآن. اعتمده في مراجعة يناير ليصبح دخل السنة الثابت.'
             : <>بقيمة ريال ذلك العام. {ifToday ? <>لو بدأ اليوم لكان <b className="figure">{sar(ifToday.monthly)}</b> شهرياً.</> : null}</>}
         </p>
         <p className="small" style={{ marginTop: 8 }}>
@@ -112,7 +113,7 @@ export default function Income() {
           <hr className="rule" style={{ margin: '4px 0' }} />
           <div className="row between small"><span>احتياطي الدخل {e.started ? 'الآن' : 'المتوقع'}</span><b className="figure">{sar(e.reserveNow)}</b></div>
           <div className="row between small"><span>المطلوب ({s.reserve_months} شهراً من الدخل)</span><b className="figure">{sar(e.reserveTarget)}</b></div>
-          <p className="tiny muted">الاحتياطي سيولة ومرابحة في الراجحي المالية، تُصرف منها التحويلات الشهرية، فلا تضطر للبيع وقت هبوط الأسواق.</p>
+          <p className="tiny muted">الاحتياطي سيولة ومرابحة في {reserveName}، تُصرف منها التحويلات الشهرية، فلا تضطر للبيع وقت هبوط الأسواق.{!reserveAcc && !readOnly ? <> حدّد حسابه من <a href="#/profile">«وضعي المالي»</a>.</> : null}</p>
         </div>
       </section>
 

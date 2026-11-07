@@ -34,6 +34,12 @@ export interface PlanSettings {
   income_start_year: number | null
   income_approved_annual: number | null
   income_approved_year: number | null
+  /** typical monthly amount invested from salary; null = varies month to month */
+  monthly_invest: number | null
+  deposit_day: number
+  contribution_mode: 'auto' | 'manual'
+  reserve_account_id: string | null
+  stock_cap: number
   updated_at?: string
 }
 
@@ -90,6 +96,9 @@ export interface Holding {
   payout_per_unit: number | null
   payout_nominal: number | null
   maturity_date: string | null
+  /** belongs to a goal portfolio instead of the independence portfolio */
+  goal_id: string | null
+  goal_bucket: string | null
   sort: number
 }
 
@@ -170,4 +179,44 @@ export interface Viewer {
   owner_id: string
   viewer_email: string
   created_at: string
+}
+
+export type StreamKind = 'bonus' | 'vacation_bonus' | 'advance' | 'savings_program' | 'side' | 'rent' | 'other'
+export interface IncomeStream {
+  id: string
+  user_id?: string
+  name: string
+  kind: StreamKind
+  amount: number
+  frequency: 'monthly' | 'yearly' | 'once' | 'irregular'
+  month: number | null
+  next_date: string | null
+  invest_pct: number
+  note: string | null
+  sort: number
+}
+
+export interface Obligation {
+  id: string
+  user_id?: string
+  name: string
+  monthly_amount: number
+  end_year: number | null
+  note: string | null
+  sort: number
+}
+
+export interface GoalBucket { key: string; name: string; weight: number }
+export interface Goal {
+  id: string
+  user_id?: string
+  name: string
+  target_amount: number
+  target_date: string | null
+  expected_return: number
+  allocation: GoalBucket[]
+  priority: number
+  note: string | null
+  archived: boolean
+  sort: number
 }

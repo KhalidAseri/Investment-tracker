@@ -7,7 +7,6 @@ import type { WatchItem } from '../lib/types'
 import { Empty, NumberField, SelectField, Sheet, TextField } from '../components/ui'
 import { IconCheck, IconPlus, IconRefresh } from '../components/icons'
 
-const PER_STOCK_CAP = 3
 const CONDITIONS: Array<{ key: 'c_size' | 'c_shariah' | 'c_quality' | 'c_thesis'; label: string; hint: string }> = [
   { key: 'c_size', label: 'شركة كبيرة وقيادية', hint: 'من أكبر الشركات في قطاعها، وسيولة سهمها عالية' },
   { key: 'c_shariah', label: 'متوافقة مع الضوابط الشرعية', hint: 'حسب قائمة الهيئة الشرعية التي تعتمدها' },
@@ -33,7 +32,7 @@ export default function Watchlist() {
   const directValue = direct ? holdings.filter((h) => h.sleeve_id === direct.id).reduce((a, h) => a + holdingValue(h, fx), 0) : 0
   const directPct = total ? (directValue / total) * 100 : 0
   const room = Math.max(0, (capPct / 100) * total - directValue)
-  const perStock = (PER_STOCK_CAP / 100) * total
+  const perStock = (Number(settings.stock_cap) / 100) * total
 
   const rows = [...watchlist].sort((a, b) => {
     const da = distance(a), db = distance(b)
@@ -50,7 +49,7 @@ export default function Watchlist() {
         <div className="facts" style={{ marginTop: 0 }}>
           <div className="fact"><div className="v">{pct(directPct)}</div><div className="l">الأسهم المباشرة الآن، والحد {pct(capPct)}</div></div>
           <div className="fact"><div className="v">{sar(room)}</div><div className="l">المتاح للأسهم المباشرة</div></div>
-          <div className="fact"><div className="v">{sar(perStock)}</div><div className="l">أقصى مبلغ لسهم واحد ({pct(PER_STOCK_CAP)})</div></div>
+          <div className="fact"><div className="v">{sar(perStock)}</div><div className="l">أقصى مبلغ لسهم واحد ({pct(Number(settings.stock_cap))})</div></div>
         </div>
       </section>
 

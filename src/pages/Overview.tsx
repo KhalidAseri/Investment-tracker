@@ -11,7 +11,7 @@ import type { Go, Route } from '../App'
 const yearsText = (n: number) => (n === 1 ? 'بسنة' : n === 2 ? 'بسنتين' : n <= 10 ? `بـ ${n} سنوات` : `بـ ${n} سنة`)
 
 export default function Overview({ go }: { go: Go }) {
-  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly } = useStore()
+  const { settings, sleeves, snapshots, ibkr, fxUpdatedAt, holdings, watchlist, readOnly, accounts } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const history = useMemo(() => snapshots.map((s) => ({ year: yearFrac(new Date(s.snap_date + 'T12:00:00')), value: Number(s.total_sar) })), [snapshots])
@@ -65,10 +65,10 @@ export default function Overview({ go }: { go: Go }) {
   }
   if (readOnly) {
     // viewers only see informational items, not to-dos meant for the owner
-  } else if (!ibkr?.query_id) {
+  } else if (!ibkr?.query_id && accounts.some((a) => a.is_ibkr)) {
     alerts.push({ tone: 'plain', icon: <IconLink />, action: () => go('settings'), body: <>اربط حساب IBKR ليتحدث الجزء العالمي من محفظتك تلقائياً كل صباح.</> })
-  } else if (ibkr.last_status === 'error') {
-    alerts.push({ tone: 'warn', icon: <IconLink />, action: () => go('settings'), body: <>تعذّرت آخر مزامنة مع IBKR: {ibkr.last_message}</> })
+  } else if (ibkr?.last_status === 'error') {
+    alerts.push({ tone: 'warn', icon: <IconLink />, action: () => go('settings'), body: <>تعذّرت آخر مزامنة مع IBKR: {ibkr?.last_message}</> })
   }
 
   const shownAlerts = readOnly
@@ -136,6 +136,23 @@ export default function Overview({ go }: { go: Go }) {
           <p className="tiny muted" style={{ marginTop: 10 }}>الخط الداكن على كل شريط هو الوزن المستهدف لهذا العام{d.totals.unassigned > 0 ? `؛ ${sarShort(d.totals.unassigned)} بلا طبقة غير محسوبة` : ''}.</p>
         </div>
       </section>
+
+      {d.goalStats.length > 0 && (
+        <section className="section">
+          <div className="section-head"><h2>أهدافك الأخرى</h2><button className="btn quiet small" onClick={() => go('goals')}>التفاصيل</button></div>
+          <div className="panel stack" style={{ gap: 14 }}>
+            {d.goalStats.slice(0, 4).map((g) => (
+              <a key={g.goal.id} href="#/goals" style={{ color: 'inherit', textDecoration: 'none' }}>
+                <div className="row between small" style={{ marginBottom: 6 }}>
+                  <span>{g.goal.name}</span>
+                  <span><b className="figure">{sarShort(g.value)}</b> من {sarShort(Number(g.goal.target_amount))}</span>
+                </div>
+                <div className="progress"><i style={{ width: `${g.progress * 100}%` }} /></div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <div className="section-head"><h2>ما يحتاج انتباهك</h2></div>

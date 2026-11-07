@@ -12,7 +12,7 @@ const CURRENCIES = ['SAR', 'USD', 'GBP', 'EUR', 'AED', 'HKD', 'SGD', 'JPY']
 const SOURCE_LABEL = { manual: 'يدوي', yahoo: 'آلي من السوق', ibkr: 'من IBKR', nav: 'آلي من تقرير الصندوق' } as const
 
 export default function Holdings() {
-  const { holdings, sleeves, accounts, fx, refreshMarket, refreshing, notify, readOnly, upsert } = useStore()
+  const { holdings, sleeves, accounts, fx, refreshMarket, refreshing, notify, readOnly, upsert, goals } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const [editing, setEditing] = useState<Partial<Holding> | null>(null)
@@ -21,8 +21,9 @@ export default function Holdings() {
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? 'بلا حساب'
   const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
   const visible = holdings.filter((h) => !h.archived)
-  const inPortfolio = visible.filter((h) => !h.account_id || !excluded.has(h.account_id))
-  const outside = visible.filter((h) => h.account_id && excluded.has(h.account_id))
+  const inPortfolio = visible.filter((h) => !h.goal_id && (!h.account_id || !excluded.has(h.account_id)))
+  const outside = visible.filter((h) => !h.goal_id && h.account_id && excluded.has(h.account_id))
+  const goalGroups = goals.filter((g) => !g.archived).map((g) => ({ g, items: visible.filter((h) => h.goal_id === g.id) })).filter((x) => x.items.length)
   const unassigned = inPortfolio.filter((h) => !h.sleeve_id || !sleeves.some((s) => s.id === h.sleeve_id))
   const noHaul = visible.filter((h) => h.zakatable !== false && !h.zakat_start && holdingValue(h, fx) > 0)
 
@@ -96,6 +97,12 @@ export default function Holdings() {
           <div className="panel flush">{unassigned.map(row)}</div>
         </section>
       )}
+      {goalGroups.map(({ g, items }) => (
+        <section className="section" key={g.id}>
+          <div className="section-head"><h2>هدف: {g.name}</h2><p><a href="#/goals">{sar(d.totals.goals[g.id] ?? 0)} من {sar(Number(g.target_amount))}</a></p></div>
+          <div className="panel flush">{items.map(row)}</div>
+        </section>
+      ))}
       {outside.length > 0 && (
         <section className="section">
           <div className="section-head"><h2>خارج المحفظة</h2><p>لا يدخل في الأوزان ولا في الهدف</p></div>
@@ -145,7 +152,7 @@ export default function Holdings() {
 }
 
 export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose: () => void }) {
-  const { upsert, remove, fx, notify, accounts, sleeves, holdings } = useStore()
+  const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals } = useStore()
   const [h, setH] = useState<Partial<Holding>>(initial)
   const [lumpSum, setLumpSum] = useState(initial.price_source === 'manual' && Number(initial.quantity) === 1 && Number(initial.price) > 50)
   const set = (patch: Partial<Holding>) => setH((x) => ({ ...x, ...patch }))
@@ -160,6 +167,7 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
       note: h.note ?? null, sort: h.sort ?? holdings.length + 1, zakatable: h.zakatable !== false, zakat_start: h.zakatable !== false ? h.zakat_start || null : null,
       payout_freq: h.payout_freq ?? 'none', payout_next: h.payout_next || null, payout_basis: h.payout_basis ?? 'rate',
       payout_rate: h.payout_rate ?? null, payout_per_unit: h.payout_per_unit ?? null, payout_nominal: h.payout_nominal || null, maturity_date: h.maturity_date || null,
+      goal_id: h.goal_id || null, goal_bucket: h.goal_id ? h.goal_bucket ?? null : null, ...(h.goal_id ? { sleeve_id: null } : {}),
       ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
     }
     const ok = await upsert('holdings', row)
@@ -172,11 +180,22 @@ export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; 
     </>}>
       <div className="stack">
         <TextField label="الاسم" value={h.name ?? ''} onChange={(v) => set({ name: v })} placeholder="مثال: صندوق البلاد للذهب" />
+        {goals.some((g) => !g.archived) && (
+          <SelectField label="يتبع محفظة" value={h.goal_id ?? ''} onChange={(v) => {
+            const g = goals.find((x) => x.id === v)
+            set({ goal_id: v || null, goal_bucket: g?.allocation?.[0]?.key ?? null })
+          }} options={[{ value: '', label: 'الاستقلال المالي' }, ...goals.filter((g) => !g.archived || g.id === h.goal_id).map((g) => ({ value: g.id, label: `هدف: ${g.name}` }))]} />
+        )}
         <div className="grid2">
           <SelectField label="الحساب" value={h.account_id ?? ''} onChange={(v) => set({ account_id: v || null })}
             options={[{ value: '', label: 'بلا حساب' }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
-          <SelectField label="الطبقة" value={h.sleeve_id ?? ''} onChange={(v) => set({ sleeve_id: v || null })}
-            options={[{ value: '', label: 'بلا طبقة' }, ...sleeves.map((s) => ({ value: s.id, label: s.name }))]} />
+          {h.goal_id ? (
+            <SelectField label="الجزء" value={h.goal_bucket ?? ''} onChange={(v) => set({ goal_bucket: v || null })}
+              options={(goals.find((g) => g.id === h.goal_id)?.allocation ?? []).map((b) => ({ value: b.key, label: b.name }))} />
+          ) : (
+            <SelectField label="الطبقة" value={h.sleeve_id ?? ''} onChange={(v) => set({ sleeve_id: v || null })}
+              options={[{ value: '', label: 'بلا طبقة' }, ...sleeves.map((s) => ({ value: s.id, label: s.name }))]} />
+          )}
         </div>
         {!isIbkr && (
           <SelectField label="كيف يُحدَّث السعر؟" value={h.price_source ?? 'manual'} onChange={(v) => set({ price_source: v })}
