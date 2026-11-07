@@ -26,6 +26,14 @@ export interface PlanSettings {
   baseline_value: number | null
   baseline_date: string | null
   extra: Record<string, unknown>
+  income_method: 'value' | 'profit' | 'fixed'
+  income_profit_share: number
+  income_fixed_monthly: number | null
+  income_transfer_day: number
+  income_review_month: number
+  income_start_year: number | null
+  income_approved_annual: number | null
+  income_approved_year: number | null
   updated_at?: string
 }
 
@@ -72,6 +80,16 @@ export interface Holding {
   note: string | null
   archived: boolean
   zakatable: boolean
+  /** start of this holding's zakat year (haul), anniversaries follow the Hijri calendar */
+  zakat_start: string | null
+  payout_freq: 'none' | 'monthly' | 'quarterly' | 'semiannual' | 'annual'
+  payout_next: string | null
+  /** 'rate' = annual % of value (or of nominal value if set); 'per_unit' = fixed SAR per unit per payment */
+  payout_basis: 'rate' | 'per_unit'
+  payout_rate: number | null
+  payout_per_unit: number | null
+  payout_nominal: number | null
+  maturity_date: string | null
   sort: number
 }
 
@@ -95,7 +113,7 @@ export interface Transaction {
   created_at?: string
 }
 
-export type EventKind = 'bonus' | 'advance' | 'vacation_bonus' | 'vesting' | 'zakat' | 'review' | 'withdrawal' | 'deposit' | 'other'
+export type EventKind = 'bonus' | 'advance' | 'vacation_bonus' | 'vesting' | 'zakat' | 'review' | 'withdrawal' | 'deposit' | 'other' | 'payout'
 
 export interface MoneyEvent {
   id: string

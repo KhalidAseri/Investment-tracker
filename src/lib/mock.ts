@@ -28,12 +28,14 @@ function fixture() {
   const old = new Date(Date.now() - 50 * 86400000).toISOString()
   const h = (name: string, acc: number, sl: number | null, qty: number, price: number, extra: Row = {}, sort = 0) => ({
     id: id(), user_id: uid, account_id: accounts[acc].id, sleeve_id: sl == null ? null : sleeves[sl].id, name, symbol: null, price_source: 'manual',
-    currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true, sort, ...extra,
+    currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true,
+    zakat_start: null, payout_freq: 'none', payout_next: null, payout_basis: 'rate', payout_rate: null, payout_per_unit: null, payout_nominal: null, maturity_date: null, sort, ...extra,
   })
   const holdings = [
     h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISWD.L', price_source: 'yahoo', currency: 'USD' }, 1),
-    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885' }, 2),
-    h('صندوق الراجحي للتوزيعات الشهرية 2', 1, 5, 2300, 9.93, {}, 3),
+    h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885', payout_freq: 'monthly', payout_rate: 7.5, payout_next: iso(new Date(Date.now() + 12 * 86400000)), zakat_start: '2025-03-01' }, 2),
+    h('صندوق الراجحي للتوزيعات الشهرية 2', 1, 5, 2300, 9.93, { payout_freq: 'monthly', payout_next: iso(new Date(Date.now() + 14 * 86400000)) }, 3),
+    h('صكوك الحكومة 2029', 1, 3, 20, 985, { payout_freq: 'semiannual', payout_rate: 5.2, payout_nominal: 1000, payout_next: iso(new Date(Date.now() + 40 * 86400000)), maturity_date: '2029-06-30', zakat_start: '2026-01-15' }, 10),
     h('صندوق البلاد للذهب', 1, 7, 0, 21.3, { symbol: '9405.SR', price_source: 'yahoo' }, 4),
     h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, {}, 5),
     h('برنامج الادخار: الدخل المتحفظ', 2, 3, 1, 23900, {}, 6),
@@ -56,6 +58,8 @@ function fixture() {
     ev('اكتمال استحقاق برنامج الادخار', 'vesting', '2032-06-01', null),
   ]
   const settings = {
+    income_method: 'value', income_profit_share: 100, income_fixed_monthly: null, income_transfer_day: 27, income_review_month: 1,
+    income_start_year: /income-now/.test(typeof location !== 'undefined' ? location.search : '') ? new Date().getFullYear() : null, income_approved_annual: null, income_approved_year: null,
     user_id: typeof location !== 'undefined' && /viewer/.test(location.search) ? 'owner-user' : uid, monthly_income_target: 20000, withdrawal_rate: 4, safe_withdrawal_rate: 3.5, inflation_rate: 2.5, expected_return: 6.5,
     return_low: 5, return_high: 8, annual_contribution: 300000, contribution_growth: 4, birth_year: 1998, independence_year: 2038, glide_start_year: 2035,
     rebalance_band: 5, reserve_months: 24, guard_drawdown: 15, guard_cut: 10, guard_high_rate: 5, guard_low_rate: 3, include_mortgage: false,
@@ -63,6 +67,7 @@ function fixture() {
   }
   const transactions = [
     { id: id(), user_id: uid, account_id: accounts[1].id, holding_id: holdings[1].id, sleeve_id: sleeves[5].id, tx_date: iso(new Date(today.getTime() - 6 * 86400000)), kind: 'dividend', amount_sar: 820, quantity: null, price: null, currency: 'SAR', note: 'توزيع شهري', source: 'manual', external_id: null },
+    ...[36, 66, 97, 127].map((days) => ({ id: id(), user_id: uid, account_id: accounts[1].id, holding_id: holdings[1].id, sleeve_id: sleeves[5].id, tx_date: iso(new Date(today.getTime() - days * 86400000)), kind: 'dividend', amount_sar: 560 + (days % 7) * 10, quantity: null, price: null, currency: 'SAR', note: 'توزيع شهري', source: 'manual', external_id: null })),
     { id: id(), user_id: uid, account_id: accounts[1].id, holding_id: holdings[6].id, sleeve_id: sleeves[6].id, tx_date: iso(new Date(today.getTime() - 20 * 86400000)), kind: 'deposit', amount_sar: 10000, quantity: null, price: null, currency: 'SAR', note: null, source: 'planner', external_id: null },
   ]
   const fx_rates = [

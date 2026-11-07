@@ -10,20 +10,24 @@ import Calendar from './pages/Calendar'
 import Activity from './pages/Activity'
 import Settings from './pages/Settings'
 import Watchlist from './pages/Watchlist'
-import { IconCalendar, IconChevron, IconDeposit, IconEye, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
+import Income from './pages/Income'
+import Payouts from './pages/Payouts'
+import { IconCalendar, IconChevron, IconCoins, IconDeposit, IconEye, IconIncome, IconHome, IconHorizon, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
+export type Route = 'home' | 'holdings' | 'deposit' | 'outlook' | 'income' | 'payouts' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
   home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', outlook: 'المستقبل والدخل', plan: 'الخطة والأوزان',
-  watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  income: 'الدخل الشهري', payouts: 'التوزيعات', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
   { r: 'holdings', label: 'المحفظة', icon: IconWallet },
   { r: 'deposit', label: 'الإيداع', icon: IconDeposit },
   { r: 'outlook', label: 'المستقبل', icon: IconHorizon },
+  { r: 'income', label: 'الدخل', icon: IconIncome, desc: 'حساب دخلك السنوي، ومصادره، وما تبيعه، ومواعيد التحويل' },
+  { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
   { r: 'plan', label: 'الخطة', icon: IconTarget, desc: 'الأوزان المستهدفة وقواعد المتابعة والسحب' },
   { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
@@ -65,7 +69,7 @@ export default function App() {
   const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
 
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, plan: <Plan />, watch: <Watchlist />,
+    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, outlook: <Outlook />, income: <Income />, payouts: <Payouts />, plan: <Plan />, watch: <Watchlist />,
     calendar: <Calendar />, activity: <Activity />, settings: <Settings />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
   const activeTab = TABS.includes(current) ? current : 'more'

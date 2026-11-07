@@ -329,7 +329,72 @@ function nextOccurrence(dateISO: string, recurrence: string, fromISO: string): s
   return d.toISOString().slice(0, 10);
 }
 
-async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean) {
+// ---------- schedules (mirror of the app's lib/income.ts) ----------
+const DAY = 86400000;
+const utcNoon = (iso: string) => new Date(iso.slice(0, 10) + "T12:00:00Z");
+const isoOf = (d: Date) => d.toISOString().slice(0, 10);
+const addMonthsUtc = (base: Date, n: number) => {
+  const y = base.getUTCFullYear(), m = base.getUTCMonth() + n, day = base.getUTCDate();
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(day, last), 12));
+};
+const STEP: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+const PER_YEAR: Record<string, number> = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 };
+let hijriFmt: Intl.DateTimeFormat | null = null;
+let hijriLong: Intl.DateTimeFormat | null = null;
+try {
+  hijriFmt = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura-nu-latn", { year: "numeric", month: "numeric", day: "numeric", timeZone: "UTC" });
+  hijriLong = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+} catch (_) { /* fall back to 354-day years */ }
+const hijri = (d: Date) => {
+  if (!hijriFmt) return null;
+  const p = Object.fromEntries(hijriFmt.formatToParts(d).map((x) => [x.type, x.value]));
+  return { y: parseInt(String(p.year), 10), m: parseInt(String(p.month), 10), d: parseInt(String(p.day), 10) };
+};
+function nextHaul(startISO: string, fromISO: string): string | null {
+  const start = utcNoon(startISO), from = utcNoon(fromISO);
+  const hs = hijri(start);
+  let n = Math.max(1, Math.floor((from.getTime() - start.getTime()) / (354.367 * DAY)));
+  for (let g = 0; g < 4; g++, n++) {
+    const approx = start.getTime() + n * 354.367 * DAY;
+    let hit: Date | null = null;
+    if (hs) {
+      for (let k = -4; k <= 4 && !hit; k++) {
+        const c = new Date(approx + k * DAY);
+        const h = hijri(c);
+        if (h && h.y === hs.y + n && h.m === hs.m && h.d === Math.min(hs.d, 29)) hit = c;
+      }
+    }
+    if (!hit) hit = new Date(approx);
+    if (hit >= from) return isoOf(hit);
+  }
+  return null;
+}
+function nextPayout(h: Record<string, any>, fromISO: string): string | null {
+  if (!h.payout_next || !STEP[h.payout_freq]) return null;
+  const base = utcNoon(h.payout_next), from = utcNoon(fromISO);
+  const mat = h.maturity_date ? utcNoon(h.maturity_date) : null;
+  for (let n = 0; n < 1200; n++) {
+    const d = addMonthsUtc(base, n * STEP[h.payout_freq]);
+    if (mat && d > mat) return null;
+    if (d >= from) return isoOf(d);
+  }
+  return null;
+}
+function payoutAmount(h: Record<string, any>, fx: Fx): number | null {
+  const per = PER_YEAR[h.payout_freq];
+  const q = Number(h.quantity) || 0;
+  const r = fx[String(h.currency ?? "SAR").toUpperCase()] ?? 1;
+  if (!per || q <= 0) return null;
+  if (h.payout_basis === "per_unit") return h.payout_per_unit == null ? null : q * Number(h.payout_per_unit) * r;
+  if (h.payout_rate == null) return null;
+  const unit = h.payout_nominal ? Number(h.payout_nominal) : Number(h.price) || 0;
+  return (q * unit * r * Number(h.payout_rate) / 100) / per;
+}
+const daysUntil = (from: string, to: string) => Math.round((utcNoon(to).getTime() - utcNoon(from).getTime()) / DAY);
+const whenText = (days: number) => (days <= 0 ? "اليوم" : days === 1 ? "غداً" : `بعد ${days} أيام`);
+
+async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean, fx: Fx) {
   const { count } = await admin.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", uid);
   if (!count) return { sent: 0 };
   const today = riyadhDate();
@@ -364,6 +429,41 @@ async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean) 
         const week = `${today.slice(0, 4)}-${Math.floor((Date.parse(today) - Date.UTC(Number(today.slice(0, 4)), 0, 1)) / 604800000)}`;
         alerts.push({ key: `drift:${week}`, tag: "drift", title: "أوزان المحفظة تحتاج تصحيحاً",
           body: `${off.length === 1 ? off[0].name : `${off.length} طبقات`} بعيدة عن الوزن المستهدف. افتح مخطط الإيداع ليوجّه إيداعك القادم.` });
+      }
+    }
+    // distributions, maturities and each holding's zakat date
+    const { data: hs } = await admin.from("holdings").select("*").eq("user_id", uid).eq("archived", false);
+    for (const h of hs ?? []) {
+      if (!(Number(h.quantity) > 0)) continue;
+      const pay = nextPayout(h, today);
+      if (pay && daysUntil(today, pay) <= 1) {
+        const amt = payoutAmount(h, fx);
+        alerts.push({ key: `pay:${h.id}:${pay}`, tag: `pay-${h.id}`, title: `توزيع ${h.name} ${whenText(daysUntil(today, pay))}`,
+          body: `${amt ? `المتوقع نحو ${fmt0(amt)} ريال. ` : ""}سجّل وصوله من صفحة التوزيعات.` });
+      }
+      if (h.maturity_date && daysUntil(today, h.maturity_date) >= 0 && daysUntil(today, h.maturity_date) <= 7) {
+        alerts.push({ key: `mat:${h.id}:${h.maturity_date}`, tag: `mat-${h.id}`, title: `استحقاق ${h.name} ${whenText(daysUntil(today, h.maturity_date))}`,
+          body: "يعود رأس المال إلى حسابك؛ قرّر أين تعيد استثماره حسب مخطط الإيداع." });
+      }
+      if (h.zakatable !== false && h.zakat_start) {
+        const due = nextHaul(h.zakat_start, today);
+        if (due && daysUntil(today, due) <= 3) {
+          const value = Number(h.quantity) * Number(h.price) * (fx[String(h.currency ?? "SAR").toUpperCase()] ?? 1);
+          alerts.push({ key: `zk:${h.id}:${due}`, tag: `zk-${h.id}`, title: `زكاة ${h.name} ${whenText(daysUntil(today, due))}`,
+            body: `يحول الحول في ${hijriLong ? hijriLong.format(utcNoon(due)) : due}. الزكاة التقديرية ${fmt0((value * 2.5) / 100)} ريال بقيمة اليوم.` });
+        }
+      }
+    }
+    // monthly income transfer, once income has started
+    if (s && s.income_start_year && Number(s.income_start_year) <= Number(today.slice(0, 4))) {
+      const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
+      let due = isoOf(new Date(Date.UTC(y, m - 1, s.income_transfer_day ?? 27, 12)));
+      if (due < today) due = isoOf(new Date(Date.UTC(y, m, s.income_transfer_day ?? 27, 12)));
+      const days = daysUntil(today, due);
+      if (days <= 1) {
+        const approved = s.income_approved_year === Number(due.slice(0, 4)) && s.income_approved_annual;
+        alerts.push({ key: `tr:${due.slice(0, 7)}`, tag: "transfer", title: `التحويل الشهري ${whenText(days)}`,
+          body: approved ? `حوّل ${fmt0(Number(s.income_approved_annual) / 12)} ريال من احتياطي الدخل إلى حسابك، ثم سجّله في التطبيق.` : "اعتمد دخل هذا العام من صفحة الدخل الشهري لتعرف مبلغ التحويل." });
       }
     }
     if (conn?.last_status === "error") {
@@ -483,7 +583,7 @@ Deno.serve(async (req) => {
     if (mode === "all" || mode === "prices") res.prices = await refreshPrices(admin, uid);
     res.snapshot = await writeSnapshot(admin, uid, fx);
     if (cronKey) {
-      try { res.notify = await notifyUser(admin, uid, mode === "all"); } catch (e) { res.notify = { error: String(e) }; }
+      try { res.notify = await notifyUser(admin, uid, mode === "all", fx); } catch (e) { res.notify = { error: String(e) }; }
     }
     results.push(res);
   }

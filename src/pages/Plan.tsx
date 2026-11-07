@@ -66,20 +66,15 @@ export default function Plan() {
       </section>
 
       <section className="section">
-        <div className="section-head"><h2>قواعد المتابعة والسحب</h2></div>
+        <div className="section-head"><h2>قواعد المتابعة</h2></div>
         <div className="panel stack">
           <div className="grid2">
             <NumberField label="حد الانحراف قبل التنبيه" value={s.rebalance_band} suffix="نقطة" decimals={1} onChange={(v) => updateSettings({ rebalance_band: v })} />
-            <NumberField label="احتياطي الدخل" value={s.reserve_months} suffix="شهراً" onChange={(v) => updateSettings({ reserve_months: Math.round(v) })} />
-            <NumberField label="نسبة السحب" value={s.withdrawal_rate} suffix="%" decimals={1} onChange={(v) => updateSettings({ withdrawal_rate: v })} />
-            <NumberField label="النسبة الآمنة" value={s.safe_withdrawal_rate} suffix="%" decimals={1} onChange={(v) => updateSettings({ safe_withdrawal_rate: v })} />
-            <NumberField label="هبوط يستدعي خفض الدخل" value={s.guard_drawdown} suffix="%" decimals={1} onChange={(v) => updateSettings({ guard_drawdown: v })} />
-            <NumberField label="أقصى تغيير سنوي في الدخل" value={s.guard_cut} suffix="%" decimals={1} onChange={(v) => updateSettings({ guard_cut: v })} />
-          </div>
-          <div className="grid2">
             <NumberField plain label="سنة الميلاد" value={s.birth_year} onChange={(v) => updateSettings({ birth_year: Math.round(v) })} />
             <NumberField label="قسط التمويل العقاري" value={s.mortgage_monthly} suffix="ريال" onChange={(v) => updateSettings({ mortgage_monthly: v })} />
+            <NumberField plain label="آخر سنة للقسط" value={s.mortgage_end_year} onChange={(v) => updateSettings({ mortgage_end_year: Math.round(v) })} />
           </div>
+          <p className="small muted">نسبة السحب والاحتياطي وقواعد الحماية في صفحة <a href="#/income">«الدخل الشهري»</a>.</p>
         </div>
       </section>
       </fieldset>

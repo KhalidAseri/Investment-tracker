@@ -9,7 +9,7 @@ import { IconPlus } from '../components/icons'
 
 export const KIND_LABEL: Record<EventKind, string> = {
   bonus: 'مكافأة', advance: 'سلفة', vacation_bonus: 'مكافأة إجازة', vesting: 'استحقاق', zakat: 'زكاة',
-  review: 'مراجعة', withdrawal: 'سحب', deposit: 'إيداع', other: 'أخرى',
+  review: 'مراجعة', withdrawal: 'سحب', deposit: 'إيداع', other: 'أخرى', payout: 'توزيع نقدي',
 }
 const RECUR_LABEL = { none: 'مرة واحدة', monthly: 'كل شهر', yearly: 'كل سنة' } as const
 
@@ -18,7 +18,8 @@ export default function Calendar() {
   const d = useDerived()
   const [editing, setEditing] = useState<Partial<MoneyEvent> | null>(null)
   const [range, setRange] = useState(365)
-  const occ = useMemo(() => upcoming(events, todayISO(), range), [events, range])
+  const occ = useMemo(() => [...upcoming(events, todayISO(), range).map((o) => ({ ...o, route: undefined as string | undefined })), ...(d ? d.virtual(todayISO(), range) : [])]
+    .sort((a, b) => a.date.localeCompare(b.date)), [events, range, d])
   const groups = useMemo(() => {
     const m = new Map<string, typeof occ>()
     for (const o of occ) {
@@ -46,14 +47,14 @@ export default function Calendar() {
             <div className="section-head"><h2>{monthName(m - 1)} {y}</h2></div>
             <div className="panel flush">
               {items.map((o, i) => (
-                <button key={o.event.id + i} className="list-item" onClick={() => !readOnly && setEditing(o.event)} style={readOnly ? { cursor: 'default' } : undefined}>
+                <button key={o.event.id + i} className="list-item" onClick={() => { if (o.route) location.hash = `/${o.route}`; else if (!readOnly) setEditing(o.event) }} style={readOnly && !o.route ? { cursor: 'default' } : undefined}>
                   <div style={{ width: 70, flex: 'none', textAlign: 'center' }}>
                     <div className="figure" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1 }}>{Number(o.date.slice(8, 10))}</div>
                     <div className="tiny muted">{relativeDays(o.date)}</div>
                   </div>
                   <div className="grow">
                     <div>{o.event.title}</div>
-                    <div className="meta">{KIND_LABEL[o.event.kind]}، {RECUR_LABEL[o.event.recurrence]}{o.event.note ? `، ${o.event.note}` : ''}</div>
+                    <div className="meta">{KIND_LABEL[o.event.kind]}{o.route ? '' : `، ${RECUR_LABEL[o.event.recurrence]}`}{o.event.note ? `، ${o.event.note}` : ''}</div>
                   </div>
                   {o.event.amount ? <div className="amount">{sar(o.event.amount)}</div>
                     : o.event.kind === 'zakat' && d ? <div className="amount">{sar(d.zakat.amount)}<div className="tiny muted">تقديرياً اليوم</div></div> : null}

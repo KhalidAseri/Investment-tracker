@@ -188,3 +188,45 @@ export function MixBar({ parts }: { parts: Array<{ key: string; value: number; c
     </div>
   )
 }
+
+/** Monthly bars: received months (muted) then expected months (accent). */
+export function MonthBars({ data, title }: { data: Array<{ key: string; label: string; short: string; value: number; kind: 'received' | 'expected' }>; title: string }) {
+  const [box, W] = useWidth()
+  const H = 200
+  const m = { l: 48, r: 8, t: 22, b: 26 }
+  const maxY = Math.max(1, ...data.map((d) => d.value)) * 1.15
+  const step = niceStep(maxY, 3)
+  const ticks: number[] = []
+  for (let v = 0; v <= maxY; v += step) ticks.push(v)
+  const slot = (W - m.l - m.r) / Math.max(1, data.length)
+  const bw = Math.max(6, Math.min(34, slot * 0.62))
+  const Y = (v: number) => H - m.b - (v / maxY) * (H - m.t - m.b)
+  const every = slot >= 40 ? 1 : slot >= 22 ? 2 : 3
+  const short = (v: number) => (v >= 1_000_000 ? `${+(v / 1_000_000).toFixed(1)}م` : v >= 1000 ? `${+(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`)
+  return (
+    <div ref={box}>
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={title} direction="ltr">
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={m.l} x2={W - m.r} y1={Y(v)} y2={Y(v)} stroke="var(--line)" />
+            <text x={m.l - 8} y={Y(v) + 4} textAnchor="end">{v === 0 ? '0' : millions(v)}</text>
+          </g>
+        ))}
+        {data.map((d, i) => {
+          const cx = m.l + slot * i + slot / 2
+          const y = Y(d.value)
+          return (
+            <g key={d.key}>
+              <rect x={cx - bw / 2} y={y} width={bw} height={Math.max(0, H - m.b - y)} rx={Math.min(5, bw / 3)}
+                fill={d.kind === 'received' ? 'var(--income)' : 'var(--accent)'} opacity={d.kind === 'received' ? 0.45 : 1}>
+                <title>{`${d.label}: ${num0(d.value)} ريال`}</title>
+              </rect>
+              {slot >= 34 && d.value > 0 && <text x={cx} y={y - 6} textAnchor="middle" className="label-strong" style={{ fontSize: 10.5 }}>{d.value >= 100000 ? short(d.value) : num0(d.value)}</text>}
+              {i % every === 0 && <text x={cx} y={H - 8} textAnchor="middle" direction="rtl">{slot * every >= 46 ? d.label : d.short}</text>}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}

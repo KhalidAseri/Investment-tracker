@@ -6,7 +6,7 @@ import { ago, dateShort, pct, relativeDays, sar, sarShort } from '../lib/format'
 import { MixBar, PathChart } from '../components/charts'
 import { IconAlert, IconCalendar, IconCheck, IconEye, IconLink, IconScale, IconWallet } from '../components/icons'
 import { buyPrice, conditionsMet } from './Watchlist'
-import type { Go } from '../App'
+import type { Go, Route } from '../App'
 
 const yearsText = (n: number) => (n === 1 ? 'بسنة' : n === 2 ? 'بسنتين' : n <= 10 ? `بـ ${n} سنوات` : `بـ ${n} سنة`)
 
@@ -46,7 +46,7 @@ export default function Overview({ go }: { go: Go }) {
   }
   for (const o of d.soon.slice(0, 4)) {
     alerts.push({
-      tone: 'accent', icon: <IconCalendar />, action: () => go('calendar'),
+      tone: 'accent', icon: <IconCalendar />, action: () => go(('route' in o && (o as { route?: Route }).route) || 'calendar'),
       body: <><b>{o.event.title}</b> {relativeDays(o.date)} ({dateShort(o.date)}){o.event.amount ? `، ${sar(o.event.amount)}` : ''}</>,
     })
   }
@@ -93,7 +93,7 @@ export default function Overview({ go }: { go: Go }) {
       </section>
 
       <div className="facts">
-        <div className="fact"><div className="v">{sarShort(d.incomeNow)}</div><div className="l">دخل شهري ممكن الآن بنسبة {pct(settings.withdrawal_rate)}</div></div>
+        <a className="fact" href="#/income" style={{ color: 'inherit', textDecoration: 'none' }}><div className="v">{sarShort(d.incomeNow)}</div><div className="l">دخل شهري ممكن الآن بنسبة {pct(settings.withdrawal_rate)}</div></a>
         <div className="fact"><div className="v">{sarShort(d.capitalToday)}</div><div className="l">المحفظة المطلوبة بقيمة اليوم</div></div>
         <div className="fact"><div className="v">{pct(Math.min(999, d.progress * 100))}</div><div className="l">قطعتها من الطريق</div></div>
       </div>

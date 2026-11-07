@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { sleeveColors, useDerived } from '../lib/derived'
 import { LAYER_NAMES, LAYER_ORDER, ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
-import { ago, num2, pct, sar } from '../lib/format'
+import { ago, dateLong, num2, pct, relativeDays, sar, todayISO } from '../lib/format'
+import { FREQ_LABEL, PER_YEAR, hijriLabel, nextHaul, payoutPerPayment } from '../lib/income'
 import type { Holding } from '../lib/types'
-import { NumberField, SelectField, Sheet, Switch, TextField } from '../components/ui'
+import { NumberField, Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
 
 const CURRENCIES = ['SAR', 'USD', 'GBP', 'EUR', 'AED', 'HKD', 'SGD', 'JPY']
@@ -23,6 +24,7 @@ export default function Holdings() {
   const inPortfolio = visible.filter((h) => !h.account_id || !excluded.has(h.account_id))
   const outside = visible.filter((h) => h.account_id && excluded.has(h.account_id))
   const unassigned = inPortfolio.filter((h) => !h.sleeve_id || !sleeves.some((s) => s.id === h.sleeve_id))
+  const noHaul = visible.filter((h) => h.zakatable !== false && !h.zakat_start && holdingValue(h, fx) > 0)
 
   const row = (h: Holding) => {
     const v = holdingValue(h, fx)
@@ -108,7 +110,20 @@ export default function Holdings() {
             <span className="v">{sar(d.zakat.amount)}</span>
             <span className="small muted">على {sar(d.zakat.base)}{d.zakat.exempt > 0 ? `، ومستثنى ${sar(d.zakat.exempt)}` : ''}</span>
           </div>
-          <p className="small muted">كل الأصول عليها زكاة افتراضياً، والأسهم السعودية تحدّد أنت حكمها. التقدير على القيمة الحالية؛ احسب المبلغ النهائي في يوم حولك.</p>
+          <p className="small muted">كل الأصول عليها زكاة افتراضياً، والأسهم السعودية تحدّد أنت حكمها. لكل أصل حوله الخاص يبدأ من التاريخ الذي تحدّده له، ويتكرر بالتقويم الهجري.</p>
+          {d.zakatDue.length > 0 && (
+            <div className="panel flush">
+              {d.zakatDue.map((z) => (
+                <button key={z.holding.id + z.date} className="list-item" onClick={() => !readOnly && setEditing(z.holding)} style={readOnly ? { cursor: 'default' } : undefined}>
+                  <div className="grow"><div>{z.holding.name}</div><div className="meta">{hijriLabel(z.date)}، {dateLong(z.date)} ({relativeDays(z.date)})</div></div>
+                  <div className="amount">{sar(z.amount)}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {noHaul.length > 0 && (
+            <p className="small warn">{noHaul.length === 1 ? `«${noHaul[0].name}» لم تُحدَّد بداية حوله.` : `${noHaul.length} أصول لم تُحدَّد بداية حولها: ${noHaul.slice(0, 3).map((h) => h.name).join('، ')}${noHaul.length > 3 ? '…' : ''}.`} {readOnly ? '' : 'افتح الأصل وحدّدها ليظهر موعد زكاته وتصلك تنبيهاته.'}</p>
+          )}
           <details>
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{readOnly ? 'الأصول وحكم زكاتها' : 'حدّد الأصول التي عليها زكاة'}</summary>
             <div className="stack" style={{ marginTop: 10, gap: 0 }}>
@@ -129,7 +144,7 @@ export default function Holdings() {
 
 }
 
-function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose: () => void }) {
+export function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose: () => void }) {
   const { upsert, remove, fx, notify, accounts, sleeves, holdings } = useStore()
   const [h, setH] = useState<Partial<Holding>>(initial)
   const [lumpSum, setLumpSum] = useState(initial.price_source === 'manual' && Number(initial.quantity) === 1 && Number(initial.price) > 50)
@@ -142,7 +157,9 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
     const row: Partial<Holding> = {
       id: h.id, name: h.name.trim(), account_id: h.account_id ?? null, sleeve_id: h.sleeve_id ?? null, symbol: h.symbol?.trim() || null,
       price_source: h.price_source ?? 'manual', currency: h.currency ?? 'SAR', quantity: Number(h.quantity ?? 0), price: Number(h.price ?? 0),
-      note: h.note ?? null, sort: h.sort ?? holdings.length + 1, zakatable: h.zakatable !== false,
+      note: h.note ?? null, sort: h.sort ?? holdings.length + 1, zakatable: h.zakatable !== false, zakat_start: h.zakatable !== false ? h.zakat_start || null : null,
+      payout_freq: h.payout_freq ?? 'none', payout_next: h.payout_next || null, payout_basis: h.payout_basis ?? 'rate',
+      payout_rate: h.payout_rate ?? null, payout_per_unit: h.payout_per_unit ?? null, payout_nominal: h.payout_nominal || null, maturity_date: h.maturity_date || null,
       ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
     }
     const ok = await upsert('holdings', row)
@@ -193,10 +210,70 @@ function HoldingSheet({ initial, onClose }: { initial: Partial<Holding>; onClose
           <SelectField label="العملة" value={h.currency ?? 'SAR'} onChange={(v) => set({ currency: v })} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
         )}
         <p className="small">القيمة بالريال: <b className="figure">{sar(value)}</b></p>
-        <Switch label="عليه زكاة" hint={h.zakatable !== false ? `زكاته التقديرية ${sar((value * ZAKAT_RATE) / 100)}` : 'لا يدخل في حساب الزكاة'}
-          checked={h.zakatable !== false} onChange={(v) => set({ zakatable: v })} />
+        <PayoutFields h={h} set={set} />
+        <div className="panel inset stack" style={{ gap: 10 }}>
+          <Switch label="عليه زكاة" hint={h.zakatable !== false ? `زكاته التقديرية ${sar((value * ZAKAT_RATE) / 100)}` : 'لا يدخل في حساب الزكاة'}
+            checked={h.zakatable !== false} onChange={(v) => set({ zakatable: v })} />
+          {h.zakatable !== false && <ZakatStart h={h} set={set} />}
+        </div>
         <TextField label="ملاحظة" value={h.note ?? ''} onChange={(v) => set({ note: v })} />
       </div>
     </Sheet>
+  )
+}
+
+function ZakatStart({ h, set }: { h: Partial<Holding>; set: (p: Partial<Holding>) => void }) {
+  const next = h.zakat_start ? nextHaul(h.zakat_start, todayISO()) : null
+  return (
+    <label className="field"><span>بداية الحول</span>
+      <div className="row" style={{ gap: 8 }}>
+        <input className="input grow" type="date" value={h.zakat_start ?? ''} onChange={(e) => set({ zakat_start: e.target.value || null })} />
+        {!h.zakat_start && <button type="button" className="btn ghost small" onClick={() => set({ zakat_start: todayISO() })}>اليوم</button>}
+      </div>
+      <small>
+        {h.zakat_start
+          ? <>بدأ في {hijriLabel(h.zakat_start)}. يحول عليه الحول في <b>{next ? `${hijriLabel(next)} (${dateLong(next)})` : '—'}</b>، ويتكرر كل سنة هجرية.</>
+          : 'عادةً تاريخ شراء الأصل أو تاريخ بلوغ مالك النصاب. يصلك تنبيه قبل موعده بثلاثة أيام.'}
+      </small>
+    </label>
+  )
+}
+
+function PayoutFields({ h, set }: { h: Partial<Holding>; set: (p: Partial<Holding>) => void }) {
+  const { fx } = useStore()
+  const freq = h.payout_freq ?? 'none'
+  const [open, setOpen] = useState(freq !== 'none' || !!h.maturity_date)
+  const per = freq === 'none' ? 0 : payoutPerPayment({ ...(h as Holding), payout_freq: freq, payout_basis: h.payout_basis ?? 'rate' }, fx)
+  if (!open) return (
+    <button type="button" className="btn ghost" onClick={() => setOpen(true)}>يوزّع أرباحاً نقدية أو له تاريخ استحقاق؟</button>
+  )
+  return (
+    <div className="panel inset stack" style={{ gap: 10 }}>
+      <h3 style={{ margin: 0 }}>التوزيعات النقدية</h3>
+      <SelectField label="كم مرة يوزّع؟" value={freq} onChange={(v) => set({ payout_freq: v })}
+        options={(Object.keys(FREQ_LABEL) as Array<keyof typeof FREQ_LABEL>).map((k) => ({ value: k, label: FREQ_LABEL[k] }))} />
+      {freq !== 'none' && <>
+        <Segmented label="طريقة حساب التوزيع" value={h.payout_basis ?? 'rate'} onChange={(v) => set({ payout_basis: v })}
+          options={[{ value: 'rate', label: 'نسبة سنوية' }, { value: 'per_unit', label: 'مبلغ لكل وحدة' }]} />
+        {(h.payout_basis ?? 'rate') === 'rate' ? (
+          <div className="grid2">
+            <NumberField label="نسبة التوزيع السنوية" value={h.payout_rate ?? null} suffix="%" decimals={2} onChange={(v) => set({ payout_rate: v || null })} />
+            <NumberField label="القيمة الاسمية للوحدة" value={h.payout_nominal ?? null} decimals={2} suffix={h.currency ?? 'SAR'} onChange={(v) => set({ payout_nominal: v || null })}
+              hint="للصكوك فقط (غالباً 1,000). اتركه فارغاً للصناديق" />
+          </div>
+        ) : (
+          <NumberField label="المبلغ لكل وحدة في كل توزيع" value={h.payout_per_unit ?? null} decimals={4} suffix={h.currency ?? 'SAR'} onChange={(v) => set({ payout_per_unit: v || null })} />
+        )}
+        <label className="field"><span>موعد التوزيع القادم</span>
+          <input className="input" type="date" value={h.payout_next ?? ''} onChange={(e) => set({ payout_next: e.target.value || null })} />
+          <small>تتكرر المواعيد بعده {FREQ_LABEL[freq]}.</small>
+        </label>
+        <p className="small">{per == null ? 'أدخل النسبة أو المبلغ ليُحسب التوزيع.' : per > 0 ? <>نحو <b className="figure">{sar(per)}</b> في كل توزيع، و<b className="figure">{sar(per * PER_YEAR[freq])}</b> في السنة.</> : 'أدخل عدد الوحدات ليُحسب التوزيع.'}</p>
+      </>}
+      <label className="field"><span>تاريخ الاستحقاق</span>
+        <input className="input" type="date" value={h.maturity_date ?? ''} onChange={(e) => set({ maturity_date: e.target.value || null })} />
+        <small>للصكوك والودائع: يعود فيه رأس المال وتتوقف التوزيعات.</small>
+      </label>
+    </div>
   )
 }
