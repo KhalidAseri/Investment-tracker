@@ -11,7 +11,6 @@ import Settings from './pages/Settings'
 import Watchlist from './pages/Watchlist'
 import Payouts from './pages/Payouts'
 import Goals from './pages/Goals'
-import Profile from './pages/Profile'
 import Onboarding from './pages/Onboarding'
 import Performance from './pages/Performance'
 import NetWorth from './pages/NetWorth'
@@ -19,14 +18,14 @@ import Import from './pages/Import'
 import Report from './pages/Report'
 import { LockGate } from './components/LockGate'
 import { markUnlocked } from './lib/lock'
-import { IconCalendar, IconChevron, IconCoins, IconFlag, IconUser, IconDeposit, IconEye, IconHome, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
+import { IconCalendar, IconChevron, IconCoins, IconFlag, IconDeposit, IconEye, IconHome, IconList, IconMore, IconRefresh, IconSettings, IconTarget, IconWallet, IconChart, IconScale, IconImport, IconDoc } from './components/icons'
 
-export type Route = 'home' | 'holdings' | 'deposit' | 'payouts' | 'goals' | 'profile' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
+export type Route = 'home' | 'holdings' | 'deposit' | 'payouts' | 'goals' | 'plan' | 'watch' | 'calendar' | 'activity' | 'settings' | 'more' | 'performance' | 'networth' | 'import' | 'report'
 export type Go = (r: Route) => void
 
 const TITLES: Record<Route, string> = {
   home: 'مسارك', holdings: 'المحفظة', deposit: 'مخطط الإيداع', plan: 'الأوزان المستهدفة',
-  payouts: 'التوزيعات', goals: 'الأهداف', profile: 'وضعي المالي', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
+  payouts: 'التوزيعات', goals: 'الأهداف', watch: 'قائمة المراقبة', calendar: 'التقويم', activity: 'العمليات', settings: 'الإعدادات', more: 'المزيد',
   performance: 'الأداء', networth: 'صافي الثروة', import: 'الاستيراد من دراهم', report: 'التقرير السنوي',
 }
 const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?: string }> = [
@@ -37,7 +36,6 @@ const NAV: Array<{ r: Route; label: string; icon: (p: any) => JSX.Element; desc?
   { r: 'networth', label: 'صافي الثروة', icon: IconScale, desc: 'كل ما تملك وما عليك: العقار والديون وتوزيع أموالك' },
   { r: 'payouts', label: 'التوزيعات', icon: IconCoins, desc: 'ما وصلك وما ينتظر وصوله من صناديق الدخل والصكوك' },
   { r: 'goals', label: 'الأهداف', icon: IconFlag, desc: 'محافظ منفصلة لدفعة بيت أو سيارة أو تعليم' },
-  { r: 'profile', label: 'وضعي المالي', icon: IconUser, desc: 'ما تستثمره ومتى، والتزاماتك، وهدفك' },
   { r: 'plan', label: 'الأوزان', icon: IconTarget, desc: 'الأوزان المستهدفة لكل طبقة وحد التنبيه' },
   { r: 'watch', label: 'المراقبة', icon: IconEye, desc: 'الأسهم المباشرة وشروط شرائها وسعر الشراء' },
   { r: 'calendar', label: 'التقويم', icon: IconCalendar, desc: 'المكافأة والسلفة والزكاة والمراجعة السنوية' },
@@ -82,7 +80,7 @@ export default function App() {
   const current: Route = readOnly && VIEWER_HIDDEN.includes(route) ? 'home' : route
 
   const page: Record<Route, ReactNode> = {
-    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, payouts: <Payouts />, goals: <Goals />, profile: <Profile />, plan: <Plan />, watch: <Watchlist />,
+    home: <Overview go={go} />, holdings: <Holdings />, deposit: <Deposit />, payouts: <Payouts />, goals: <Goals />, plan: <Plan />, watch: <Watchlist />,
     calendar: <Calendar />, activity: <Activity />, settings: <Settings />, performance: <Performance />, networth: <NetWorth />, import: <Import />, report: <Report />, more: <More go={go} items={nav.filter((n) => n.desc && !TABS.includes(n.r))} />,
   }
   const activeTab = TABS.includes(current) ? current : 'more'

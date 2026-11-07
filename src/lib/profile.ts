@@ -133,28 +133,19 @@ const KIND_EVENT: Record<IncomeStream['kind'], MoneyEvent['kind']> = {
   bonus: 'bonus', vacation_bonus: 'vacation_bonus', advance: 'advance', savings_program: 'vesting', side: 'deposit', rent: 'deposit', other: 'deposit',
 }
 
-export function profileOccurrences(args: { s: PlanSettings; streams: IncomeStream[]; goals: Goal[]; fromISO: string; days: number }): ProfileOcc[] {
-  const { s, streams, goals, fromISO, days } = args
+/** Calendar entries from settings: the monthly deposit reminder and goal deadlines. */
+export function profileOccurrences(args: { s: PlanSettings; goals: Goal[]; fromISO: string; days: number }): ProfileOcc[] {
+  const { s, goals, fromISO, days } = args
   const from = utc(fromISO)
   const to = new Date(from.getTime() + days * 86400000)
   const toISO = isoOf(to)
   const out: ProfileOcc[] = []
-  for (const st of streams) {
-    if (st.frequency === 'monthly') continue
-    const invest = Math.round((Number(st.amount) || 0) * (Number(st.invest_pct) / 100))
-    let next = nextStreamDate(st, fromISO)
-    for (let k = 0; next && next <= toISO && k < 15; k++) {
-      out.push({ route: 'deposit', date: next, event: vEvent(`s:${st.id}:${next}`, st.name, KIND_EVENT[st.kind], next, invest || null, `${STREAM_LABEL[st.kind]}، للاستثمار${st.frequency === 'irregular' ? '، التاريخ تقديري' : ''}`) })
-      if (st.frequency !== 'yearly') break
-      next = isoOf(new Date(Date.UTC(Number(next.slice(0, 4)) + 1, Number(next.slice(5, 7)) - 1, Number(next.slice(8, 10)), 12)))
-    }
-  }
   if (s.deposit_day) {
     for (let k = 0; k < Math.ceil(days / 28) + 1; k++) {
       const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + k, s.deposit_day, 12))
       if (d < from || d > to) continue
       const date = isoOf(d)
-      out.push({ route: 'deposit', date, event: vEvent(`d:${date}`, 'الإيداع الشهري', 'deposit', date, s.monthly_invest ? Math.round(Number(s.monthly_invest)) : null, s.monthly_invest ? 'من الراتب' : 'المبلغ يتغير؛ قسّمه من مخطط الإيداع') })
+      out.push({ route: 'deposit', date, event: vEvent(`d:${date}`, 'الإيداع الشهري', 'deposit', date, null, 'قسّمه من مخطط الإيداع') })
     }
   }
   for (const g of goals) {

@@ -5,7 +5,7 @@ import { ago, dateLong, sar, todayISO } from '../lib/format'
 import type { Account, Viewer } from '../lib/types'
 import { supabase } from '../lib/supabase'
 import { disablePush, enablePush, pushState, testPush, type PushState } from '../lib/push'
-import { Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
+import { NumberField, Segmented, SelectField, Sheet, Switch, TextField } from '../components/ui'
 import { IconPlus, IconRefresh } from '../components/icons'
 import { disableLock, enableLock, lockAvailable, lockConfig, setLockMinutes } from '../lib/lock'
 
@@ -220,6 +220,19 @@ function AppLock() {
   )
 }
 
+function DepositReminder() {
+  const { settings, updateSettings } = useStore()
+  if (!settings) return null
+  const on = settings.deposit_day != null
+  return (
+    <div className="panel inset stack" style={{ gap: 10 }}>
+      <Switch label="ذكّرني بالإيداع كل شهر" hint="اختياري؛ يصلك إشعار في اليوم الذي تحدده" checked={on}
+        onChange={(v) => updateSettings({ deposit_day: v ? 27 : null })} />
+      {on && <NumberField plain label="يوم التذكير في الشهر" value={settings.deposit_day} min={1} max={28} onChange={(v) => updateSettings({ deposit_day: Math.round(v) || 27 })} />}
+    </div>
+  )
+}
+
 function Notifications() {
   const { notify } = useStore()
   const [state, setState] = useState<PushState | null>(null)
@@ -243,6 +256,7 @@ function Notifications() {
           <li>وصول سهم في قائمة المراقبة إلى سعر الشراء.</li>
           <li>تعذّر مزامنة IBKR.</li>
         </ul>
+        <DepositReminder />
         {state === 'needs-install' && <p className="small warn">على الآيفون تعمل الإشعارات بعد إضافة التطبيق إلى الشاشة الرئيسية وفتحه منها.</p>}
         {state === 'denied' && <p className="small warn">سمحت سابقاً بحظر الإشعارات لهذا الموقع. افتح إعدادات الموقع في المتصفح واسمح بالإشعارات، ثم عد هنا.</p>}
         {state === 'unsupported' && <p className="small muted">جرّب Chrome على الأندرويد، أو Safari أو Chrome على الماك.</p>}

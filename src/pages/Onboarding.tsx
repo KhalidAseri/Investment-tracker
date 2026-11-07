@@ -1,18 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { num0, sar } from '../lib/format'
-import { ASSET_TYPES, FREQUENCY_LABEL, STREAM_KINDS, TEMPLATES, type AssetType } from '../lib/profile'
+import { ASSET_TYPES, TEMPLATES, type AssetType } from '../lib/profile'
 import type { IncomeStream } from '../lib/types'
 import { MixBar } from '../components/charts'
 import { NumberField, Segmented, SelectField, Switch, TextField } from '../components/ui'
 import { IconClose, IconPlus } from '../components/icons'
 import { LAYER_VAR } from '../lib/derived'
 
-type StreamRow = { kind: IncomeStream['kind']; name: string; amount: number; frequency: IncomeStream['frequency']; month: string; invest_pct: number }
 type ObligationRow = { name: string; monthly_amount: number; end_year: number | null }
 type AssetRow = { name: string; value: number; type: AssetType; platform: string }
 
-const STEPS = ['ما تستثمره', 'التزاماتك', 'ما تملكه الآن', 'أسلوب المحفظة']
+const STEPS = ['التزاماتك', 'ما تملكه الآن', 'أسلوب المحفظة']
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
 const PLATFORMS = ['الراجحي المالية', 'Interactive Brokers', 'دراية المالية', 'الأهلي المالية', 'الإنماء للاستثمار', 'الجزيرة كابيتال', 'برنامج ادخار جهة العمل', 'حساب بنكي']
 const OBLIGATION_CHIPS = ['تمويل عقاري', 'قرض شخصي', 'تمويل سيارة', 'قسط سلفة']
@@ -22,19 +21,11 @@ export default function Onboarding() {
   const thisYear = new Date().getFullYear()
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [varies, setVaries] = useState(false)
-  const [monthly, setMonthly] = useState(3000)
-  const [depositDay, setDepositDay] = useState(27)
-  const [streams, setStreams] = useState<StreamRow[]>([])
   const [obligations, setObligations] = useState<ObligationRow[]>([])
   const [assets, setAssets] = useState<AssetRow[]>([])
   const [emergency, setEmergency] = useState(0)
   const [template, setTemplate] = useState('balanced')
 
-  const yearly = useMemo(() => monthly * 12 + streams.reduce((a, r) => {
-    const v = r.amount * (r.invest_pct / 100)
-    return a + (r.frequency === 'monthly' ? v * 12 : r.frequency === 'once' ? 0 : v)
-  }, 0), [monthly, streams])
   const tpl = TEMPLATES.find((t) => t.key === template)!
 
   const finish = async () => {
@@ -53,12 +44,11 @@ export default function Onboarding() {
     if (emergency > 0) holdings.push({ name: 'صندوق الطوارئ', value: emergency, sort: holdings.length + 1, account: accounts.length - 1 } as never)
     const ok = await createPlan({
       settings: {
-        monthly_invest: monthly, deposit_day: depositDay, annual_contribution: Math.round(yearly), extra: { monthly_varies: varies, template },
+        extra: { template },
       },
       accounts,
       sleeves: tpl.sleeves.map(({ asset: _a, ...s }) => s),
       holdings,
-      streams: streams.filter((r) => r.amount > 0).map((r, i) => ({ ...r, month: r.month || null, sort: i + 1 })),
       obligations: obligations.filter((o) => o.name.trim() && o.monthly_amount > 0).map((o, i) => ({ ...o, sort: i + 1 })),
     })
     setBusy(false)
@@ -84,49 +74,6 @@ export default function Onboarding() {
 
       <main className="onboard-body">
         {step === 0 && (
-          <section className="stack">
-            <h2>ما تستثمره</h2>
-            <Segmented label="الإيداع من الراتب" value={varies ? 'varies' : 'fixed'} onChange={(v) => setVaries(v === 'varies')}
-              options={[{ value: 'fixed', label: 'مبلغ شهري ثابت تقريباً' }, { value: 'varies', label: 'يتغير كل شهر' }]} />
-            <div className="grid2">
-              <NumberField label={varies ? 'متوسطه الشهري تقريباً' : 'المبلغ الشهري'} value={monthly} suffix="ريال" onChange={setMonthly} />
-              <NumberField plain label="يوم الإيداع في الشهر" value={depositDay} min={1} max={28} onChange={(v) => setDepositDay(Math.round(v))} hint="عادةً بعد نزول الراتب" />
-            </div>
-            <h3 style={{ marginTop: 8 }}>دخل إضافي تستثمر منه</h3>
-            <p className="small muted">أضف ما ينطبق عليك؛ يظهر في التقويم ويقترح التطبيق تقسيمه حين يصل.</p>
-            <div className="chips">
-              {STREAM_KINDS.map((k) => (
-                <button key={k.kind} type="button" className="btn ghost small" onClick={() => setStreams((r) => [...r, { kind: k.kind, name: k.label, amount: 0, frequency: k.frequency, month: '', invest_pct: k.invest }])}>
-                  <IconPlus /> {k.label}
-                </button>
-              ))}
-            </div>
-            {streams.map((r, i) => {
-              const set = (p: Partial<StreamRow>) => setStreams((rows) => rows.map((x, j) => (j === i ? { ...x, ...p } : x)))
-              return (
-                <div key={i} className="panel inset stack" style={{ gap: 10 }}>
-                  <div className="row" style={{ gap: 8 }}>
-                    <div className="grow"><TextField label="الاسم" value={r.name} onChange={(v) => set({ name: v })} /></div>
-                    <button className="icon-btn" aria-label="حذف" onClick={() => setStreams((rows) => rows.filter((_, j) => j !== i))} style={{ alignSelf: 'flex-end' }}><IconClose /></button>
-                  </div>
-                  <div className="grid2">
-                    <NumberField label="المبلغ" value={r.amount} suffix="ريال" onChange={(v) => set({ amount: v })} />
-                    <SelectField label="كم مرة؟" value={r.frequency} onChange={(v) => set({ frequency: v })}
-                      options={(Object.keys(FREQUENCY_LABEL) as Array<IncomeStream['frequency']>).map((f) => ({ value: f, label: FREQUENCY_LABEL[f] }))} />
-                    {r.frequency !== 'monthly' && (
-                      <SelectField label="في أي شهر غالباً؟" value={r.month} onChange={(v) => set({ month: v })}
-                        options={[{ value: '', label: 'غير ثابت' }, ...MONTHS.map((m, k) => ({ value: String(k + 1), label: m }))]} />
-                    )}
-                    <NumberField label="كم تستثمر منه؟" value={r.invest_pct} suffix="%" min={0} max={100} onChange={(v) => set({ invest_pct: v })} />
-                  </div>
-                </div>
-              )
-            })}
-            <p className="small">تستثمر سنوياً نحو <b className="figure">{sar(yearly)}</b>.</p>
-          </section>
-        )}
-
-        {step === 1 && (
           <section className="stack">
             <h2>التزاماتك الشهرية</h2>
             <p className="muted">الأقساط التي تستمر سنوات، مثل التمويل العقاري أو الشخصي. يمكنك لاحقاً إضافة المبلغ المتبقي لكل دين من «صافي الثروة».</p>
@@ -154,7 +101,7 @@ export default function Onboarding() {
           </section>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <section className="stack">
             <h2>ما تملكه الآن</h2>
             <p className="muted">الأرصدة الحالية بالقيمة التقريبية. التفاصيل (الوحدات، الرموز، الربط الآلي) تضيفها لاحقاً من صفحة المحفظة.</p>
@@ -181,7 +128,7 @@ export default function Onboarding() {
           </section>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <section className="stack">
             <h2>أسلوب المحفظة</h2>
             <p className="muted">نقطة بداية للأوزان. تغيّر أي وزن أو تضيف طبقة متى شئت من صفحة الأوزان.</p>
@@ -193,7 +140,6 @@ export default function Onboarding() {
               </button>
             ))}
             <div className="panel stack" style={{ gap: 6 }}>
-              <div className="row between small"><span>تستثمر سنوياً</span><b className="figure">{sar(yearly)}</b></div>
               <div className="row between small"><span>تملك الآن</span><b className="figure">{sar(assets.reduce((a, x) => a + x.value, 0))}</b></div>
             </div>
           </section>

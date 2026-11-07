@@ -36,7 +36,8 @@ export interface PlanSettings {
   income_approved_year: number | null
   /** typical monthly amount invested from salary; null = varies month to month */
   monthly_invest: number | null
-  deposit_day: number
+  /** day of the month for the deposit reminder; null = no reminder */
+  deposit_day: number | null
   contribution_mode: 'auto' | 'manual'
   reserve_account_id: string | null
   stock_cap: number

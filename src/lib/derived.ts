@@ -3,7 +3,7 @@ import { useStore } from './store'
 import { computeTotals, drifts, upcoming, zakatEstimate } from './calc'
 import { todayISO } from './format'
 import { payoutSchedule, virtualOccurrences, zakatSchedule } from './income'
-import { contributionFromProfile, goalStatus, profileOccurrences } from './profile'
+import { goalStatus, profileOccurrences } from './profile'
 import type { Layer, Sleeve } from './types'
 
 export const LAYER_VAR: Record<Layer, string> = {
@@ -22,7 +22,7 @@ export function sleeveColors(sleeves: Sleeve[]): Record<string, { color: string;
 }
 
 export function useDerived() {
-  const { settings, sleeves, accounts, holdings, snapshots, events, fx, transactions, streams, goals } = useStore()
+  const { settings, sleeves, accounts, holdings, snapshots, events, fx, goals } = useStore()
   return useMemo(() => {
     if (!settings) return null
     const totals = computeTotals(holdings, accounts, sleeves, fx)
@@ -33,9 +33,8 @@ export function useDerived() {
     const zakatDue = zakatSchedule(holdings, fx, todayISO(), 365)
     const virtual = (fromISO: string, days: number) => [
       ...virtualOccurrences({ holdings, fx, s: settings, engine: null, fromISO, days }),
-      ...profileOccurrences({ s: settings, streams, goals, fromISO, days }),
+      ...profileOccurrences({ s: settings, goals, fromISO, days }),
     ].sort((a, b) => a.date.localeCompare(b.date))
-    const contribution = contributionFromProfile(settings, streams)
     const goalStats = goals.filter((g) => !g.archived).map((g) => goalStatus(g, totals.goals[g.id] ?? 0))
     const soon = [...upcoming(events, todayISO(), 60), ...virtual(todayISO(), 21).filter((o) => !o.event.id.startsWith('v:d:'))].sort((a, b) => a.date.localeCompare(b.date))
     const today = todayISO()
@@ -47,7 +46,7 @@ export function useDerived() {
       (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000))
     const targetSum = { now: sleeves.reduce((a, s) => a + Number(s.target_now), 0) }
     return {
-      totals, drift, outOfBand, zakat, soon, change, unassigned, staleManual, targetSum, payouts, zakatDue, virtual, contribution, goalStats,
+      totals, drift, outOfBand, zakat, soon, change, unassigned, staleManual, targetSum, payouts, zakatDue, virtual, goalStats,
     }
-  }, [settings, sleeves, accounts, holdings, snapshots, events, fx, transactions, streams, goals])
+  }, [settings, sleeves, accounts, holdings, snapshots, events, fx, goals])
 }

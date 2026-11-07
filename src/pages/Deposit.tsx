@@ -7,7 +7,7 @@ import type { Goal, Holding } from '../lib/types'
 import { NumberField, Segmented, Sheet, Switch } from '../components/ui'
 
 export default function Deposit() {
-  const { settings, sleeves, holdings, streams, accounts } = useStore()
+  const { settings, sleeves, holdings, accounts } = useStore()
   const d = useDerived()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
   const [text, setText] = useState('10,000')
@@ -34,12 +34,7 @@ export default function Deposit() {
   const fiAmount = Math.max(0, amount - goalsTotal)
   const lines = useMemo(() => (d && settings && fiAmount > 0 ? planDeposit(fiAmount, sleeves, d.totals, settings, mode) : []), [fiAmount, sleeves, d, settings, mode])
   if (!settings || !d) return null
-  const monthlyQuick = Number(settings.monthly_invest) || 0
-  const quick = [
-    ...(monthlyQuick > 0 ? [{ label: `الشهري ${num0(monthlyQuick)}`, v: monthlyQuick }] : [{ label: '5,000', v: 5000 }, { label: '10,000', v: 10000 }]),
-    ...streams.filter((st) => st.frequency !== 'monthly' && Number(st.amount) > 0).slice(0, 3)
-      .map((st) => { const v = Math.round(Number(st.amount) * (Number(st.invest_pct) / 100)); return { label: `${st.name} ${num0(v)}`, v } }),
-  ]
+  const quick = [2000, 5000, 10000, 20000].map((v) => ({ label: num0(v), v }))
   const suggestion = (sleeveId: string) => {
     const note = sleeves.find((s) => s.id === sleeveId)?.note
     if (note) return note
@@ -48,7 +43,7 @@ export default function Deposit() {
 
   return (
     <>
-      <p className="muted" style={{ marginBottom: 14 }}>اكتب المبلغ الذي ستستثمره، وأقسّمه لك على الطبقات بحيث تقترب المحفظة من أوزانها المستهدفة لهذا العام.</p>
+      <p className="muted" style={{ marginBottom: 14 }}>اكتب المبلغ الذي ستستثمره، وأقسّمه لك على الطبقات بحيث تقترب المحفظة من أوزانها المستهدفة.</p>
       <div className="panel amount-hero">
         <label htmlFor="amt" className="small muted">مبلغ الإيداع بالريال</label>
         <input id="amt" className="amount-input" inputMode="decimal" value={text}
