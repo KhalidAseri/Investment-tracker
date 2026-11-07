@@ -66,8 +66,13 @@ export function todayLabel(d = new Date()) {
 }
 
 // ---------- actions from anywhere (the shell listens) ----------
-export type ActionKind = 'sheet' | 'asset' | 'payout' | 'tx'
-export const openAction = (kind: ActionKind = 'sheet') => { haptic(); window.dispatchEvent(new CustomEvent('masar:action', { detail: kind })) }
+export type ActionKind = 'sheet' | 'asset' | 'payout' | 'tx' | 'rebalance' | 'treasury' | 'withdraw' | 'emergency'
+export type ActionRequest = { kind: ActionKind; param?: string }
+/** Opens a sheet from anywhere; `param` is passed to the sheet (e.g. an amount or a plan action key). */
+export const openAction = (kind: ActionKind = 'sheet', param?: string) => {
+  haptic()
+  window.dispatchEvent(new CustomEvent<ActionRequest>('masar:action', { detail: { kind, param } }))
+}
 
 // ---------- colours & initials ----------
 export const LAYER_COLOR: Record<Layer, string> = { growth: 'var(--growth)', income: 'var(--income)', safety: 'var(--safety)', hedge: 'var(--hedge)' }

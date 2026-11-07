@@ -5,8 +5,9 @@ import { useDerived } from '../lib/derived'
 import { ZAKAT_RATE, holdingValue } from '../lib/calc'
 import { dateLong, dateShort, monthName, num0, num2, pct, relativeDays, sar, todayISO } from '../lib/format'
 import {
-  FREQ_LABEL, daysBetween, hijriLabel, isIncomeTx, isoOf, nominalValue, payoutAnnual, payoutPerPayment, utc, type PayoutItem,
+  FREQ_LABEL, daysBetween, hijriLabel, incomeTxIn, isoOf, nominalValue, payoutAnnual, payoutPerPayment, treasuryHoldingIds, utc, type PayoutItem,
 } from '../lib/income'
+import { usePlan, usePlanOps } from '../lib/usePlan'
 import { purification } from '../lib/wealth'
 import type { Holding, Transaction } from '../lib/types'
 import { MonthBars } from '../components/charts'
@@ -79,7 +80,7 @@ function Row({ start, title, href, sub, end, className = '' }: {
 }
 
 export default function Payouts() {
-  const { holdings, transactions, sleeves, accounts, fx, readOnly } = useStore()
+  const { holdings, transactions, sleeves, accounts, goals, fx, readOnly } = useStore()
   const d = useDerived()
   const [tab, setTab] = useState<Tab>('next')
   const [recording, setRecording] = useState<Partial<PayoutItem> | null>(null)
@@ -90,6 +91,8 @@ export default function Payouts() {
   const data = useMemo(() => {
     if (!d) return null
     const yearAgo = addDays(today, -365)
+    // received income only: a monthly transfer out of the income treasury is not a distribution
+    const isIncomeTx = incomeTxIn(treasuryHoldingIds(holdings, goals))
     const incomeTx = transactions.filter(isIncomeTx)
     const received = incomeTx.filter((t) => t.tx_date > yearAgo && t.tx_date <= today)
     const receivedSum = received.reduce((a, t) => a + Number(t.amount_sar), 0)
@@ -150,7 +153,7 @@ export default function Payouts() {
       expected, received, receivedSum, incomeTx, hasOlder: incomeTx.some((t) => t.tx_date <= yearAgo),
       annual, yieldPct, unknown, tools, awaiting, bars, missing,
     }
-  }, [d, holdings, transactions, sleeves, accounts, fx, today])
+  }, [d, holdings, transactions, sleeves, accounts, goals, fx, today])
 
   const shown = useCountUp(data?.expected ?? 0)
   if (!d || !data) return null
@@ -439,9 +442,14 @@ function Purification() {
 }
 
 export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<PayoutItem>; onClose: () => void }) {
-  const { holdings, fx, upsert, notify } = useStore()
+  const { holdings, goals, fx, upsert, notify } = useStore()
   const d = useDerived()
+  const plan = usePlan()
+  const ops = usePlanOps()
   const maturity = initial.kind === 'maturity'
+  // with an income treasury, a distribution can go straight into it (on by default once income has started)
+  const treasuryGoal = goals.find((g) => g.kind === 'income' && !g.archived) ?? null
+  const [toTreasury, setToTreasury] = useState(() => !!plan.progress?.treasury.started)
   // instruments that pay come first in the list
   const options = useMemo(() => {
     const live = holdings.filter((h) => !h.archived)
@@ -478,7 +486,9 @@ export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<Payou
     if (ok) {
       if (maturity && close) await upsert('holdings', { id: h.id, quantity: 0, archived: true })
       else if (next) await upsert('holdings', { id: h.id, payout_next: next })
-      notify(maturity ? 'سُجّل الاستحقاق' : 'سُجّل التوزيع')
+      const moved = !maturity && !!treasuryGoal && toTreasury && h.goal_id !== treasuryGoal.id
+        ? await ops.toTreasury(amount, date, note || `توزيع ${h.name}`, 'transfer') : false
+      notify(maturity ? 'سُجّل الاستحقاق' : moved ? 'سُجّل التوزيع وأُضيف إلى خزانة الدخل' : 'سُجّل التوزيع')
       onClose()
     }
     setBusy(false)
@@ -495,6 +505,9 @@ export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<Payou
           <label className="field"><span>تاريخ الوصول</span><input className="input" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value || todayISO())} /></label>
         </div>
         {maturity && <Switch label="أغلق الأصل بعد الاستحقاق" hint="تُصفَّر وحداته ويُنقل إلى الأرشيف" checked={close} onChange={setClose} />}
+        {!maturity && treasuryGoal && h?.goal_id !== treasuryGoal.id && (
+          <Switch label="أضفه إلى خزانة الدخل" hint="يُضاف المبلغ إلى نقد الخزانة دون أن يُحسب إيداعاً جديداً" checked={toTreasury} onChange={setToTreasury} />
+        )}
         {next && <p className="small muted">يصبح موعد التوزيع القادم {dateLong(next)}.</p>}
         <TextField label="ملاحظة" value={note} onChange={setNote} />
       </div>

@@ -76,6 +76,20 @@ export interface Drift {
   target: number // %
   diff: number // percentage points
   gapValue: number // SAR needed to reach target (negative = over)
+  /** allowed range, % (the plan phase's band, or target ± settings.rebalance_band) */
+  min: number
+  max: number
+  /** outside the allowed range (never true while the portfolio is empty) */
+  out: boolean
+}
+
+/** Allowed range of a sleeve: its own band when set, otherwise target ± rebalance_band. */
+export function bandOf(sl: Pick<Sleeve, 'target_now' | 'band_min' | 'band_max'>, s: Pick<PlanSettings, 'rebalance_band'> | null | undefined) {
+  const target = Number(sl.target_now) || 0
+  const band = Number(s?.rebalance_band) || 0
+  const min = sl.band_min != null ? Number(sl.band_min) : Math.max(0, target - band)
+  const max = sl.band_max != null ? Number(sl.band_max) : target + band
+  return { target, min, max }
 }
 
 export function drifts(sleeves: Sleeve[], totals: Totals, s: PlanSettings): Drift[] {
@@ -84,7 +98,9 @@ export function drifts(sleeves: Sleeve[], totals: Totals, s: PlanSettings): Drif
     const value = totals.bySleeve[sl.id] ?? 0
     const actual = total ? (value / total) * 100 : 0
     const target = currentTarget(sl, s)
-    return { sleeve: sl, value, actual, target, diff: actual - target, gapValue: (target / 100) * total - value }
+    const { min, max } = bandOf(sl, s)
+    const out = total > 0 && (actual < min - 1e-9 || actual > max + 1e-9)
+    return { sleeve: sl, value, actual, target, diff: actual - target, gapValue: (target / 100) * total - value, min, max, out }
   })
 }
 

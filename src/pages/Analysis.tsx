@@ -109,8 +109,10 @@ function Diversification() {
       .filter((p) => p.value > 0 || (p.target ?? 0) > 0),
     ...(d.totals.unassigned > 0 ? [{ key: 'none', label: 'بلا شريحة', value: d.totals.unassigned, color: 'var(--line-strong)', target: null }] : []),
   ]
+  // out of range = outside the active plan phase's band when the sleeve has one, otherwise target ± rebalance_band (Drift.out)
   const band = Number(settings.rebalance_band) || 0
-  const out = d.drift.filter((x) => Math.abs(x.diff) > band)
+  const hasBands = d.drift.some((x) => x.sleeve.band_min != null || x.sleeve.band_max != null)
+  const out = d.drift.filter((x) => x.out)
   const scale = Math.max(1, ...d.drift.map((x) => Math.max(x.actual, x.target))) * 1.08
   const warn = inv.topShare > 25
 
@@ -139,34 +141,44 @@ function Diversification() {
           ) : <p className="an-hint flat">المحفظة الرئيسية بلا قيمة بعد؛ أصولك كلها في محافظ الأهداف.</p>}
         </Card>
 
-        <Card title="مقارنة بالأوزان المستهدفة" className="an-o3" action={readOnly ? null : { label: 'عدّل الأوزان', href: '#/plan' }}>
+        <Card title="مقارنة بالأوزان المستهدفة" className="an-o3" action={readOnly ? null : { label: 'الخطة', href: '#/plan/doc' }}>
           <p className={`an-status ${out.length ? 'warn' : 'good'}`}>
-            {out.length
-              ? `${sleevesText(out.length)} خارج ±${num1(band)} ${pointsWord(band)} من الهدف`
-              : `كل الشرائح ضمن ±${num1(band)} ${pointsWord(band)} من الهدف`}
+            {hasBands
+              ? (out.length ? `${sleevesText(out.length)} خارج نطاق خطتك` : 'كل الشرائح ضمن نطاق خطتك')
+              : out.length
+                ? <>{sleevesText(out.length)} خارج ±<bdi dir="ltr">{num1(band)}</bdi> {pointsWord(band)} من الهدف</>
+                : <>كل الشرائح ضمن ±<bdi dir="ltr">{num1(band)}</bdi> {pointsWord(band)} من الهدف</>}
           </p>
           <div className="an-cap flat"><span>الشريحة</span><span>الحالي / الهدف</span></div>
           {d.drift.map((x) => {
             const c = colors[x.sleeve.id] ?? { color: layerColor(x.sleeve.layer), opacity: 1 }
-            const off = Math.abs(x.diff) > band
+            const off = x.out
+            const own = x.sleeve.band_min != null || x.sleeve.band_max != null
+            const over = x.actual > x.max
+            const beyond = over ? x.actual - x.max : x.min - x.actual
             return (
               <div key={x.sleeve.id} className="alloc-row">
                 <div className="alloc-name"><i className="dot" style={{ background: c.color, opacity: c.opacity }} /><span dir="auto">{x.sleeve.name}</span></div>
-                <div className="alloc-nums"><b>{share(x.actual)}</b> <span className="muted">/ {share(x.target)}</span></div>
-                <div className="alloc-bar" role="img" aria-label={`${x.sleeve.name}: الحالي ${share(x.actual)}، الهدف ${share(x.target)}`}>
+                <div className="alloc-nums"><b>{share(x.actual)}</b> <span className="muted">/ {share(x.target)}</span>
+                  {own && <small className="an-range">النطاق <bdi dir="ltr">{num1(x.min)}–{num1(x.max)}%</bdi></small>}</div>
+                <div className="alloc-bar" role="img" aria-label={`${x.sleeve.name}: الحالي ${share(x.actual)}، الهدف ${share(x.target)}${own ? `، النطاق من ${num1(x.min)} إلى ${num1(x.max)}` : ''}`}>
+                  {own && <i className="band" style={{ insetInlineStart: `${Math.min(100, (x.min / scale) * 100)}%`, width: `${Math.max(0, Math.min(100, (x.max / scale) * 100) - Math.min(100, (x.min / scale) * 100))}%` }} />}
                   <i className="fill" style={{ width: `${Math.min(100, (x.actual / scale) * 100)}%`, background: c.color, opacity: c.opacity }} />
                   <i className="mark" style={{ insetInlineStart: `calc(${Math.min(100, (x.target / scale) * 100)}% - 1px)` }} />
                 </div>
                 {off && (
                   <div className="an-drift">
-                    <small className="chip warn">{x.diff > 0 ? 'أعلى' : 'أقل'} من الهدف بـ {num1(Math.abs(x.diff))} {pointsWord(Number(num1(Math.abs(x.diff))))}</small>
+                    <small className="chip warn">
+                      {own ? <>{over ? 'أعلى' : 'أقل'} من نطاقها بـ <bdi dir="ltr">{num1(beyond)}</bdi> {pointsWord(Number(num1(beyond)))}</>
+                        : <>{x.diff > 0 ? 'أعلى' : 'أقل'} من الهدف بـ <bdi dir="ltr">{num1(Math.abs(x.diff))}</bdi> {pointsWord(Number(num1(Math.abs(x.diff))))}</>}
+                    </small>
                     <span>{x.diff > 0 ? 'زيادة' : 'ينقصها'} <span className="money">{sar(Math.abs(x.gapValue))}</span></span>
                   </div>
                 )}
               </div>
             )
           })}
-          {d.drift.length === 0 && <p className="an-hint flat">لا شرائح بعد.{!readOnly && <> حدّدها من <a href="#/plan">الأوزان المستهدفة</a>.</>}</p>}
+          {d.drift.length === 0 && <p className="an-hint flat">لا شرائح بعد.{!readOnly && <> حدّدها في <a href="#/plan/doc">الخطة</a>.</>}</p>}
         </Card>
       </div>
 

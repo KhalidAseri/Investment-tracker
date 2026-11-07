@@ -19,38 +19,48 @@ import NetWorth from './pages/NetWorth'
 import Import from './pages/Import'
 import Report from './pages/Report'
 import Me from './pages/Me'
+import Review from './pages/Review'
+import { EmergencySheet, RebalanceSheet, TreasurySheet, WithdrawSheet } from './components/PlanSheets'
 import { LockGate } from './components/LockGate'
 import { AddAssetSheet } from './components/AddAsset'
 import { Sheet } from './components/ui'
 import { markUnlocked } from './lib/lock'
-import { greeting, haptic, todayLabel, usePrivacy, type ActionKind } from './lib/ui'
+import { greeting, haptic, todayLabel, usePrivacy, type ActionKind, type ActionRequest } from './lib/ui'
 import { todayISO } from './lib/format'
 import { useDerived } from './lib/derived'
+import { usePlan } from './lib/usePlan'
 import {
   IconCalendar, IconChevron, IconCoins, IconFlag, IconDeposit, IconEye, IconEyeOff, IconHome, IconList, IconSettings, IconTarget, IconWallet,
-  IconChart, IconScale, IconImport, IconDoc, IconPlus, IconPencil, IconCash, IconUser,
+  IconChart, IconScale, IconImport, IconDoc, IconPlus, IconPencil, IconCash, IconUser, IconShield, IconIncome, IconBuilding,
 } from './components/icons'
 
 export type Route = 'home' | 'portfolio' | 'goals' | 'watch' | 'asset' | 'update' | 'deposit' | 'income' | 'analysis' | 'networth' | 'me'
-  | 'calendar' | 'activity' | 'import' | 'report' | 'plan' | 'settings'
+  | 'calendar' | 'activity' | 'import' | 'report' | 'plan' | 'review' | 'settings'
 export type Go = (r: Route, param?: string) => void
 
 const TITLES: Record<Route, string> = {
   home: 'الرئيسية', portfolio: 'المحفظة', goals: 'المحفظة', watch: 'المحفظة', asset: 'تفاصيل الأصل', update: 'تحديث القيم',
   deposit: 'إيداع جديد', income: 'الدخل', analysis: 'التحليل', networth: 'صافي الثروة', me: 'حسابي', calendar: 'التقويم',
-  activity: 'العمليات', import: 'الاستيراد من دراهم', report: 'التقرير السنوي', plan: 'الأوزان المستهدفة', settings: 'الإعدادات',
+  activity: 'العمليات', import: 'الاستيراد من دراهم', report: 'التقرير السنوي', plan: 'الخطة', review: 'المراجعة السنوية', settings: 'الإعدادات',
 }
 const ALIASES: Record<string, Route> = { holdings: 'portfolio', payouts: 'income', performance: 'analysis', more: 'me', outlook: 'home', profile: 'home' }
 /** which bottom tab a page belongs to */
-const PARENT: Partial<Record<Route, Route>> = { goals: 'portfolio', watch: 'portfolio', asset: 'portfolio', update: 'portfolio' }
-const MAIN: Route[] = ['home', 'portfolio', 'goals', 'watch', 'income', 'analysis']
+const PARENT: Partial<Record<Route, Route>> = { goals: 'portfolio', watch: 'portfolio', asset: 'portfolio', update: 'portfolio', review: 'plan', analysis: 'home' }
+const MAIN: Route[] = ['home', 'portfolio', 'goals', 'watch', 'plan', 'income']
 
 type Nav = { r: Route; label: string; icon: (p: any) => JSX.Element }
+/** desktop sidebar */
 const PRIMARY: Nav[] = [
   { r: 'home', label: 'الرئيسية', icon: IconHome },
   { r: 'portfolio', label: 'المحفظة', icon: IconWallet },
+  { r: 'plan', label: 'الخطة', icon: IconTarget },
   { r: 'income', label: 'الدخل', icon: IconCoins },
   { r: 'analysis', label: 'التحليل', icon: IconChart },
+]
+/** mobile tab bar: two tabs, the ＋ button, two tabs */
+const TABS: [Nav[], Nav[]] = [
+  [PRIMARY[0], PRIMARY[1]],
+  [PRIMARY[2], PRIMARY[3]],
 ]
 const SECONDARY: Nav[] = [
   { r: 'deposit', label: 'إيداع جديد', icon: IconDeposit },
@@ -62,7 +72,6 @@ const SECONDARY: Nav[] = [
   { r: 'activity', label: 'العمليات', icon: IconList },
   { r: 'import', label: 'الاستيراد', icon: IconImport },
   { r: 'report', label: 'التقرير السنوي', icon: IconDoc },
-  { r: 'plan', label: 'الأوزان المستهدفة', icon: IconTarget },
   { r: 'settings', label: 'الإعدادات', icon: IconSettings },
 ]
 const VIEWER_HIDDEN: Route[] = ['deposit', 'import', 'update']
@@ -77,10 +86,15 @@ const readRoute = (): { route: Route; param: string } => {
 export default function App() {
   const { session, ready, loading, error, settings, save, toast, readOnly, needsSetup } = useStore()
   const [{ route, param }, setLoc] = useState(readRoute)
-  const [action, setAction] = useState<ActionKind | null>(null)
+  const [req, setReq] = useState<ActionRequest | null>(null)
+  const action = req?.kind ?? null
+  const setAction = (k: ActionKind | null, param?: string) => setReq(k ? { kind: k, param } : null)
   useEffect(() => {
     const on = () => { setLoc(readRoute()); window.scrollTo({ top: 0 }) }
-    const act = (e: Event) => setAction(((e as CustomEvent).detail as ActionKind) ?? 'sheet')
+    const act = (e: Event) => {
+      const d = (e as CustomEvent).detail as ActionRequest | ActionKind | null
+      setReq(typeof d === 'string' ? { kind: d } : d?.kind ? d : { kind: 'sheet' })
+    }
     window.addEventListener('hashchange', on)
     window.addEventListener('masar:action', act)
     return () => { window.removeEventListener('hashchange', on); window.removeEventListener('masar:action', act) }
@@ -103,9 +117,12 @@ export default function App() {
   const isMain = MAIN.includes(current)
   const page: Record<Route, ReactNode> = {
     home: <Home go={go} />, portfolio: <Portfolio go={go} />, goals: <Goals />, watch: <Watchlist />, asset: <Asset id={param} go={go} />,
-    update: <QuickUpdate go={go} />, deposit: <Deposit />, income: <Payouts />, analysis: <Analysis />, networth: <NetWorth />,
-    me: <Me go={go} />, calendar: <Calendar />, activity: <Activity />, import: <Import />, report: <Report />, plan: <Plan />, settings: <Settings />,
+    update: <QuickUpdate go={go} />, deposit: <Deposit param={param} />, income: <Payouts />, analysis: <Analysis />, networth: <NetWorth />,
+    me: <Me go={go} />, calendar: <Calendar />, activity: <Activity />, import: <Import />, report: <Report />, plan: <Plan go={go} param={param} />,
+    review: <Review go={go} />, settings: <Settings />,
   }
+  // a sidebar entry is current when it is the page itself, or the page's parent when the page has no entry of its own
+  const sideActive = (r: Route) => r === current || (r === tab && !PRIMARY.some((n) => n.r === current))
   const secondary = readOnly ? SECONDARY.filter((n) => !VIEWER_HIDDEN.includes(n.r)) : SECONDARY
 
   return (
@@ -115,7 +132,7 @@ export default function App() {
         <div className="brand"><img src="./icons/icon-192.png" width={34} height={34} alt="" style={{ borderRadius: 10 }} /><b>مسار</b></div>
         {!readOnly && <button className="btn primary side-add" onClick={() => setAction('sheet')}><IconPlus /> إضافة</button>}
         {PRIMARY.map((n) => (
-          <button key={n.r} className="side-link" aria-current={tab === n.r ? 'page' : undefined} onClick={() => go(n.r)}><n.icon />{n.label}</button>
+          <button key={n.r} className="side-link" aria-current={sideActive(n.r) ? 'page' : undefined} onClick={() => go(n.r)}><n.icon />{n.label}</button>
         ))}
         <div className="side-group">المزيد</div>
         {secondary.map((n) => (
@@ -129,14 +146,18 @@ export default function App() {
         <div className="page" key={current + param}>{page[current]}</div>
       </main>
       <nav className="tabbar" aria-label="التنقل الرئيسي">
-        {PRIMARY.slice(0, 2).map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
+        {TABS[0].map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
         {!readOnly && <div className="fab-slot"><button className="fab" aria-label="إضافة" onClick={() => { haptic(12); setAction('sheet') }}><IconPlus /></button></div>}
-        {PRIMARY.slice(2).map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
+        {TABS[1].map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
       </nav>
       {action === 'sheet' && <ActionSheet go={go} onPick={(k) => setAction(k)} onClose={() => setAction(null)} />}
       {action === 'asset' && <AddAssetSheet onClose={() => setAction(null)} />}
       {action === 'payout' && <RecordPayoutSheet initial={{ date: todayISO() }} onClose={() => setAction(null)} />}
       {action === 'tx' && <TxSheet initial={{ kind: 'withdrawal', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' }} onClose={() => setAction(null)} />}
+      {action === 'rebalance' && <RebalanceSheet param={req?.param} onClose={() => setAction(null)} />}
+      {action === 'treasury' && <TreasurySheet param={req?.param} onClose={() => setAction(null)} />}
+      {action === 'withdraw' && <WithdrawSheet param={req?.param} onClose={() => setAction(null)} />}
+      {action === 'emergency' && <EmergencySheet param={req?.param} onClose={() => setAction(null)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
     </LockGate>
@@ -166,11 +187,14 @@ function TopBar({ route, isMain, go, save, readOnly }: { route: Route; isMain: b
   )
 }
 
+type ActionTile = { key: string; icon: ReactNode; title: string; text: string; run: () => void; badge?: number }
+
 function ActionSheet({ go, onPick, onClose }: { go: Go; onPick: (k: ActionKind) => void; onClose: () => void }) {
   const d = useDerived()
+  const { doc, progress } = usePlan()
   const stale = d?.staleManual.length ?? 0
   const to = (r: Route) => { onClose(); go(r) }
-  const tiles: Array<{ key: string; icon: ReactNode; title: string; text: string; run: () => void; badge?: number }> = [
+  const tiles: ActionTile[] = [
     { key: 'deposit', icon: <IconDeposit />, title: 'إيداع جديد', text: 'قسّم مبلغاً على محفظتك وأهدافك', run: () => to('deposit') },
     { key: 'asset', icon: <IconWallet />, title: 'أصل جديد', text: 'سهم، صندوق، مرابحة أو غيرها', run: () => onPick('asset') },
     { key: 'update', icon: <IconPencil />, title: 'تحديث القيم', text: 'حدّث الأصول اليدوية دفعة واحدة', run: () => to('update'), badge: stale },
@@ -178,18 +202,31 @@ function ActionSheet({ go, onPick, onClose }: { go: Go; onPick: (k: ActionKind) 
     { key: 'import', icon: <IconImport />, title: 'استيراد من دراهم', text: 'التقرير الشهري أو ملف العمليات', run: () => to('import') },
     { key: 'tx', icon: <IconCash />, title: 'عملية أخرى', text: 'سحب، زكاة مدفوعة، رسوم', run: () => onPick('tx') },
   ]
+  // from the active plan: the emergency fund and the income treasury
+  const em = progress?.emergency
+  const tr = progress?.treasury
+  const plan: ActionTile[] = []
+  if (em?.enabled) plan.push({ key: 'emergency', icon: <IconShield />, title: 'صندوق الطوارئ', text: em.shortfall > 0.5 ? 'أكمل احتياطيك' : 'أضف إلى احتياطيك', run: () => onPick('emergency') })
+  if (doc?.income && tr) {
+    plan.push({ key: 'treasury', icon: <IconBuilding />, title: 'خزانة الدخل', text: 'بيع من المحفظة أو إيداع مباشر', run: () => onPick('treasury') })
+    if (tr.started) plan.push({ key: 'withdraw', icon: <IconIncome />, title: 'تحويل الدخل الشهري', text: 'من الخزانة إلى حسابك', run: () => onPick('withdraw') })
+  }
+  const tile = (t: ActionTile, wide = false) => (
+    <button key={t.key} type="button" className={`action-tile ${wide ? 'wide' : ''}`} onClick={() => { haptic(); t.run() }}>
+      <span className="ico">{t.icon}</span>
+      <b>{t.title}</b>
+      <span>{t.text}</span>
+      {!!t.badge && <i className="badge">{t.badge}</i>}
+    </button>
+  )
   return (
     <Sheet title="ماذا تريد أن تفعل؟" onClose={onClose}>
-      <div className="action-grid">
-        {tiles.map((t) => (
-          <button key={t.key} type="button" className="action-tile" onClick={() => { haptic(); t.run() }}>
-            <span className="ico">{t.icon}</span>
-            <b>{t.title}</b>
-            <span>{t.text}</span>
-            {!!t.badge && <i className="badge">{t.badge}</i>}
-          </button>
-        ))}
-      </div>
+      <div className="action-grid">{tiles.map((t) => tile(t))}</div>
+      {plan.length > 0 && <>
+        <div className="action-group">من خطتك</div>
+        {/* an odd last tile takes the whole row so the grid stays even */}
+        <div className="action-grid">{plan.map((t, i) => tile(t, plan.length % 2 === 1 && i === plan.length - 1))}</div>
+      </>}
     </Sheet>
   )
 }

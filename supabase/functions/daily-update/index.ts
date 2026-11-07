@@ -461,24 +461,28 @@ async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean, 
       alerts.push({ key: `ev:${e.id}:${next}`, tag: "event", title: e.title, body: `${when}${e.amount ? `، ${fmt0(e.amount)} ريال` : ""}${e.note ? `. ${e.note}` : ""}` });
     }
 
-    const [{ data: s }, { data: sleeves }, { data: snap }, { data: conn }] = await Promise.all([
+    const [{ data: s }, { data: sleeves }, { data: snap }, { data: conn }, { data: planRow }] = await Promise.all([
       admin.from("plan_settings").select("*").eq("user_id", uid).maybeSingle(),
-      admin.from("sleeves").select("id, name, target_now, target_fi").eq("user_id", uid),
+      admin.from("sleeves").select("id, name, target_now, band_min, band_max").eq("user_id", uid),
       admin.from("snapshots").select("total_sar, by_sleeve").eq("user_id", uid).order("snap_date", { ascending: false }).limit(1).maybeSingle(),
       admin.from("ibkr_connection").select("last_status, last_message").eq("user_id", uid).maybeSingle(),
+      admin.from("plans").select("doc").eq("user_id", uid).eq("is_active", true).maybeSingle(),
     ]);
+    // the active plan (lib/plan.ts PlanDoc); every field is read defensively
+    // deno-lint-ignore no-explicit-any
+    const plan: any = planRow?.doc && typeof planRow.doc === "object" ? planRow.doc : null;
     if (s && snap && Number(snap.total_sar) > 0) {
-      const yf = yearFrac();
-      const p = yf <= s.glide_start_year ? 0 : yf >= s.independence_year ? 1 : (yf - s.glide_start_year) / (s.independence_year - s.glide_start_year);
+      // out of band: outside the active phase's range when the sleeve has one, otherwise farther than rebalance_band from the target
       const off = (sleeves ?? []).filter((x) => {
-        const target = Number(x.target_now) + (Number(x.target_fi) - Number(x.target_now)) * p;
+        const target = Number(x.target_now);
         const actual = (Number((snap.by_sleeve as Record<string, number>)[x.id] ?? 0) / Number(snap.total_sar)) * 100;
+        if (x.band_min != null && x.band_max != null) return actual < Number(x.band_min) - 0.05 || actual > Number(x.band_max) + 0.05;
         return Math.abs(actual - target) > Number(s.rebalance_band);
       });
       if (off.length) {
         const week = `${today.slice(0, 4)}-${Math.floor((Date.parse(today) - Date.UTC(Number(today.slice(0, 4)), 0, 1)) / 604800000)}`;
-        alerts.push({ key: `drift:${week}`, tag: "drift", title: "أوزان المحفظة تحتاج تصحيحاً",
-          body: `${off.length === 1 ? off[0].name : `${off.length} طبقات`} بعيدة عن الوزن المستهدف. افتح مخطط الإيداع ليوجّه إيداعك القادم.` });
+        alerts.push({ key: `drift:${week}`, tag: "drift", title: "أوزان المحفظة خارج نطاقها",
+          body: `${off.length === 1 ? off[0].name : `${off.length} طبقات`} خارج النطاق المسموح في خطتك. افتح «الخطة» لترى كيف تعيد التوازن.` });
       }
     }
     // distributions, maturities and each holding's zakat date
@@ -504,33 +508,60 @@ async function notifyUser(admin: SupabaseClient, uid: string, morning: boolean, 
         }
       }
     }
-    // the monthly deposit day, and expected extra income
+    // the monthly deposit day (optional reminder)
     if (s && s.deposit_day && Number(today.slice(8, 10)) === Number(s.deposit_day)) {
-      const varies = (s.extra as Record<string, unknown> | null)?.monthly_varies;
       alerts.push({ key: `dep:${today.slice(0, 7)}`, tag: "deposit", title: "موعد إيداعك الشهري",
-        body: varies || !s.monthly_invest ? "اكتب مبلغ هذا الشهر في مخطط الإيداع ليقسّمه على الطبقات والأهداف." : `أودع ${fmt0(Number(s.monthly_invest))} ريال، ومخطط الإيداع يقسّمه على الطبقات والأهداف.` });
+        body: "اكتب مبلغ هذا الشهر في مخطط الإيداع ليقسّمه على الطبقات والأهداف." });
     }
-    const { data: streams } = await admin.from("income_streams").select("*").eq("user_id", uid);
-    for (const st of streams ?? []) {
-      if (st.frequency === "monthly") continue;
-      const due = nextStreamDate(st, today);
-      if (!due) continue;
-      const days = daysUntil(today, due);
-      if (days < 0 || days > 3) continue;
-      const invest = (Number(st.amount) * Number(st.invest_pct)) / 100;
-      alerts.push({ key: `st:${st.id}:${due}`, tag: `st-${st.id}`, title: `${st.name} ${whenText(days)}`,
-        body: invest ? `المخطط له للاستثمار ${fmt0(invest)} ريال. عند وصوله افتح مخطط الإيداع ليقسّمه لك.` : "عند وصوله افتح مخطط الإيداع ليقسّمه لك." });
-    }
-    // monthly income transfer, once income has started
-    if (s && s.income_start_year && Number(s.income_start_year) <= Number(today.slice(0, 4))) {
-      const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
-      let due = isoOf(new Date(Date.UTC(y, m - 1, s.income_transfer_day ?? 27, 12)));
-      if (due < today) due = isoOf(new Date(Date.UTC(y, m, s.income_transfer_day ?? 27, 12)));
-      const days = daysUntil(today, due);
-      if (days <= 1) {
-        const approved = s.income_approved_year === Number(due.slice(0, 4)) && s.income_approved_annual;
-        alerts.push({ key: `tr:${due.slice(0, 7)}`, tag: "transfer", title: `التحويل الشهري ${whenText(days)}`,
-          body: approved ? `حوّل ${fmt0(Number(s.income_approved_annual) / 12)} ريال من احتياطي الدخل إلى حسابك، ثم سجّله في التطبيق.` : "اعتمد دخل هذا العام من صفحة الدخل الشهري لتعرف مبلغ التحويل." });
+    if (plan) {
+      const [y, m, dd] = [Number(today.slice(0, 4)), Number(today.slice(5, 7)), Number(today.slice(8, 10))];
+      const dayOf = (yy: number, mm: number, day: number) => {
+        const last = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+        return isoOf(new Date(Date.UTC(yy, mm - 1, Math.min(Math.max(1, day), last), 12)));
+      };
+      // yearly and one-off contributions due within three days
+      for (const c of Array.isArray(plan.contributions) ? plan.contributions : []) {
+        if (!c || !(Number(c.amount) > 0) || c.kind === "monthly") continue;
+        let due: string | null = null;
+        if (c.kind === "yearly" && c.month) { due = dayOf(y, Number(c.month), Number(c.day ?? 1)); if (due < today) due = dayOf(y + 1, Number(c.month), Number(c.day ?? 1)); }
+        if (c.kind === "once" && typeof c.date === "string") due = c.date;
+        if (!due || (c.until && due > c.until)) continue;
+        const days = daysUntil(today, due);
+        if (days < 0 || days > 3) continue;
+        alerts.push({ key: `pc:${c.key}:${due}`, tag: `pc-${c.key}`, title: `${c.name} ${whenText(days)}`,
+          body: `خطتك تستثمر منه ${fmt0(Number(c.amount))} ريال. عند وصوله افتح مخطط الإيداع ليقسّمه لك.` });
+      }
+      // plan steps due within a day
+      for (const st of Array.isArray(plan.steps) ? plan.steps : []) {
+        if (!st || !st.due) continue;
+        let due = String(st.due);
+        let done = !!st.done_at;
+        if (st.recurring === "yearly") { due = `${y}${due.slice(4)}`; done = !!st.done_at && Number(String(st.done_at).slice(0, 4)) >= y; }
+        if (done) continue;
+        const days = daysUntil(today, due);
+        if (days < 0 || days > 1) continue;
+        alerts.push({ key: `step:${st.key}:${due}`, tag: `step-${st.key}`, title: `خطوة في خطتك ${whenText(days)}`, body: String(st.title ?? "") });
+      }
+      // the annual review, early in the review month
+      const reviewMonth = Number(plan.rules?.review_month ?? 1);
+      const reviewed = (Array.isArray(plan.reviews) ? plan.reviews : []).some((r: { year?: number }) => Number(r?.year) === y);
+      if (m === reviewMonth && dd <= 7 && !reviewed) {
+        alerts.push({ key: `review:${y}`, tag: "review", title: "حان موعد المراجعة السنوية",
+          body: "راجع الزكاة والتطهير والأوزان ودخل السنة من «الخطة»." });
+      }
+      // the monthly income transfer, once income has started
+      const inc = plan.income;
+      if (inc && typeof inc.start === "string" && inc.start <= today) {
+        const tday = Number(inc.transfer_day ?? 27);
+        let due = dayOf(y, m, tday);
+        if (due < today) due = dayOf(y, m + 1, tday);
+        const days = daysUntil(today, due);
+        if (days <= 1) {
+          const approved = Number(plan.state?.income_year) === Number(due.slice(0, 4)) && Number(plan.state?.income_annual) > 0;
+          const monthly = inc.method === "fixed" && Number(inc.fixed_monthly) > 0 ? Number(inc.fixed_monthly) : approved ? Number(plan.state.income_annual) / 12 : 0;
+          alerts.push({ key: `tr:${due.slice(0, 7)}`, tag: "transfer", title: `تحويل دخلك الشهري ${whenText(days)}`,
+            body: monthly ? `حوّل ${fmt0(monthly)} ريال من خزانة الدخل إلى حسابك، ثم سجّله في التطبيق.` : "اعتمد دخل هذه السنة في المراجعة السنوية لتعرف مبلغ التحويل." });
+        }
       }
     }
     if (conn?.last_status === "error") {

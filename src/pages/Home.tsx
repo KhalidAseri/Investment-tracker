@@ -1,24 +1,26 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
+import { usePlan } from '../lib/usePlan'
 import { LAYER_NAMES, LAYER_ORDER } from '../lib/calc'
-import { ago, dateLong, dateShort, num0, pct, relativeDays, sarShort, todayISO } from '../lib/format'
+import { ago, dateLong, dateShort, num0, relativeDays, sarShort, todayISO } from '../lib/format'
 import { mainFlows, netWorth, performance, periodStart, PERIODS, type Period } from '../lib/wealth'
 import { haptic, layerColor, openAction, useCountUp } from '../lib/ui'
 import { AssetRow, Card, DateBadge, Money, Pct, Pill, StackBar, Tile, Chev } from '../components/kit'
 import { AreaChart, Donut } from '../components/viz'
-import {
-  IconAlert, IconChart, IconCheck, IconCoins, IconEye, IconLayers, IconLink, IconPencil, IconRefresh, IconScale, IconShield, IconTarget,
-} from '../components/icons'
-import { buyPrice, conditionsMet } from './Watchlist'
+import { ActionRow } from '../components/PlanActions'
+import { IconAlert, IconChart, IconCheck, IconCoins, IconRefresh, IconScale, IconShield, IconTarget } from '../components/icons'
+import type { PlanView } from '../lib/usePlan'
 import type { Go, Route } from '../App'
-import type { Layer } from '../lib/types'
+import type { Goal, Layer } from '../lib/types'
+import './Home.css'
 
 const ROUTE_OF: Record<string, Route> = { payouts: 'income', holdings: 'portfolio', income: 'income', deposit: 'deposit', goals: 'goals', calendar: 'calendar', profile: 'home' }
 
 export default function Home({ go }: { go: Go }) {
-  const { settings, snapshots, transactions, holdings, accounts, otherAssets, obligations, sleeves, fx, fxUpdatedAt, ibkr, watchlist, readOnly, refreshMarket, refreshing, notify } = useStore()
+  const { settings, snapshots, transactions, holdings, accounts, otherAssets, obligations, sleeves, fx, fxUpdatedAt, readOnly, refreshMarket, refreshing, notify } = useStore()
   const d = useDerived()
+  const plan = usePlan()
   const today = todayISO()
   const total = d?.totals.total ?? 0
   const firstSnap = snapshots.find((s) => Number(s.total_sar) > 0)?.snap_date
@@ -46,21 +48,15 @@ export default function Home({ go }: { go: Go }) {
     actual: total ? ((d.totals.byLayer[l] ?? 0) / total) * 100 : 0, target: layerTarget(l),
   }))
 
-  // what needs attention
-  type Attn = { tone: 'warn' | 'accent' | 'bad' | ''; icon: ReactNode; title: ReactNode; sub?: ReactNode; to: Route; owner?: boolean }
-  const attn: Attn[] = []
-  if (d.staleManual.length) attn.push({ tone: 'warn', icon: <IconPencil />, title: 'حدّث القيم اليدوية', sub: `${countAssets(d.staleManual.length)} · مضى على آخر تحديث أكثر من شهر`, to: 'update', owner: true })
-  if (d.outOfBand.length) attn.push({ tone: 'warn', icon: <IconScale />, title: d.outOfBand.length === 1 ? `«${d.outOfBand[0].sleeve.name}» بعيدة عن وزنها` : `${d.outOfBand.length} طبقات بعيدة عن أوزانها`, sub: 'وجّه إيداعك القادم لتصحيحها', to: 'deposit' })
-  if (ibkr?.last_status === 'error') attn.push({ tone: 'bad', icon: <IconLink />, title: 'تعذّرت مزامنة IBKR', sub: ibkr.last_message ?? undefined, to: 'settings', owner: true })
-  else if (!ibkr?.query_id && accounts.some((a) => a.is_ibkr)) attn.push({ tone: 'accent', icon: <IconLink />, title: 'اربط حساب IBKR', sub: 'ليتحدث الجزء العالمي تلقائياً', to: 'settings', owner: true })
-  if (d.unassigned.length) attn.push({ tone: 'warn', icon: <IconLayers />, title: 'أصول بلا طبقة', sub: `${countAssets(d.unassigned.length)} · حدّد طبقتها لتدخل في التوزيع`, to: 'portfolio', owner: true })
-  if (Math.round(d.targetSum.now) !== 100) attn.push({ tone: 'bad', icon: <IconTarget />, title: `مجموع الأوزان المستهدفة ${pct(d.targetSum.now)}`, sub: 'اجعله 100%', to: 'plan', owner: true })
-  const noHaul = holdings.filter((h) => !h.archived && h.zakatable !== false && !h.zakat_start && Number(h.quantity) * Number(h.price) > 0)
-  if (noHaul.length) attn.push({ tone: '', icon: <IconShield />, title: 'حدّد بداية الحول', sub: `${countAssets(noHaul.length)} · ليصلك تنبيه الزكاة في موعده`, to: 'income', owner: true })
-  for (const w of watchlist.filter((x) => conditionsMet(x).priceOk).slice(0, 2)) {
-    attn.push({ tone: 'accent', icon: <IconEye />, title: `${w.name} تحت سعر الشراء`, sub: `سعر الشراء ${buyPrice(w)?.toFixed(2)}، اكتمل ${conditionsMet(w).count} من 5 شروط`, to: 'watch' })
-  }
-  const visibleAttn = readOnly ? attn.filter((a) => !a.owner) : attn
+  // what to do: the plan's actions engine (data checks too, with or without a plan); viewers get no owner-only items
+  const actions = plan.actions
+  // out of range: the active plan's bands (same rows as the actions), otherwise each sleeve's band or target ± settings.rebalance_band
+  const planBands = !!plan.doc && !!plan.progress
+  const outNames = planBands ? plan.progress!.outOfBand.map((b) => b.name) : d.outOfBand.map((x) => x.sleeve.name)
+  const hasBands = planBands || sleeves.some((s) => s.band_min != null || s.band_max != null)
+  const outN = outNames.length
+  const goalTarget = (g: Goal) => (g.kind === 'emergency' && plan.progress && plan.progress.emergency.target > 0 ? plan.progress.emergency.target
+    : g.kind === 'income' && plan.progress && plan.progress.treasury.target > 0 ? plan.progress.treasury.target : Number(g.target_amount))
 
   const soon = d.soon.filter((o) => o.date <= new Date(Date.now() + 31 * 86400000).toISOString().slice(0, 10)).slice(0, 5)
   const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
@@ -117,9 +113,12 @@ export default function Home({ go }: { go: Go }) {
                 </div>
               ))}
             </div>
-            <div className={`alloc-status ${d.outOfBand.length ? 'warn' : 'good'}`}>
-              {d.outOfBand.length ? <IconAlert /> : <IconCheck />}
-              <span>{d.outOfBand.length ? `${d.outOfBand.length === 1 ? 'طبقة واحدة' : `${d.outOfBand.length} طبقات`} خارج النطاق المسموح (${settings.rebalance_band} نقاط)` : 'محفظتك قريبة من أوزانها المستهدفة'}</span>
+            <div className={`alloc-status ${outN ? 'warn' : 'good'}`}>
+              {outN ? <IconAlert /> : <IconCheck />}
+              {outN
+                ? <span>{outN === 1 ? `«${outNames[0]}» خارج نطاقها` : outN === 2 ? 'طبقتان خارج نطاقهما' : `${outN} طبقات خارج نطاقها`}
+                    {!hasBands && <> (±<bdi dir="ltr">{Number(settings.rebalance_band)}</bdi> {Number(settings.rebalance_band) <= 2 ? 'نقطة' : 'نقاط'})</>}</span>
+                : <span>{hasBands ? 'كل الطبقات ضمن نطاقها في خطتك' : 'محفظتك قريبة من أوزانها المستهدفة'}</span>}
             </div>
             {!readOnly && <a className="btn soft block" href="#/deposit" style={{ marginTop: 12 }}>خطّط إيداعك القادم</a>}
           </> : (
@@ -156,21 +155,20 @@ export default function Home({ go }: { go: Go }) {
             sub={perfAll.points.length > 1 ? <><Pct v={perfAll.twr} signed /> بعد استبعاد الإيداعات</> : 'بعد أيام من البيانات'} />
         </div>
 
-        {/* attention */}
-        <Card className="attn-card" flush title="يحتاج انتباهك">
-          {visibleAttn.length ? <>
-            {visibleAttn.slice(0, 3).map((a, i) => (
-              <button key={i} type="button" className={`attn ${a.tone}`} onClick={() => go(a.to)}>
-                <span className="ico">{a.icon}</span>
-                <p>{a.title}{a.sub && <small>{a.sub}</small>}</p>
-                <Chev />
-              </button>
-            ))}
-            {visibleAttn.length > 3 && <p className="tiny muted" style={{ padding: '0 16px 12px' }}>و{visibleAttn.length - 3 === 1 ? 'تنبيه آخر' : `${visibleAttn.length - 3} تنبيهات أخرى`} بعد إنجاز هذه.</p>}
+        {/* what to do (plan actions) */}
+        <Card className="attn-card" flush title="ما عليك فعله" action={actions.length ? { label: 'الكل', href: '#/plan' } : null}>
+          {actions.length ? <>
+            {actions.slice(0, 3).map((a) => <ActionRow key={a.key} a={a} compact />)}
+            {actions.length > 3 && (
+              <a className="attn-more" href="#/plan">{moreText(actions.length - 3)}<Chev /></a>
+            )}
           </> : (
             <div className="attn accent" style={{ cursor: 'default' }}><span className="ico"><IconCheck /></span><p>لا شيء يحتاج تدخلك اليوم<small>الأسعار تتحدث كل صباح تلقائياً</small></p></div>
           )}
         </Card>
+
+        {/* the plan at a glance */}
+        <PlanCard plan={plan} readOnly={readOnly} />
 
         {/* upcoming */}
         <Card className="soon-card" flush title="القادم" action={{ label: 'التقويم', href: '#/calendar' }}>
@@ -192,10 +190,16 @@ export default function Home({ go }: { go: Go }) {
             <div className="hscroll">
               {d.goalStats.map((g) => (
                 <a key={g.goal.id} href="#/goals" className="goal-mini">
-                  <Donut size={52} thickness={6} parts={[{ key: 'done', value: g.progress, color: 'var(--accent)' }, { key: 'rest', value: Math.max(0, 1 - g.progress), color: 'transparent' }]}>
-                    <b style={{ fontSize: 12.5 }}>{Math.round(g.progress * 100)}%</b>
-                  </Donut>
-                  <span className="grow" style={{ minWidth: 0 }}><b>{g.goal.name}</b><span><Money v={g.value} short /> من {sarShort(Number(g.goal.target_amount))}</span></span>
+                  {(() => {
+                    const t = goalTarget(g.goal)
+                    const k = t > 0 ? Math.min(1, g.value / t) : 0
+                    return (
+                      <Donut size={52} thickness={6} parts={[{ key: 'done', value: k, color: 'var(--accent)' }, { key: 'rest', value: Math.max(0, 1 - k), color: 'transparent' }]}>
+                        <b style={{ fontSize: 12.5 }}><bdi dir="ltr">{Math.round(k * 100)}%</bdi></b>
+                      </Donut>
+                    )
+                  })()}
+                  <span className="grow" style={{ minWidth: 0 }}><b>{g.goal.name}</b><small className="gm-sub"><Money v={g.value} short /> من <Money v={goalTarget(g.goal)} short /></small></span>
                 </a>
               ))}
             </div>
@@ -206,4 +210,44 @@ export default function Home({ go }: { go: Go }) {
   )
 }
 
-const countAssets = (n: number) => (n === 1 ? 'أصل واحد' : n === 2 ? 'أصلان' : n <= 10 ? `${n} أصول` : `${n} أصلاً`)
+const moreText = (n: number) => (n === 1 ? 'وإجراء آخر' : n === 2 ? 'وإجراءان آخران' : n <= 10 ? `و${n} إجراءات أخرى` : `و${n} إجراءً آخر`)
+
+/** «خطتك»: plan value against the plan's path for today, the phase, and the next milestone. */
+function PlanCard({ plan, readOnly }: { plan: PlanView; readOnly: boolean }) {
+  const p = plan.progress
+  if (!plan.doc || !p) {
+    if (readOnly) return null
+    return (
+      <a className="card plan-card plan-invite" href="#/plan/doc" onClick={() => haptic()}>
+        <span className="ico"><IconTarget /></span>
+        <p><b>ابنِ خطتك</b><small>المراحل والأوزان والمحطات، ثم يخبرك التطبيق بما تفعله</small></p>
+        <Chev />
+      </a>
+    )
+  }
+  const next = p.nextMilestone
+  const toNext = next && next.value > 0 ? Math.min(1, Math.max(0, p.planValue / next.value)) : null
+  const status = p.status === 'ahead' ? 'متقدم على خطتك' : p.status === 'behind' ? 'متأخر عن خطتك' : p.status === 'on' ? 'على المسار' : null
+  return (
+    <a className="card plan-card" href="#/plan/progress" onClick={() => haptic()} aria-label="تقدم خطتك">
+      <div className="card-head">
+        <h3>خطتك</h3>
+        {p.phase && <span className="chip accent">مرحلة {p.phase.name}</span>}
+      </div>
+      <div className="pc-value"><Money v={p.planValue} /></div>
+      {p.expected != null ? (
+        <div className="pc-line">
+          {p.gapPct != null && <Pill pct={p.gapPct} label={status ?? undefined} />}
+          <span className="muted">المخطط اليوم <Money v={p.expected} /></span>
+        </div>
+      ) : <div className="pc-line muted">أضف محطات لخطتك لتقارن قيمتها بالمسار.</div>}
+      {next && toNext != null && (
+        <div className="pc-next">
+          <div className="row between"><span>المحطة القادمة{next.label ? ` · ${next.label}` : ''}</span><span className="muted">{dateLong(next.date)}</span></div>
+          <div className="progress"><i style={{ width: `${toNext * 100}%` }} /></div>
+          <div className="row between tiny muted"><span><Pct v={toNext * 100} digits={0} /> منها</span><Money v={next.value} /></div>
+        </div>
+      )}
+    </a>
+  )
+}

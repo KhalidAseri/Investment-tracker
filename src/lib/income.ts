@@ -122,7 +122,26 @@ export function payoutSchedule(holdings: Holding[], fx: Fx, fromISO: string, day
 /** The payment date after `dateISO` for this holding (used after recording a received payment). */
 export const nextPayoutAfter = (h: Holding, dateISO: string) => isoOf(addMonthsUtc(utc(dateISO), STEP[h.payout_freq ?? 'none'] || 1))
 
-export const isIncomeTx = (t: Transaction) => t.kind === 'dividend' || t.kind === 'income'
+/**
+ * A monthly income transfer out of the income treasury («الخطة»: usePlanOps().withdraw writes kind 'income', source 'planner').
+ * It is money leaving the treasury for the owner's account, not income received, so it never counts as a distribution.
+ * With `treasuryIds` (holdings of income-kind goals, see treasuryHoldingIds) an 'income' entry typed by hand on a treasury
+ * holding counts as a transfer too.
+ */
+export const isTreasuryWithdrawal = (t: Pick<Transaction, 'kind' | 'source' | 'holding_id'>, treasuryIds?: ReadonlySet<string>) =>
+  t.kind === 'income' && (t.source === 'planner' || (!!t.holding_id && !!treasuryIds?.has(t.holding_id)))
+
+/** Holdings of the income treasury (goals of kind 'income'). */
+export const treasuryHoldingIds = (holdings: Array<Pick<Holding, 'id' | 'goal_id'>>, goals: Array<{ id: string; kind?: string | null; archived?: boolean }>) => {
+  const ids = new Set(goals.filter((g) => g.kind === 'income').map((g) => g.id))
+  return new Set(holdings.filter((h) => h.goal_id && ids.has(h.goal_id)).map((h) => h.id))
+}
+
+/** Received income: distributions and income entries, never a monthly transfer out of the income treasury. */
+export const isIncomeTx = (t: Transaction) => t.kind === 'dividend' || (t.kind === 'income' && !isTreasuryWithdrawal(t))
+/** isIncomeTx that also leaves out hand-typed 'income' entries on the treasury's holdings. */
+export const incomeTxIn = (treasuryIds: ReadonlySet<string>) => (t: Transaction) =>
+  t.kind === 'dividend' || (t.kind === 'income' && !isTreasuryWithdrawal(t, treasuryIds))
 
 // ---------- annual income engine ----------
 export interface SellLine { sleeve: Sleeve; amount: number; over: number }

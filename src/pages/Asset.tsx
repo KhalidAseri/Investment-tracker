@@ -5,7 +5,7 @@ import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
 import { ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
 import { ago, dateLong, dateShort, num0, num1, num2, pct, relativeDays, sar, signedPct, todayISO } from '../lib/format'
-import { FREQ_LABEL, hijriLabel, nextHaul, payoutAnnual, payoutPerPayment } from '../lib/income'
+import { FREQ_LABEL, hijriLabel, isIncomeTx, isTreasuryWithdrawal, nextHaul, payoutAnnual, payoutPerPayment } from '../lib/income'
 import { REGION_LABEL, holdingPnL, regionOf } from '../lib/wealth'
 import { benchmarkHistory } from '../lib/tools'
 import { assetColor, haptic, layerColor } from '../lib/ui'
@@ -268,8 +268,8 @@ function Facts({ h, value, weight }: { h: Holding; value: number; weight: number
 const OUT_KINDS = new Set(['sell', 'withdrawal', 'fee', 'tax', 'zakat'])
 function TxRow({ t }: { t: Transaction }) {
   const a = Number(t.amount_sar) || 0
-  const income = t.kind === 'dividend' || t.kind === 'income'
-  const out = OUT_KINDS.has(t.kind) || (t.kind === 'transfer' && a < 0)
+  const income = isIncomeTx(t)
+  const out = OUT_KINDS.has(t.kind) || isTreasuryWithdrawal(t) || (t.kind === 'transfer' && a < 0)
   const year = t.tx_date.slice(0, 4)
   const meta = [year !== String(new Date().getFullYear()) ? year : null, t.quantity ? `${num2(Math.abs(Number(t.quantity)))} وحدة` : null, t.note]
     .filter(Boolean).join(' · ')

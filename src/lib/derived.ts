@@ -27,7 +27,8 @@ export function useDerived() {
     if (!settings) return null
     const totals = computeTotals(holdings, accounts, sleeves, fx)
     const drift = drifts(sleeves, totals, settings)
-    const outOfBand = drift.filter((d) => Math.abs(d.diff) > settings.rebalance_band)
+    // the active plan phase's band when set (sleeves.band_min/band_max), otherwise target ± rebalance_band
+    const outOfBand = drift.filter((d) => d.out)
     const zakat = zakatEstimate(holdings, fx)
     const payouts = payoutSchedule(holdings, fx, todayISO(), 365)
     const zakatDue = zakatSchedule(holdings, fx, todayISO(), 365)

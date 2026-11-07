@@ -5,12 +5,20 @@ import { planDeposit, rateOf, type DepositLine } from '../lib/calc'
 import { num0, num2, parseNum, pct, sar, todayISO } from '../lib/format'
 import type { Goal, Holding } from '../lib/types'
 import { NumberField, Segmented, Sheet, Switch } from '../components/ui'
+import { usePlan } from '../lib/usePlan'
+import { openAction } from '../lib/ui'
+import { Money } from '../components/kit'
+import { IconShield } from '../components/icons'
 
-export default function Deposit() {
+/** an amount passed in the route (#/deposit/<riyals>), e.g. from the rebalance sheet */
+const amountFrom = (param?: string) => { const n = Number(String(param ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? Math.round(n) : null }
+
+export default function Deposit({ param }: { param?: string }) {
   const { settings, sleeves, holdings, accounts } = useStore()
   const d = useDerived()
+  const { doc, progress } = usePlan()
   const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
-  const [text, setText] = useState('10,000')
+  const [text, setText] = useState(() => num0(amountFrom(param) ?? 10000))
   const [mode, setMode] = useState<'gaps' | 'weights'>('gaps')
   const [months, setMonths] = useState<'1' | '3' | '6'>('1')
   const [recording, setRecording] = useState(false)
@@ -41,8 +49,21 @@ export default function Deposit() {
     return holdings.find((h) => h.sleeve_id === sleeveId && !h.archived && !/برنامج الادخار/.test(h.name))?.name ?? ''
   }
 
+  // with an active plan: the emergency fund comes first, and this month's planned contribution is a one-tap amount
+  const em = doc && progress ? progress.emergency : null
+  const shortfall = em && em.target > 0 && em.shortfall > 0.5 ? Math.round(em.shortfall) : 0
+  const month = doc && progress ? progress.contributions : null
+  const remaining = month ? Math.max(0, Math.round(month.plannedThisMonth - month.actualThisMonth)) : 0
+
   return (
     <>
+      {shortfall > 0 && (
+        <button type="button" className="banner" style={{ marginBottom: 14 }} onClick={() => openAction('emergency', String(shortfall))}>
+          <span className="ico"><IconShield /></span>
+          <p>أكمل صندوق الطوارئ أولاً<small>ينقصه <Money v={shortfall} /> حسب خطتك</small></p>
+          <span className="attn-cta" style={{ color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)' }}>أضف إليه</span>
+        </button>
+      )}
       <p className="muted" style={{ marginBottom: 14 }}>اكتب المبلغ الذي ستستثمره، وأقسّمه لك على الطبقات بحيث تقترب المحفظة من أوزانها المستهدفة.</p>
       <div className="panel amount-hero">
         <label htmlFor="amt" className="small muted">مبلغ الإيداع بالريال</label>
@@ -52,6 +73,14 @@ export default function Deposit() {
         <div className="quick">
           {quick.map((q) => <button key={q.label} className="btn ghost small" onClick={() => setText(num0(q.v))}>{q.label}</button>)}
         </div>
+        {month && month.plannedThisMonth > 0 && (
+          <div className="callout row wrap" style={{ gap: 8, justifyContent: 'space-between' }}>
+            <span className="small">خطتك لهذا الشهر <b><Money v={month.plannedThisMonth} /></b><span className="muted"> · أودعت <Money v={month.actualThisMonth} /></span></span>
+            {remaining > 0
+              ? <button type="button" className="btn soft small" onClick={() => setText(num0(remaining))}>استخدم الباقي <Money v={remaining} /></button>
+              : <span className="small good">اكتمل إيداع الشهر</span>}
+          </div>
+        )}
         <div className="row wrap" style={{ gap: 10, marginTop: 6 }}>
           <Segmented label="طريقة التقسيم" value={mode} onChange={setMode} options={[{ value: 'gaps', label: 'سدّ النقص أولاً' }, { value: 'weights', label: 'حسب الأوزان' }]} />
           <Segmented label="التوزيع على الأشهر" value={months} onChange={setMonths} options={[{ value: '1', label: 'دفعة واحدة' }, { value: '3', label: '3 أشهر' }, { value: '6', label: '6 أشهر' }]} />

@@ -1,3 +1,5 @@
+import type { PlanDoc } from './plan'
+
 export type Layer = 'safety' | 'income' | 'growth' | 'hedge'
 
 export interface PlanSettings {
@@ -59,6 +61,9 @@ export interface Sleeve {
   zakat_rate: number
   note: string | null
   sort: number
+  /** allowed range of the active plan phase, % (null = use settings.rebalance_band around the target) */
+  band_min: number | null
+  band_max: number | null
 }
 
 export interface Account {
@@ -239,9 +244,12 @@ export interface OtherAsset {
 }
 
 export interface GoalBucket { key: string; name: string; weight: number }
+/** 'emergency' = the emergency fund, 'income' = the income treasury; both are kept outside the main portfolio */
+export type GoalKind = 'goal' | 'emergency' | 'income'
 export interface Goal {
   id: string
   user_id?: string
+  kind: GoalKind
   name: string
   target_amount: number
   target_date: string | null
@@ -251,4 +259,15 @@ export interface Goal {
   note: string | null
   archived: boolean
   sort: number
+}
+
+/** a saved investment plan; one active plan per user */
+export interface PlanRow {
+  id: string
+  user_id?: string
+  name: string
+  is_active: boolean
+  doc: PlanDoc
+  created_at?: string
+  updated_at?: string
 }

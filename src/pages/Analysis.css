@@ -92,3 +92,7 @@
 .an-expo-line > span:last-child { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
 .an-expo-line .money { color: var(--muted); font-size: 12px; }
 .an-expo-line b { font-weight: 600; }
+
+/* allowed range of the active plan phase on the actual-vs-target bars */
+.alloc-bar .band { position: absolute; inset-block: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.alloc-nums .an-range { display: block; font-size: 11.5px; color: var(--muted); font-family: var(--font-ui); line-height: 1.3; }

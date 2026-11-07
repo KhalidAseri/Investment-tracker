@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { monthName, sar, todayISO, dateShort } from '../lib/format'
+import { incomeTxIn, isTreasuryWithdrawal, treasuryHoldingIds } from '../lib/income'
 import type { Transaction, TxKind } from '../lib/types'
 import { NumberField, Segmented, SelectField, Sheet, TextField } from '../components/ui'
 import { IconPlus } from '../components/icons'
@@ -10,20 +11,24 @@ export const TX_LABEL: Record<TxKind, string> = {
   zakat: 'زكاة', transfer: 'تحويل', income: 'دخل',
 }
 const OUT: TxKind[] = ['withdrawal', 'fee', 'tax', 'zakat', 'sell']
+/** money going out: withdrawals and costs, a monthly transfer out of the income treasury, a negative transfer */
+const isOut = (t: Transaction, treasury: ReadonlySet<string>) => OUT.includes(t.kind) || isTreasuryWithdrawal(t, treasury) || (t.kind === 'transfer' && Number(t.amount_sar) < 0)
 type Filter = 'all' | 'in' | 'dividend' | 'trade'
 
 export default function Activity() {
-  const { transactions, holdings, accounts, readOnly } = useStore()
+  const { transactions, holdings, accounts, goals, readOnly } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<Partial<Transaction> | null>(null)
   const year = String(new Date().getFullYear())
+  const treasury = useMemo(() => treasuryHoldingIds(holdings, goals), [holdings, goals])
+  const isIncome = useMemo(() => incomeTxIn(treasury), [treasury])
   const ytd = useMemo(() => {
     const t = transactions.filter((x) => x.tx_date.startsWith(year))
     const sum = (k: TxKind[]) => t.filter((x) => k.includes(x.kind)).reduce((a, x) => a + Number(x.amount_sar), 0)
-    return { deposits: sum(['deposit']), dividends: sum(['dividend', 'income']), costs: sum(['fee', 'tax']) }
-  }, [transactions, year])
+    return { deposits: sum(['deposit']), dividends: t.filter(isIncome).reduce((a, x) => a + Number(x.amount_sar), 0), costs: sum(['fee', 'tax']) }
+  }, [transactions, year, isIncome])
   const list = transactions.filter((x) =>
-    filter === 'all' ? true : filter === 'in' ? x.kind === 'deposit' || x.kind === 'withdrawal' : filter === 'dividend' ? ['dividend', 'income', 'tax'].includes(x.kind) : x.kind === 'buy' || x.kind === 'sell')
+    filter === 'all' ? true : filter === 'in' ? x.kind === 'deposit' || x.kind === 'withdrawal' || isTreasuryWithdrawal(x, treasury) : filter === 'dividend' ? isIncome(x) || x.kind === 'tax' : x.kind === 'buy' || x.kind === 'sell')
   const groups = useMemo(() => {
     const m = new Map<string, Transaction[]>()
     for (const t of list) m.set(t.tx_date.slice(0, 7), [...(m.get(t.tx_date.slice(0, 7)) ?? []), t])
@@ -59,7 +64,7 @@ export default function Activity() {
                     <div className="row" style={{ gap: 8 }}>{TX_LABEL[t.kind]}{t.source === 'ibkr' && <span className="chip accent">IBKR</span>}{t.source === 'import' && <span className="chip">مستورد</span>}</div>
                     <div className="meta">{dateShort(t.tx_date)}{hName(t.holding_id) ? `، ${hName(t.holding_id)}` : aName(t.account_id) ? `، ${aName(t.account_id)}` : ''}{t.note && !t.note.startsWith('إيداع موزّع') ? `، ${t.note}` : ''}</div>
                   </div>
-                  <div className={`amount ${OUT.includes(t.kind) ? '' : 'good'}`}>{OUT.includes(t.kind) ? '−' : '+'}{sar(Number(t.amount_sar))}</div>
+                  <div className={`amount ${isOut(t, treasury) ? '' : 'good'}`}>{isOut(t, treasury) ? '−' : '+'}{sar(Math.abs(Number(t.amount_sar)))}</div>
                 </button>
               ))}
             </div>

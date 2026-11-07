@@ -3,7 +3,7 @@ import { useStore } from '../lib/store'
 import { haptic } from '../lib/ui'
 import { Chev } from '../components/kit'
 import {
-  IconCalendar, IconDoc, IconImport, IconList, IconLogout, IconScale, IconSettings, IconTarget, IconUser, IconPencil, IconDeposit, IconLink,
+  IconCalendar, IconChart, IconDoc, IconImport, IconList, IconLogout, IconScale, IconSettings, IconTarget, IconUser, IconPencil, IconDeposit, IconLink,
 } from '../components/icons'
 import type { Go, Route } from '../App'
 
@@ -12,8 +12,9 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
   { title: 'محفظتي', items: [
     { r: 'deposit', icon: <IconDeposit />, title: 'إيداع جديد', sub: 'قسّم مبلغاً على طبقاتك وأهدافك', owner: true },
     { r: 'update', icon: <IconPencil />, title: 'تحديث القيم', sub: 'الأصول التي تُدخل قيمتها بنفسك', owner: true },
+    { r: 'plan', icon: <IconTarget />, title: 'الخطة', sub: 'المراحل والأوزان والتصدير والاستيراد' },
+    { r: 'analysis', icon: <IconChart />, title: 'التحليل', sub: 'الأداء والتنويع والتكاليف' },
     { r: 'networth', icon: <IconScale />, title: 'صافي الثروة', sub: 'العقار والأصول الأخرى والديون' },
-    { r: 'plan', icon: <IconTarget />, title: 'الأوزان المستهدفة', sub: 'نسبة كل طبقة وحد التنبيه' },
   ] },
   { title: 'السجلات', items: [
     { r: 'activity', icon: <IconList />, title: 'العمليات', sub: 'الإيداعات والتوزيعات والسحوبات' },

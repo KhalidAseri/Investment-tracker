@@ -3,7 +3,7 @@ import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
 import { holdingValue } from '../lib/calc'
 import { dateLong, num2, pct, sar, signedPct, todayISO } from '../lib/format'
-import { isIncomeTx, zakatSchedule } from '../lib/income'
+import { isIncomeTx, isTreasuryWithdrawal, zakatSchedule } from '../lib/income'
 import { debtView, feeDrag, holdingPnL, netWorth, performance, purification } from '../lib/wealth'
 
 const signedSar = (v: number) => `${v >= 0 ? '+' : '−'}${sar(Math.abs(v))}`
@@ -35,7 +35,7 @@ export default function Report() {
     const fundFees = live.filter((h) => Number(h.fee_pct) > 0).reduce((s, h) => s + holdingValue(h, fx) * Number(h.fee_pct) / 100, 0)
     const zakatNext = zakatSchedule(holdings, fx, today, 365)
     const nw = netWorth({ invested: d.totals.total, goals: Object.values(d.totals.goals).reduce((a, b) => a + b, 0), outside: d.totals.outside, otherAssets, obligations })
-    return { perf, deposits: sumKind('deposit'), withdrawals: sumKind('withdrawal') + sumKind('income'), fees: sumKind('fee'), zakatPaid: sumKind('zakat'), dividends,
+    return { perf, deposits: sumKind('deposit'), withdrawals: sumKind('withdrawal') + inYear.filter((t) => isTreasuryWithdrawal(t)).reduce((x, t) => x + Math.abs(Number(t.amount_sar)), 0), fees: sumKind('fee'), zakatPaid: sumKind('zakat'), dividends,
       dividendTotal: dividends.reduce((s, x) => s + x.value, 0), pur, live, totalAll, fundFees, zakatNext, nw }
   }, [d, settings, snapshots, transactions, holdings, accounts, fx, otherAssets, obligations, from, to, year, thisYear, today])
 

@@ -1,5 +1,7 @@
 // Development-only in-memory stand-in for Supabase, used with ?demo to review the interface.
 // Never included in production builds (guarded by import.meta.env.DEV in supabase.ts).
+import { PLAN_TEMPLATES } from './planTemplates'
+import type { PlanDoc } from './plan'
 type Row = Record<string, any>
 const uid = 'demo-user'
 const id = () => Math.random().toString(36).slice(2, 10)
@@ -7,7 +9,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 
 function fixture() {
   const s = (name: string, layer: string, now: number, fi: number, accepts = true, note = '', sort = 0) =>
-    ({ id: id(), user_id: uid, name, layer, target_now: now, target_fi: fi, accepts_new_money: accepts, expected_return: 6, yield_pct: 3, zakat_rate: 2.5, note, sort })
+    ({ id: id(), user_id: uid, name, layer, target_now: now, target_fi: fi, accepts_new_money: accepts, expected_return: 6, yield_pct: 3, zakat_rate: 2.5, note, sort, band_min: null, band_max: null })
   const sleeves = [
     s('أسهم عالمية متوافقة', 'growth', 45, 33, true, 'iShares MSCI World Islamic في IBKR', 1),
     s('أسهم سعودية متوافقة', 'growth', 12, 9, true, 'صندوق مؤشر منخفض الرسوم', 2),
@@ -40,7 +42,7 @@ function fixture() {
     h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, { fee_pct: 0.75 }, 5),
     h('برنامج الادخار: الدخل المتحفظ', 2, 3, 1, 23900, {}, 6),
     h('صندوق مرابحة', 1, 6, 1, 15000, {}, 7),
-    h('حساب الطوارئ', 3, null, 1, 95000, {}, 8),
+    h('حساب الطوارئ', 3, null, 1, 80000, {}, 8),
     h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false, cost_basis: 12600, purification_pct: 0.8 }, 9),
   ]
   const today = new Date()
@@ -59,7 +61,7 @@ function fixture() {
   const events = [
     ev('المراجعة السنوية وإعادة التوازن', 'review', '2027-01-05', null, 'yearly', 'قارن الأوزان واحسب الزكاة'),
     ev('تجديد السلفة', 'advance', '2027-05-15', 250000, 'none', 'وزّعها على 6 أشهر'),
-    ev('المكافأة السنوية', 'bonus', '2027-03-01', 105000, 'yearly', 'التاريخ تقديري'),
+    ev('المكافأة السنوية', 'bonus', '2027-03-01', 60000, 'yearly', 'التاريخ تقديري'),
     ev('الزكاة السنوية', 'zakat', '2027-02-08', null),
     ev('اكتمال استحقاق برنامج الادخار', 'vesting', '2032-06-01', null),
   ]
@@ -92,9 +94,24 @@ function fixture() {
   ]
   const portfolio_viewers = [{ id: id(), owner_id: uid, viewer_email: 'wife@example.com', created_at: new Date().toISOString() }]
   const goalId = id()
-  const goals = [{ id: goalId, user_id: uid, name: 'الدفعة الأولى للبيت', target_amount: 300000, target_date: iso(new Date(Date.now() + 3.2 * 365 * 86400000)), expected_return: 5,
-    allocation: [{ key: 'cash', name: 'سيولة ومرابحة', weight: 60 }, { key: 'sukuk', name: 'صكوك', weight: 40 }], priority: 1, note: null, archived: false, sort: 1 }]
+  const emergencyId = id()
+  const treasuryId = id()
+  const cashAlloc = [{ key: 'cash', name: 'سيولة', weight: 100 }]
+  const goals = [
+    { id: goalId, user_id: uid, kind: 'goal', name: 'الدفعة الأولى للبيت', target_amount: 300000, target_date: iso(new Date(Date.now() + 3.2 * 365 * 86400000)), expected_return: 5,
+      allocation: [{ key: 'cash', name: 'سيولة ومرابحة', weight: 60 }, { key: 'sukuk', name: 'صكوك', weight: 40 }], priority: 1, note: null, archived: false, sort: 1 },
+    // special kinds: the emergency fund (below its target) and the income treasury
+    { id: emergencyId, user_id: uid, kind: 'emergency', name: 'صندوق الطوارئ', target_amount: 120000, target_date: null, expected_return: 0, allocation: cashAlloc, priority: 1, note: null, archived: false, sort: -2 },
+    { id: treasuryId, user_id: uid, kind: 'income', name: 'خزانة الدخل', target_amount: 0, target_date: null, expected_return: 0, allocation: cashAlloc, priority: 1, note: null, archived: false, sort: -1 },
+  ]
   holdings.push(h('مرابحة الدفعة الأولى', 1, null, 1, 42000, { goal_id: goalId, goal_bucket: 'cash' }, 20))
+  const emergencyHolding = holdings.find((x) => x.name === 'حساب الطوارئ')!
+  Object.assign(emergencyHolding, { goal_id: emergencyId, goal_bucket: 'cash', zakat_start: '2025-09-01' })
+  holdings.push(h('نقد خزانة الدخل', 1, null, 1, 6000, { goal_id: treasuryId, goal_bucket: 'cash', cost_basis: 6000 }, 21))
+  const plans = [
+    { id: id(), user_id: uid, name: 'خطة الاستقلال المالي', is_active: true, doc: demoPlan(today, sleeves, snapshots[0]), created_at: snapshots[0].snap_date + 'T08:00:00Z', updated_at: new Date().toISOString() },
+    { id: id(), user_id: uid, name: 'خطة دخل (مسودة)', is_active: false, doc: { ...PLAN_TEMPLATES[1].build(iso(today)), name: 'خطة دخل (مسودة)' }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ]
   const income_streams = [
     { id: id(), user_id: uid, name: 'المكافأة السنوية', kind: 'bonus', amount: 120000, frequency: 'yearly', month: 3, next_date: null, invest_pct: 70, note: null, sort: 1 },
     { id: id(), user_id: uid, name: 'سلفة جهة العمل', kind: 'advance', amount: 200000, frequency: 'irregular', month: null, next_date: '2027-05-15', invest_pct: 100, note: null, sort: 2 },
@@ -106,9 +123,69 @@ function fixture() {
   const other_assets = [{ id: id(), user_id: uid, name: 'البيت', kind: 'real_estate', value: 1250000, value_date: iso(new Date(Date.now() - 200 * 86400000)), appreciation_pct: 2, note: null, sort: 1 },
     { id: id(), user_id: uid, name: 'السيارة', kind: 'vehicle', value: 95000, value_date: iso(new Date(Date.now() - 300 * 86400000)), appreciation_pct: -12, note: null, sort: 2 }]
   if (typeof location !== 'undefined' && /onboard/.test(location.search)) {
-    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [], other_assets: [] }
+    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [], other_assets: [], plans: [] }
   }
-  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals, other_assets }
+  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals, other_assets, plans }
+}
+
+/**
+ * An active plan that exercises every part of the feature around the demo values: 3 phases with bands (the next one starts in
+ * 45 days), milestones a little ahead of the portfolio, monthly/yearly/once contributions due now, an emergency fund below
+ * target, an income treasury that is being built (?income-now: income already started), rules, steps done/overdue/upcoming
+ * and one past review.
+ */
+export function demoPlan(today: Date, sleeves: Row[], first: Row): PlanDoc {
+  const day = (n: number) => iso(new Date(today.getTime() + n * 86400000))
+  const y = today.getFullYear(), m = today.getMonth() + 1, d = today.getDate()
+  const ym = (yy: number, mm: number, dd: number) => iso(new Date(Date.UTC(yy, mm - 1, dd, 12)))
+  const incomeNow = typeof location !== 'undefined' && /income-now/.test(location.search)
+  const keys = ['global', 'saudi', 'direct', 'sukuk', 'reit', 'dist', 'cash', 'gold']
+  const band = (targets: number[], widths: number[]) => Object.fromEntries(keys.map((k, i) => [k, { target: targets[i], min: Math.max(0, targets[i] - widths[i]), max: targets[i] + widths[i] }]))
+  const created = first.snap_date as string
+  const phase3 = ym(y + 5, 1, 1)
+  return {
+    version: 1, name: 'خطة الاستقلال المالي', created,
+    baseline: { date: created, value: Number(first.total_sar) },
+    goal: { monthly_income: 15000, target_capital: 4500000, target_date: ym(y + 12, 1, 1), note: 'دخل شهري 15 ألف ريال بقيمة اليوم' },
+    sleeves: sleeves.map((s, i) => ({ key: keys[i], name: s.name, layer: s.layer, accepts_new_money: !!s.accepts_new_money, note: s.note || null })),
+    sleeve_map: Object.fromEntries(sleeves.map((s, i) => [keys[i], s.id])),
+    phases: [
+      { key: 'build', name: 'البناء', start: created, note: 'الأموال الجديدة للفئات الناقصة', weights: band([45, 12, 8, 10, 5, 5, 5, 10], [5, 3, 8, 3, 3, 3, 2, 3]) },
+      { key: 'shift', name: 'الانتقال', start: day(45), note: 'انتقال تدريجي نحو الدخل', weights: band([38, 11, 6, 18, 8, 5, 6, 8], [5, 3, 6, 3, 3, 3, 2, 3]) },
+      { key: 'income', name: 'الدخل', start: phase3, note: 'السيولة هي خزانة الدخل', weights: band([30, 9, 4, 24, 10, 6, 10, 7], [5, 3, 4, 4, 3, 3, 3, 2]) },
+    ],
+    milestones: [
+      { date: day(50), value: 320000, label: 'محطة الربع' },
+      { date: ym(y + 1, 12, 31), value: 450000, label: null },
+      { date: ym(y + 2, 12, 31), value: 650000, label: null },
+      { date: ym(y + 3, 12, 31), value: 900000, label: null },
+      { date: ym(y + 5, 12, 31), value: 1500000, label: 'بداية الدخل' },
+    ],
+    contributions: [
+      { key: 'salary', name: 'الفائض الشهري من الراتب', kind: 'monthly', amount: 4000, day: Math.max(1, d - 2), month: null, date: created, until: null, split_months: null, growth_pct: 4, note: 'يرتفع مع العلاوة' },
+      { key: 'savings', name: 'برنامج الادخار', kind: 'monthly', amount: 2000, day: 27, month: null, date: created, until: ym(y + 6, 12, 31), split_months: null, growth_pct: null, note: 'آلي' },
+      { key: 'bonus', name: 'المكافأة السنوية', kind: 'yearly', amount: 60000, day: 1, month: m, date: null, until: null, split_months: 3, growth_pct: null, note: 'على ثلاث دفعات' },
+      { key: 'advance', name: 'دفعة استثنائية', kind: 'once', amount: 100000, day: null, month: null, date: ym(y, m + 5, 15), until: null, split_months: 6, growth_pct: null, note: 'على ستة أشهر' },
+    ],
+    emergency: { months: 6, monthly_expense: 20000 },
+    income: { start: incomeNow ? day(-60) : phase3, method: 'percent', annual_pct: 4, fixed_monthly: null, band_pct: 10, treasury_months: 24, transfer_day: incomeNow ? 1 : 27,
+      no_sell_drawdown_pct: 20, build_from: day(-30) },
+    rules: { review_month: m, crash_pct: 25, crash_sleeves: ['global'], new_money_first: true },
+    steps: [
+      { key: 'emergency', title: 'افصل صندوق الطوارئ عن المحفظة', detail: 'ستة أشهر من المصروف', due: day(-100), done_at: day(-98), recurring: 'none' },
+      { key: 'account', title: 'افتح حساب الوساطة العالمي', detail: null, due: day(-80), done_at: day(-85), recurring: 'none' },
+      { key: 'stop-dist', title: 'أوقف الإيداع في صناديق التوزيع', detail: 'مع إبقاء الرصيد', due: day(-10), done_at: null, recurring: 'none' },
+      { key: 'gold', title: 'اشترِ أول حصة من الذهب', detail: 'صندوق ذهب متداول', due: day(5), done_at: null, recurring: 'none' },
+      { key: 'reit', title: 'اختر صندوقي ريت من قطاعين مختلفين', detail: null, due: day(40), done_at: null, recurring: 'none' },
+      { key: 'advance', title: 'استثمر الدفعة الاستثنائية على ستة أشهر', detail: null, due: ym(y, m + 5, 15), done_at: null, recurring: 'none' },
+      { key: 'review', title: 'المراجعة السنوية', detail: 'الزكاة والتطهير، ثم إعادة التوازن', due: ym(y - 1, m, 20), done_at: ym(y - 1, m, 22), recurring: 'yearly' },
+      { key: 'phase2', title: 'انتقل إلى أوزان مرحلة الانتقال', detail: 'بالأموال الجديدة أولاً', due: day(45), done_at: null, recurring: 'none' },
+    ],
+    reviews: [
+      { year: y - 1, date: ym(y - 1, m, 22), value: 160000, zakat_paid: 3200, purification_paid: 150, rebalanced: true, income_annual: null, notes: 'أول مراجعة' },
+    ],
+    state: { income_year: null, income_annual: null, dismissed: {} },
+  }
 }
 
 export function createMockClient(): any {
@@ -128,6 +205,11 @@ export function createMockClient(): any {
     update(p: any) { this.op = 'update'; this.payload = p; return this }
     delete() { this.op = 'delete'; return this }
     eq(k: string, v: any) { this.filters.push((r) => r[k] === v); return this }
+    neq(k: string, v: any) { this.filters.push((r) => r[k] !== v); return this }
+    gt(k: string, v: any) { this.filters.push((r) => r[k] > v); return this }
+    gte(k: string, v: any) { this.filters.push((r) => r[k] >= v); return this }
+    lt(k: string, v: any) { this.filters.push((r) => r[k] < v); return this }
+    lte(k: string, v: any) { this.filters.push((r) => r[k] <= v); return this }
     is(k: string, v: any) { this.filters.push((r) => r[k] === v); return this }
     in(k: string, v: any[]) { this.filters.push((r) => v.includes(r[k])); return this }
     order() { return this }
@@ -144,7 +226,7 @@ export function createMockClient(): any {
         const list = Array.isArray(this.payload) ? this.payload : [this.payload]
         out = list.map((p: Row) => { const r = { id: id(), user_id: uid, created_at: new Date().toISOString(), ...p }; rows.push(r); return r })
       }
-      if (this.op === 'update') { rows.forEach((r, i) => { if (match(r)) rows[i] = { ...r, ...this.payload } }); out = rows.filter(match) }
+      if (this.op === 'update') { rows.forEach((r, i) => { if (match(r)) rows[i] = { ...r, ...this.payload, ...('updated_at' in r ? { updated_at: new Date().toISOString() } : {}) } }); out = rows.filter(match) }
       if (this.op === 'delete') { db[this.table] = rows.filter((r) => !match(r)) }
       const data = this.one ? out[0] ?? null : out
       return { data: JSON.parse(JSON.stringify(data)), error: null }

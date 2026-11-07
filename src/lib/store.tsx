@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { Account, Fx, Goal, Holding, IbkrConnection, IncomeStream, MoneyEvent, Obligation, OtherAsset, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
+import type { Account, Fx, Goal, Holding, IbkrConnection, IncomeStream, MoneyEvent, Obligation, OtherAsset, PlanRow, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
+import { normalizePlan, planSleeveSync } from './plan'
+import { todayISO } from './format'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions' | 'watchlist' | 'income_streams' | 'obligations' | 'goals' | 'other_assets'
+export type Table = 'sleeves' | 'accounts' | 'holdings' | 'events' | 'transactions' | 'watchlist' | 'income_streams' | 'obligations' | 'goals' | 'other_assets' | 'plans'
 
 interface Store {
   session: Session | null
@@ -23,6 +25,8 @@ interface Store {
   obligations: Obligation[]
   goals: Goal[]
   otherAssets: OtherAsset[]
+  /** saved plans (one active); the active plan's phase is applied to the sleeves automatically */
+  plans: PlanRow[]
   /** signed in, no plan yet, not a viewer: show the first-run questions */
   needsSetup: boolean
   createPlan: (payload: Record<string, unknown>) => Promise<boolean>
@@ -72,6 +76,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [obligations, setObligations] = useState<Obligation[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
   const [otherAssets, setOtherAssets] = useState<OtherAsset[]>([])
+  const [plans, setPlans] = useState<PlanRow[]>([])
   const [needsSetup, setNeedsSetup] = useState(false)
   const [fx, setFx] = useState<Fx>({ SAR: 1, USD: 3.75 })
   const [fxUpdatedAt, setFxUpdatedAt] = useState<string | null>(null)
@@ -106,7 +111,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------- load ----------
   const reload = useCallback(async (): Promise<boolean> => {
-    const [st, sl, ac, ho, tx, ev, sn, fr, ib, wl, is, ob, go, oa] = await Promise.all([
+    const [st, sl, ac, ho, tx, ev, sn, fr, ib, wl, is, ob, go, oa, pl] = await Promise.all([
       supabase.from('plan_settings').select('*').maybeSingle(),
       supabase.from('sleeves').select('*'),
       supabase.from('accounts').select('*'),
@@ -121,6 +126,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase.from('obligations').select('*'),
       supabase.from('goals').select('*'),
       supabase.from('other_assets').select('*'),
+      supabase.from('plans').select('*').order('created_at'),
     ])
     const firstError = [st, sl, ac, ho, tx, ev, sn, fr].find((r) => r.error)?.error
     if (firstError) throw new Error(firstError.message)
@@ -136,6 +142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setObligations(byKey((ob.data ?? []) as Obligation[], 'sort'))
     setGoals(byKey((go.data ?? []) as Goal[], 'sort'))
     setOtherAssets(byKey((oa.data ?? []) as OtherAsset[], 'sort'))
+    setPlans(pl.error ? [] : ((pl.data ?? []) as PlanRow[]))
     const rates: Fx = {}
     let latest: string | null = null
     for (const r of fr.data ?? []) {
@@ -196,6 +203,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'obligations', filter }, apply<Obligation>(setObligations, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'goals', filter }, apply<Goal>(setGoals, 'sort'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'other_assets', filter }, apply<OtherAsset>(setOtherAssets, 'sort'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plans', filter }, apply<PlanRow>(setPlans))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter }, (p) => {
         setTransactions((rows) => {
           if (p.eventType === 'DELETE') return rows.filter((r) => r.id !== (p.old as Transaction).id)
@@ -234,7 +242,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id, notify, readOnly])
 
   const setterFor = (table: Table): React.Dispatch<React.SetStateAction<any[]>> =>
-    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions, watchlist: setWatchlist, income_streams: setStreams, obligations: setObligations, goals: setGoals, other_assets: setOtherAssets } as const)[table] as any
+    ({ sleeves: setSleeves, accounts: setAccounts, holdings: setHoldings, events: setEvents, transactions: setTransactions, watchlist: setWatchlist, income_streams: setStreams, obligations: setObligations, goals: setGoals, other_assets: setOtherAssets, plans: setPlans } as const)[table] as any
 
   const upsert = useCallback(async <T extends Record<string, any>>(table: Table, row: T): Promise<T | null> => {
     begin()
@@ -251,7 +259,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const set = setterFor(table)
     set((rows: any[]) => {
       const next = rows.some((r) => r.id === (data as any).id) ? rows.map((r) => (r.id === (data as any).id ? data : r)) : [...rows, data]
-      return table === 'transactions' ? next.sort((a, b) => b.tx_date.localeCompare(a.tx_date)) : table === 'events' ? next : byKey(next, 'sort')
+      return table === 'transactions' ? next.sort((a, b) => b.tx_date.localeCompare(a.tx_date)) : table === 'events' || table === 'plans' ? next : byKey(next, 'sort')
     })
     return data as T
   }, [notify])
@@ -329,14 +337,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([]); setWatchlist([]); setStreams([]); setObligations([]); setGoals([]); setOtherAssets([]); setNeedsSetup(false); setIbkr(null)
+    setSettings(null); setSleeves([]); setAccounts([]); setHoldings([]); setTransactions([]); setEvents([]); setSnapshots([]); setWatchlist([]); setStreams([]); setObligations([]); setGoals([]); setOtherAssets([]); setPlans([]); setNeedsSetup(false); setIbkr(null)
   }, [])
 
+  // ---------- the active plan's phase drives the sleeves (owner only) ----------
+  // On load, whenever the active plan or its phase changes, and when the date rolls over: target_now/target_fi,
+  // band_min/band_max, accepts_new_money and layer follow the active phase; missing sleeves are created and the
+  // plan's sleeve_map is stored. Every screen keeps reading sleeves.target_now.
+  const [day, setDay] = useState(todayISO)
+  useEffect(() => {
+    const t = window.setInterval(() => setDay((d) => (d === todayISO() ? d : todayISO())), 15 * 60 * 1000)
+    return () => window.clearInterval(t)
+  }, [])
+  const syncing = useRef(false)
+  const failedSync = useRef<string | null>(null)
+  const [syncTick, setSyncTick] = useState(0)
+  useEffect(() => {
+    if (!session || loading || readOnly || !settings || syncing.current) return
+    const active = plans.find((p) => p.is_active)
+    if (!active) return
+    const doc = normalizePlan(active.doc, day)
+    if (!doc.sleeves.length) return
+    const plan = planSleeveSync(doc, sleeves, day)
+    if (!plan.updates.length && !plan.inserts.length && !plan.mapChanged) return
+    const sig = JSON.stringify([active.id, plan.updates, plan.inserts.map((i) => i.key), plan.map])
+    if (failedSync.current === sig) return
+    syncing.current = true
+    let ok = true
+    ;(async () => {
+      try {
+        for (const u of plan.updates) {
+          const { data, error } = await supabase.from('sleeves').update(u.patch).eq('id', u.id).select('*').single()
+          if (error || !data) { ok = false; continue }
+          setSleeves((rows) => byKey(rows.map((r) => (r.id === (data as Sleeve).id ? (data as Sleeve) : r)), 'sort'))
+        }
+        const map = { ...plan.map }
+        if (plan.inserts.length) {
+          const { data, error } = await supabase.from('sleeves').insert(plan.inserts.map((i) => i.row)).select('*')
+          if (error || !data) ok = false
+          else {
+            const made = data as Sleeve[]
+            for (const ins of plan.inserts) {
+              const row = made.find((m) => m.name === ins.row.name && !Object.values(map).includes(m.id))
+              if (row) map[ins.key] = row.id
+            }
+            setSleeves((rows) => byKey([...rows.filter((r) => !made.some((m) => m.id === r.id)), ...made], 'sort'))
+          }
+        }
+        const stored = doc.sleeve_map ?? {}
+        if (Object.keys(map).length !== Object.keys(stored).length || Object.entries(map).some(([k, v]) => stored[k] !== v)) {
+          // re-read the latest document so an edit saved meanwhile is not overwritten
+          const { data: fresh } = await supabase.from('plans').select('*').eq('id', active.id).maybeSingle()
+          const latest = (fresh as PlanRow | null)?.doc ?? active.doc
+          const { data, error } = await supabase.from('plans').update({ doc: { ...(latest as object), sleeve_map: map } }).eq('id', active.id).select('*').single()
+          if (error || !data) ok = false
+          else setPlans((rows) => rows.map((r) => (r.id === (data as PlanRow).id ? (data as PlanRow) : r)))
+        }
+      } catch {
+        ok = false
+      } finally {
+        failedSync.current = ok ? null : sig
+        syncing.current = false
+        setSyncTick((t) => t + 1)
+      }
+    })()
+  }, [session?.user?.id, loading, readOnly, settings?.user_id, plans, sleeves, day, syncTick])
+
   const value = useMemo<Store>(() => ({
-    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets,
+    session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets, plans,
     needsSetup, createPlan, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut,
-  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets,
+  }), [session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets, plans,
     needsSetup, createPlan, readOnly, fx, fxUpdatedAt, ibkr,
     save, refreshing, toast, notify, updateSettings, upsert, insertMany, remove, reload, refreshMarket, saveIbkr, clearIbkr, signOut])
 
