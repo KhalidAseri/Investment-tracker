@@ -31,3 +31,10 @@
 }
 .aa-value span { font-size: 14px; color: var(--ink-2); }
 .aa-value b { font-size: 21px; font-weight: 600; color: var(--accent); }
+
+/* plan suggestions above the search */
+.aa-sugg { display: flex; flex-direction: column; gap: 8px; }
+.aa-sugg-h { font-size: 13px; font-weight: 600; color: var(--muted); }
+.aa .type-tile.aa-sugg-row { min-height: 60px; }
+.aa-sugg-row .tt-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aa-sugg-row .ltr { font-family: var(--font-display); }

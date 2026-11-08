@@ -1,27 +1,43 @@
-// «الخطة»: the owner's written plan (phases, bands, milestones, contributions, reserves, income rule, steps)
-// compared with actual balances and transactions. Pure functions only: no React, no Supabase.
-// No return assumptions or projections: every planned number comes from the plan document itself.
-import { bandOf, computeTotals, holdingValue, rateOf, type Totals } from './calc'
-import { daysBetween, hijriLabel, isoOf, utc, zakatSchedule } from './income'
+// «الخطة»: the owner's written plan (phases with bands, build order, reserves, income rule, steps) compared with actual
+// balances and transactions. Pure functions only: no React, no Supabase.
+// No value targets over time and no return assumptions: progress is how complete the STRUCTURE is (weights vs targets,
+// reserves filled) and what to do next. The advisor (advisor.ts) builds the roadmap, deposit split and checks on top of this.
+import { bandOf, computeTotals, holdingValue, rateOf, zakatRuleOf, type Totals, type ZakatOpts } from './calc'
+import { daysBetween, hijriLabel, isoOf, nominalValue, utc, zakatSchedule } from './income'
 import { todayISO } from './format'
+import { isStaleHolding } from './staleness'
 import { mainFlows, performance } from './wealth'
+import {
+  CATALOG, findInstrument, guessClass, isAssetClass, isPlatform, normalizeCatalogItem,
+  type AssetClass, type CatalogItem, type Platform,
+} from './catalog'
+import type { RoadmapItem } from './advisor'
 import type {
   Account, Fx, Goal, Holding, IbkrConnection, Layer, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem,
 } from './types'
 
 // =====================================================================================
-// Contract (PLAN-FEATURE.md)
+// Contract (PLAN-FEATURE.md + ADVISOR-FEATURE.md)
 // =====================================================================================
 export type ISODate = string // 'YYYY-MM-DD'
 
-export interface PlanSleeve { key: string; name: string; layer: Layer; accepts_new_money: boolean; note: string | null }
+export interface PlanSleeve {
+  key: string; name: string; layer: Layer; accepts_new_money: boolean; note: string | null
+  /** what the sleeve holds; drives the instrument choice, the zakat default and the plan checks */
+  class: AssetClass | null
+  /** build order, 1 first */
+  priority: number | null
+  /** start this sleeve when the main portfolio reaches this value (SAR); until then its target goes to the active sleeves */
+  start_at: number | null
+  /** catalog ids (or ids of the plan's own instruments), preferred first */
+  instruments: string[]
+}
 export interface PhaseWeight { target: number; min: number; max: number }
 export interface PlanPhase {
   key: string; name: string; start: ISODate; note: string | null
   /** keyed by sleeve key, % */
   weights: Record<string, PhaseWeight>
 }
-export interface PlanMilestone { date: ISODate; value: number; label: string | null }
 export type ContributionKind = 'monthly' | 'yearly' | 'once'
 export interface PlanContribution {
   key: string; name: string; kind: ContributionKind; amount: number
@@ -38,12 +54,34 @@ export interface PlanContribution {
   growth_pct: number | null
   note: string | null
 }
-export interface PlanEmergency { months: number; monthly_expense: number }
+export interface PlanEmergency {
+  months: number; monthly_expense: number
+  /** catalog ids, preferred first */
+  instruments: string[]
+  /** months kept instantly available; the rest may go to higher-yield short instruments (null = all of it) */
+  liquid_months: number | null
+}
+/**
+ * The income account («حساب الدخل»): at the yearly review the approved annual income moves from the portfolio into it so
+ * that it holds treasury_months of income; every month on transfer_day the owner withdraws annual / 12.
+ */
 export interface PlanIncome {
   start: ISODate | null; method: 'percent' | 'fixed'; annual_pct: number; fixed_monthly: number | null
   band_pct: number; treasury_months: number; transfer_day: number; no_sell_drawdown_pct: number; build_from: ISODate | null
+  /** catalog ids, preferred first */
+  instruments: string[]
 }
-export interface PlanRules { review_month: number; crash_pct: number; crash_sleeves: string[]; new_money_first: boolean }
+export interface PlanRules {
+  review_month: number; crash_pct: number; crash_sleeves: string[]; new_money_first: boolean
+  /** smallest purchase line, SAR */
+  min_ticket: number
+  /** sleeves funded per deposit */
+  max_lines: number
+  /** smallest position worth opening, SAR (the designer derives start_at from it) */
+  min_position: number
+  /** % per year */
+  inflation_pct: number
+}
 export interface PlanStep {
   key: string; title: string; detail: string | null; due: ISODate | null; done_at: ISODate | null
   recurring: 'none' | 'yearly'
@@ -54,20 +92,26 @@ export interface PlanReview {
 }
 export interface PlanState { income_year: number | null; income_annual: number | null; dismissed: Record<string, ISODate> }
 export interface PlanGoal { monthly_income: number | null; target_capital: number | null; target_date: ISODate | null; note: string | null }
+/** The designer's answers, kept for re-design and for the plan checks. */
+export interface PlanProfile {
+  /** largest temporary fall tolerated without selling, % */
+  drawdown: number
+  income_year: number | null
+  platforms: Platform[]
+  direct_pct: number
+  emergency_months: number
+  source: 'designer' | 'manual'
+}
 
 export interface PlanDoc {
   version: 1
   name: string
   created: ISODate
-  /** plan value when the plan was created (start of the milestone path) */
-  baseline: { date: ISODate; value: number } | null
   goal: PlanGoal
   sleeves: PlanSleeve[]
   /** key -> sleeves.id (internal; stripped on export) */
   sleeve_map?: Record<string, string>
   phases: PlanPhase[]
-  /** planned value of the plan portfolio */
-  milestones: PlanMilestone[]
   contributions: PlanContribution[]
   /** target = months × monthly_expense */
   emergency: PlanEmergency | null
@@ -76,10 +120,14 @@ export interface PlanDoc {
   steps: PlanStep[]
   reviews: PlanReview[]
   state: PlanState
+  profile: PlanProfile | null
+  /** instruments the owner added (exported with the plan) */
+  custom_instruments: CatalogItem[]
 }
 
 export type ActionArea = 'reserve' | 'step' | 'deposit' | 'rebalance' | 'income' | 'review' | 'zakat' | 'data' | 'info'
-export type ActionCta = 'rebalance' | 'treasury' | 'withdraw' | 'emergency' | 'review' | 'step' | 'update'
+/** 'buy' = record or plan a purchase for a roadmap item; param = the roadmap key ('emergency' | 'treasury' | 'sleeve:<key>') */
+export type ActionCta = 'rebalance' | 'treasury' | 'withdraw' | 'emergency' | 'review' | 'step' | 'update' | 'buy'
 export interface PlanAction {
   key: string
   priority: 1 | 2 | 3 | 4
@@ -98,6 +146,9 @@ export interface PlanAction {
 
 export const PLAN_FILE_EXT = '.masar.json'
 export const LAYERS: Layer[] = ['growth', 'income', 'safety', 'hedge']
+export const DEFAULT_RULES: PlanRules = {
+  review_month: 1, crash_pct: 25, crash_sleeves: [], new_money_first: true, min_ticket: 1000, max_lines: 3, min_position: 10000, inflation_pct: 2,
+}
 
 // =====================================================================================
 // Dates (ISO strings, noon UTC maths)
@@ -126,17 +177,18 @@ export function isISODate(v: unknown): v is ISODate {
 /** whole years from a to b (anniversaries passed) */
 const fullYears = (a: ISODate, b: ISODate) => Math.max(0, Y(b) - Y(a) - (b.slice(5) < a.slice(5) ? 1 : 0))
 /** whole months from a to b, at least 0 */
-const monthsBetween = (a: ISODate, b: ISODate) => Math.max(0, (Y(b) - Y(a)) * 12 + (M(b) - M(a)) - (D(b) < D(a) ? 1 : 0))
+export const monthsBetween = (a: ISODate, b: ISODate) => Math.max(0, (Y(b) - Y(a)) * 12 + (M(b) - M(a)) - (D(b) < D(a) ? 1 : 0))
 
 // =====================================================================================
 // Small Arabic helpers (short, plain)
 // =====================================================================================
-const n0 = (v: number) => Math.round(v).toLocaleString('en-US')
 const r1 = (v: number) => (Math.round(v * 10) / 10).toString()
 /** a percent kept left-to-right inside Arabic text (Unicode isolates) */
-const p0 = (v: number) => `\u2066${r1(v)}%\u2069`
+export const p0 = (v: number) => `⁦${r1(v)}%⁩`
+/** text kept left-to-right inside Arabic text (tickers, ranges) */
+export const ltr = (s: string) => `⁦${s}⁩`
 export const countAssets = (n: number) => (n === 1 ? 'أصل واحد' : n === 2 ? 'أصلان' : n <= 10 ? `${n} أصول` : `${n} أصلاً`)
-const countMonths = (v: number) => {
+export const countMonths = (v: number) => {
   const r = Math.round(v * 10) / 10
   if (r === 1) return 'شهر واحد'
   if (r === 2) return 'شهران'
@@ -150,6 +202,7 @@ export function inDays(n: number) {
   if (n === 2) return 'بعد يومين'
   return n <= 10 ? `بعد ${n} أيام` : `بعد ${n} يوماً`
 }
+const agoDays = (n: number) => (n <= 1 ? 'أمس' : n === 2 ? 'قبل يومين' : n <= 10 ? `قبل ${n} أيام` : `قبل ${n} يوماً`)
 const lateBy = (n: number) => (n === 1 ? 'متأخرة يوماً واحداً' : n === 2 ? 'متأخرة يومين' : n <= 10 ? `متأخرة ${n} أيام` : `متأخرة ${n} يوماً`)
 
 // =====================================================================================
@@ -157,14 +210,15 @@ const lateBy = (n: number) => (n === 1 ? 'متأخرة يوماً واحداً' 
 // =====================================================================================
 export function emptyPlan(name = 'خطتي', today: ISODate = todayISO()): PlanDoc {
   return {
-    version: 1, name, created: today, baseline: null,
+    version: 1, name, created: today,
     goal: { monthly_income: null, target_capital: null, target_date: null, note: null },
     sleeves: [],
     phases: [{ key: 'p1', name: 'المرحلة الأولى', start: today, note: null, weights: {} }],
-    milestones: [], contributions: [], emergency: null, income: null,
-    rules: { review_month: 1, crash_pct: 25, crash_sleeves: [], new_money_first: true },
+    contributions: [], emergency: null, income: null,
+    rules: { ...DEFAULT_RULES, crash_sleeves: [] },
     steps: [], reviews: [],
     state: { income_year: null, income_annual: null, dismissed: {} },
+    profile: null, custom_instruments: [],
   }
 }
 
@@ -176,26 +230,46 @@ const dateOrNull = (v: unknown) => (isISODate(v) ? v : null)
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 const obj = (v: unknown): Record<string, any> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, any>) : {})
 const isLayer = (v: unknown): v is Layer => typeof v === 'string' && (LAYERS as string[]).includes(v)
+/** unique non-empty strings */
+const strList = (v: unknown) => [...new Set(arr<unknown>(v).filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()))]
+const posOrNull = (v: unknown) => { const n = numOrNull(v); return n != null && n > 0 ? n : null }
 
-/** Tolerant reader for stored or imported documents: fills defaults, never throws. */
+/**
+ * Tolerant reader for stored or imported documents: fills defaults, never throws. Old documents are accepted: their
+ * milestones and baseline are dropped, and the new sleeve fields are filled (priority = list order, class from the first
+ * instrument, else the name, else the layer; no start_at; no instruments).
+ */
 export function normalizePlan(raw: unknown, today: ISODate = todayISO()): PlanDoc {
   const r = obj(raw)
   const base = emptyPlan(str(r.name, 'خطتي') || 'خطتي', dateOrNull(r.created) ?? today)
   const g = obj(r.goal)
-  const b = obj(r.baseline)
   const rules = obj(r.rules)
   const st = obj(r.state)
   const inc = r.income == null ? null : obj(r.income)
   const em = r.emergency == null ? null : obj(r.emergency)
+  const pr = r.profile == null ? null : obj(r.profile)
   const map = obj(r.sleeve_map)
+  const custom: CatalogItem[] = []
+  for (const x of arr<unknown>(r.custom_instruments)) {
+    const it = normalizeCatalogItem(x)
+    if (it && !custom.some((c) => c.id === it.id)) custom.push(it)
+  }
   const doc: PlanDoc = {
     ...base,
-    baseline: isISODate(b.date) && Number.isFinite(Number(b.value)) ? { date: b.date, value: num(b.value) } : null,
     goal: { monthly_income: numOrNull(g.monthly_income), target_capital: numOrNull(g.target_capital), target_date: dateOrNull(g.target_date), note: strOrNull(g.note) },
-    sleeves: arr<any>(r.sleeves).filter((s) => s && typeof s.key === 'string' && s.key).map((s) => ({
-      key: String(s.key), name: str(s.name, s.key) || String(s.key), layer: isLayer(s.layer) ? s.layer : 'growth',
-      accepts_new_money: s.accepts_new_money !== false, note: strOrNull(s.note),
-    })),
+    sleeves: arr<any>(r.sleeves).filter((s) => s && typeof s.key === 'string' && s.key).map((s, i) => {
+      const layer: Layer = isLayer(s.layer) ? s.layer : 'growth'
+      const name = str(s.name, s.key) || String(s.key)
+      const instruments = strList(s.instruments)
+      const pri = numOrNull(s.priority)
+      return {
+        key: String(s.key), name, layer, accepts_new_money: s.accepts_new_money !== false, note: strOrNull(s.note),
+        class: isAssetClass(s.class) ? s.class : findInstrument(instruments[0], custom)?.class ?? guessClass(name, layer),
+        priority: pri != null && pri >= 1 ? Math.round(pri) : i + 1,
+        start_at: posOrNull(s.start_at),
+        instruments,
+      }
+    }),
     phases: arr<any>(r.phases).filter((p) => p && typeof p === 'object').map((p, i) => ({
       key: str(p.key, `p${i + 1}`) || `p${i + 1}`, name: str(p.name, `المرحلة ${i + 1}`) || `المرحلة ${i + 1}`,
       start: dateOrNull(p.start) ?? base.created, note: strOrNull(p.note),
@@ -205,25 +279,30 @@ export function normalizePlan(raw: unknown, today: ISODate = todayISO()): PlanDo
         return [k, { target, min: o.min == null ? target : num(o.min, target), max: o.max == null ? target : num(o.max, target) }]
       })),
     })),
-    milestones: arr<any>(r.milestones).filter((m) => m && isISODate(m.date) && Number.isFinite(Number(m.value)))
-      .map((m) => ({ date: m.date as string, value: num(m.value), label: strOrNull(m.label) })),
     contributions: arr<any>(r.contributions).filter((c) => c && typeof c === 'object').map((c, i) => ({
       key: str(c.key, `c${i + 1}`) || `c${i + 1}`, name: str(c.name, 'إيداع') || 'إيداع',
       kind: (['monthly', 'yearly', 'once'] as const).includes(c.kind) ? c.kind : 'monthly',
       amount: num(c.amount), day: numOrNull(c.day), month: numOrNull(c.month), date: dateOrNull(c.date), until: dateOrNull(c.until),
       split_months: numOrNull(c.split_months), growth_pct: numOrNull(c.growth_pct), note: strOrNull(c.note),
     })),
-    emergency: em ? { months: num(em.months), monthly_expense: num(em.monthly_expense) } : null,
+    emergency: em ? {
+      months: num(em.months), monthly_expense: num(em.monthly_expense), instruments: strList(em.instruments),
+      liquid_months: (() => { const v = numOrNull(em.liquid_months); return v != null && v >= 0 ? v : null })(),
+    } : null,
     income: inc ? {
       start: dateOrNull(inc.start), method: inc.method === 'fixed' ? 'fixed' : 'percent', annual_pct: num(inc.annual_pct, 4),
       fixed_monthly: numOrNull(inc.fixed_monthly), band_pct: num(inc.band_pct, 10), treasury_months: num(inc.treasury_months, 24),
       transfer_day: Math.min(28, Math.max(1, Math.round(num(inc.transfer_day, 27)))), no_sell_drawdown_pct: num(inc.no_sell_drawdown_pct, 20),
-      build_from: dateOrNull(inc.build_from),
+      build_from: dateOrNull(inc.build_from), instruments: strList(inc.instruments),
     } : null,
     rules: {
       review_month: Math.min(12, Math.max(1, Math.round(num(rules.review_month, 1)))), crash_pct: num(rules.crash_pct, 25),
       crash_sleeves: arr<unknown>(rules.crash_sleeves).filter((k): k is string => typeof k === 'string'),
       new_money_first: rules.new_money_first !== false,
+      min_ticket: Math.max(0, num(rules.min_ticket, DEFAULT_RULES.min_ticket)),
+      max_lines: Math.min(10, Math.max(1, Math.round(num(rules.max_lines, DEFAULT_RULES.max_lines)))),
+      min_position: Math.max(0, num(rules.min_position, DEFAULT_RULES.min_position)),
+      inflation_pct: num(rules.inflation_pct, DEFAULT_RULES.inflation_pct),
     },
     steps: arr<any>(r.steps).filter((s) => s && typeof s === 'object').map((s, i) => ({
       key: str(s.key, `s${i + 1}`) || `s${i + 1}`, title: str(s.title, 'خطوة') || 'خطوة', detail: strOrNull(s.detail),
@@ -238,12 +317,20 @@ export function normalizePlan(raw: unknown, today: ISODate = todayISO()): PlanDo
       income_year: numOrNull(st.income_year), income_annual: numOrNull(st.income_annual),
       dismissed: Object.fromEntries(Object.entries(obj(st.dismissed)).filter(([, v]) => isISODate(v))) as Record<string, ISODate>,
     },
+    profile: pr ? {
+      drawdown: num(pr.drawdown, 25),
+      income_year: (() => { const v = numOrNull(pr.income_year); return v == null ? null : Math.round(v) })(),
+      platforms: [...new Set(arr<unknown>(pr.platforms).filter(isPlatform))],
+      direct_pct: Math.max(0, num(pr.direct_pct, 0)),
+      emergency_months: Math.max(0, num(pr.emergency_months, 6)),
+      source: pr.source === 'designer' ? 'designer' : 'manual',
+    } : null,
+    custom_instruments: custom,
   }
   const cleanMap = Object.fromEntries(Object.entries(map).filter(([, v]) => typeof v === 'string' && v)) as Record<string, string>
   if (Object.keys(cleanMap).length) doc.sleeve_map = cleanMap
   if (!doc.phases.length) doc.phases = base.phases
   doc.phases.sort((a, b) => a.start.localeCompare(b.start))
-  doc.milestones.sort((a, b) => a.date.localeCompare(b.date))
   return doc
 }
 
@@ -261,27 +348,78 @@ export function nextPhase(doc: PlanDoc, today: ISODate = todayISO()): PlanPhase 
   return phasesOf(doc).find((p) => p.start > today) ?? null
 }
 
-/** Baseline and milestones as one path, in date order (for the milestone chart). */
-export function milestonePath(doc: PlanDoc): Array<{ date: ISODate; value: number; label: string | null }> {
-  const pts = [...doc.milestones].sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ date: m.date, value: m.value, label: m.label }))
-  if (doc.baseline && !pts.some((p) => p.date <= doc.baseline!.date)) pts.unshift({ date: doc.baseline.date, value: doc.baseline.value, label: 'البداية' })
-  return pts
+/** When the income account starts filling: build_from, else income start − treasury_months. */
+export function treasuryWindowStart(inc: PlanIncome | null | undefined): ISODate | null {
+  if (!inc) return null
+  if (inc.build_from) return inc.build_from
+  return inc.start ? addMonthsISO(inc.start, -Math.max(0, Math.round(Number(inc.treasury_months) || 0))) : null
 }
 
-/** Expected value at a date: straight lines between the baseline and the milestones, flat after the last one. */
-export function expectedValueAt(doc: PlanDoc, date: ISODate): number | null {
-  const pts = milestonePath(doc)
-  if (!pts.length) return null
-  if (date <= pts[0].date) return doc.baseline && date >= doc.baseline.date ? pts[0].value : doc.baseline ? doc.baseline.value : null
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1], b = pts[i]
-    if (date <= b.date) {
-      const span = daysBetween(a.date, b.date)
-      const t = span > 0 ? daysBetween(a.date, date) / span : 1
-      return a.value + (b.value - a.value) * t
+// =====================================================================================
+// Effective targets: sleeves that wait for the portfolio to grow (start_at)
+// =====================================================================================
+export interface EffectiveTarget {
+  key: string
+  /** the phase's own target, % */
+  planTarget: number
+  /** after waiting sleeves hand their share to the active ones, % */
+  target: number
+  min: number
+  max: number
+  /** started: no start_at, the main portfolio reached it, or the sleeve already holds money */
+  active: boolean
+  startAt: number | null
+}
+
+const r01 = (v: number) => Math.round(v * 10) / 10
+
+/**
+ * The phase's targets with start_at thresholds applied. A sleeve waits while the main portfolio is below its start_at and
+ * it holds nothing (`held`, SAR by sleeve key; a sleeve that already holds money stays started so a dip below the threshold
+ * never asks to sell it). A waiting sleeve's target goes to the active sleeves of the same layer that accept new money,
+ * else to all active sleeves that accept new money (then any active sleeve), in proportion to their targets; each keeps its
+ * band width around the new target. When nothing would be active, the plan applies as written.
+ */
+export function effectiveTargets(doc: PlanDoc, phase: PlanPhase | null, portfolioValue: number, held: Record<string, number> = {}): EffectiveTarget[] {
+  const rows = doc.sleeves.map((ps) => {
+    const w = phase?.weights[ps.key] ?? { target: 0, min: 0, max: 0 }
+    const startAt = ps.start_at != null && ps.start_at > 0 ? ps.start_at : null
+    const active = startAt == null || portfolioValue >= startAt || (held[ps.key] ?? 0) > 0
+    return { ps, w, startAt, active, add: 0 }
+  })
+  if (!rows.some((r) => r.active && r.w.target > 0)) for (const r of rows) r.active = true
+  for (const r of rows) {
+    if (r.active || !(r.w.target > 0)) continue
+    const live = rows.filter((x) => x.active && x.w.target > 0)
+    const to = [
+      live.filter((x) => x.ps.layer === r.ps.layer && x.ps.accepts_new_money),
+      live.filter((x) => x.ps.accepts_new_money),
+      live.filter((x) => x.ps.layer === r.ps.layer),
+      live,
+    ].find((t) => t.length) ?? []
+    const sum = to.reduce((a, x) => a + x.w.target, 0)
+    for (const x of to) x.add += (r.w.target * x.w.target) / sum
+  }
+  const out: EffectiveTarget[] = rows.map((r) => {
+    if (!r.active) return { key: r.ps.key, planTarget: r.w.target, target: 0, min: 0, max: 0, active: false, startAt: r.startAt }
+    if (!(r.add > 0)) return { key: r.ps.key, planTarget: r.w.target, target: r.w.target, min: r.w.min, max: r.w.max, active: true, startAt: r.startAt }
+    const target = r01(r.w.target + r.add)
+    const below = Math.max(0, r.w.target - r.w.min), above = Math.max(0, r.w.max - r.w.target)
+    return { key: r.ps.key, planTarget: r.w.target, target, min: r01(Math.max(0, target - below)), max: r01(Math.min(100, target + above)), active: true, startAt: r.startAt }
+  })
+  // rounding: the recipients keep the exact total they received
+  const recipients = out.filter((_, i) => rows[i].active && rows[i].add > 0)
+  if (recipients.length) {
+    const want = rows.reduce((a, r) => a + (r.active && r.add > 0 ? r.w.target + r.add : 0), 0)
+    const drift = r01(want - recipients.reduce((a, e) => a + e.target, 0))
+    if (Math.abs(drift) > 1e-9) {
+      const big = recipients.reduce((m, e) => (e.target > m.target ? e : m), recipients[0])
+      big.target = r01(big.target + drift)
+      big.min = r01(Math.max(0, big.min + drift))
+      big.max = r01(Math.min(100, big.max + drift))
     }
   }
-  return pts[pts.length - 1].value
+  return out
 }
 
 // =====================================================================================
@@ -370,6 +508,16 @@ export function resolveSleeveMap(doc: PlanDoc, sleeves: Sleeve[]): Record<string
   return out
 }
 
+/** sleeves.id -> the class of the plan sleeve it carries (for zakat defaults and look-through). */
+export function sleeveClassMap(doc: PlanDoc | null, map: Record<string, string | null>): Record<string, AssetClass> {
+  const out: Record<string, AssetClass> = {}
+  for (const ps of doc?.sleeves ?? []) {
+    const id = map[ps.key]
+    if (id && ps.class) out[id] = ps.class
+  }
+  return out
+}
+
 const KEYWORDS: string[][] = [
   ['عالمي', 'العالم', 'متقدم', 'world', 'global'], ['ناشئ', 'emerging'], ['سعودي', 'تاسي', 'محلي', 'saudi'], ['مباشر', 'فرص', 'direct'],
   ['صكوك', 'sukuk'], ['دولار', 'usd'], ['حكومي', 'سيادي'], ['ريت', 'reit', 'عقار'], ['ذهب', 'gold'], ['سيوله', 'نقد', 'مرابحه', 'cash'],
@@ -412,25 +560,38 @@ export interface SleeveSync {
   /** the stored sleeve_map differs from the resolved one */
   mapChanged: boolean
   phase: PlanPhase | null
+  /** the effective targets that were applied */
+  effective: EffectiveTarget[]
 }
 
 const same = (a: number | null | undefined, b: number | null | undefined) => (a == null || b == null ? a == null && b == null : Math.abs(Number(a) - Number(b)) < 1e-6)
 
 /**
- * What must change in the sleeves rows so they show the active phase: target_now = target_fi = target, band_min/max,
- * accepts_new_money and layer from the plan. Sleeves that are not in the plan get target 0, no band, no new money.
+ * What must change in the sleeves rows so they show the active phase's EFFECTIVE targets (start_at thresholds applied
+ * against the main portfolio value): target_now = target_fi = target, band_min/max, accepts_new_money and layer from the
+ * plan. Sleeves that are not in the plan get target 0, no band, no new money. Only differences are returned, so applying
+ * them and running again gives no updates (no write loops).
+ * `portfolio` = the main portfolio value, or { total, bySleeve } so a sleeve that already holds money stays started;
+ * without it every sleeve counts as started (the plan as written).
  */
-export function planSleeveSync(doc: PlanDoc, sleeves: Sleeve[], today: ISODate = todayISO()): SleeveSync {
+export function planSleeveSync(
+  doc: PlanDoc, sleeves: Sleeve[], today: ISODate = todayISO(),
+  portfolio: number | { total: number; bySleeve?: Record<string, number> } = Infinity,
+): SleeveSync {
   const phase = activePhase(doc, today)
   const resolved = resolveSleeveMap(doc, sleeves)
+  const total = typeof portfolio === 'number' ? portfolio : Number(portfolio.total) || 0
+  const bySleeve = typeof portfolio === 'number' ? {} : portfolio.bySleeve ?? {}
+  const held = Object.fromEntries(doc.sleeves.map((ps) => [ps.key, resolved[ps.key] ? bySleeve[resolved[ps.key]!] ?? 0 : 0]))
+  const effective = effectiveTargets(doc, phase, total, held)
   const updates: SleeveSync['updates'] = []
   const inserts: SleeveSync['inserts'] = []
   const map: Record<string, string> = {}
   const inPlan = new Set<string>()
   let sort = Math.max(0, ...sleeves.map((s) => Number(s.sort) || 0))
-  for (const ps of doc.sleeves) {
-    const w = phase?.weights[ps.key] ?? { target: 0, min: 0, max: 0 }
-    const patch = { target_now: w.target, target_fi: w.target, band_min: w.min, band_max: w.max, accepts_new_money: ps.accepts_new_money, layer: ps.layer }
+  doc.sleeves.forEach((ps, i) => {
+    const e = effective[i]
+    const patch = { target_now: e.target, target_fi: e.target, band_min: e.min, band_max: e.max, accepts_new_money: ps.accepts_new_money, layer: ps.layer }
     const id = resolved[ps.key]
     if (id) {
       map[ps.key] = id
@@ -441,7 +602,7 @@ export function planSleeveSync(doc: PlanDoc, sleeves: Sleeve[], today: ISODate =
     } else {
       inserts.push({ key: ps.key, row: { name: ps.name, ...patch, expected_return: null, yield_pct: null, zakat_rate: 2.5, note: ps.note, sort: ++sort } })
     }
-  }
+  })
   for (const s of sleeves) {
     if (inPlan.has(s.id)) continue
     const patch = { target_now: 0, target_fi: 0, band_min: null, band_max: null, accepts_new_money: false, layer: s.layer }
@@ -449,7 +610,17 @@ export function planSleeveSync(doc: PlanDoc, sleeves: Sleeve[], today: ISODate =
   }
   const stored = doc.sleeve_map ?? {}
   const mapChanged = Object.keys(map).length !== Object.keys(stored).length || Object.entries(map).some(([k, v]) => stored[k] !== v)
-  return { updates, inserts, map, mapChanged, phase }
+  return { updates, inserts, map, mapChanged, phase, effective }
+}
+
+// =====================================================================================
+// Update frequency of manual values
+// =====================================================================================
+/** Days between updates and whether a value is due: lib/staleness.ts (manual: update_every_days, null = 30; NAV: 35 unless set). */
+export { updateEveryDays } from './staleness'
+/** A held, non-archived holding whose value is older than its update frequency. */
+export function isUpdateDue(h: Holding, today: ISODate = todayISO()): boolean {
+  return Number(h.quantity) > 0 && isStaleHolding(h, utc(today).getTime())
 }
 
 // =====================================================================================
@@ -484,12 +655,21 @@ export interface BandRow {
   value: number
   /** % of the main portfolio */
   actual: number
+  /** effective target and band (start_at applied), % */
   target: number
   min: number
   max: number
   status: 'below' | 'above' | 'ok'
   /** riyals to reach the target (negative = above it) */
   gap: number
+  /** the phase's own target, % */
+  planTarget: number
+  /** false while the sleeve waits for its start_at */
+  active: boolean
+  startAt: number | null
+  /** build order, 1 first (sleeves outside the plan come last) */
+  priority: number
+  cls: AssetClass | null
 }
 
 export interface StepView { step: PlanStep; due: ISODate | null; done: boolean; overdue: boolean; days: number | null }
@@ -509,6 +689,8 @@ export interface EmergencyStatus {
   goal: Goal | null
   /** cash holding that receives top-ups */
   holding: Holding | null
+  /** every holding of the emergency fund (goal kind 'emergency') */
+  holdings: Holding[]
   source: 'goal' | 'accounts' | 'none'
 }
 
@@ -516,8 +698,10 @@ export interface TreasuryStatus {
   enabled: boolean
   /** income has started (today ≥ income.start) */
   started: boolean
-  /** filling the treasury has started (today ≥ build_from, or start) */
+  /** filling the income account has started (today ≥ buildFrom) */
   building: boolean
+  /** start of the filling window: build_from, else income start − treasury_months */
+  buildFrom: ISODate | null
   value: number
   target: number
   monthlyIncome: number
@@ -539,16 +723,10 @@ export interface TreasuryStatus {
 }
 
 export interface PlanProgress {
-  /** main portfolio + income treasury */
+  /** main portfolio + income account */
   planValue: number
   mainValue: number
   treasuryValue: number
-  expected: number | null
-  gap: number | null
-  gapPct: number | null
-  status: 'ahead' | 'behind' | 'on' | null
-  prevMilestone: PlanMilestone | null
-  nextMilestone: PlanMilestone | null
   phase: PlanPhase | null
   nextPhase: PlanPhase | null
   daysToNextPhase: number | null
@@ -576,6 +754,12 @@ export interface PlanContext {
   map: Record<string, string | null>
   incomeGoal: Goal | null
   emergencyGoal: Goal | null
+  /** the active phase's effective targets (start_at applied at today's main portfolio value), in plan sleeve order */
+  effective: EffectiveTarget[]
+  /** sleeves.id -> plan sleeve class */
+  sleeveClass: Record<string, AssetClass>
+  /** options for zakatRuleOf / zakatEstimate / zakatSchedule with this plan */
+  zakat: ZakatOpts
   progress: PlanProgress
 }
 
@@ -624,33 +808,44 @@ export function planContext(input: PlanInputs): PlanContext {
   const next = doc ? nextPhase(doc, today) : null
   const thisMonth = today.slice(0, 7)
   const year = Y(today)
+  const held = doc ? Object.fromEntries(doc.sleeves.map((ps) => [ps.key, map[ps.key] ? totals.bySleeve[map[ps.key]!] ?? 0 : 0])) : {}
+  const effective = doc ? effectiveTargets(doc, phase, mainValue, held) : []
+  const sleeveClass = sleeveClassMap(doc, map)
+  const zakat: ZakatOpts = { sleeveClass, custom: doc?.custom_instruments ?? [] }
 
-  // ---- bands ----
+  // ---- bands (effective targets) ----
   const bands: BandRow[] = []
   const used = new Set<string>()
-  const mk = (key: string, sleeve: Sleeve | null, planSleeve: PlanSleeve | null, w: PhaseWeight): BandRow => {
+  type Extra = Pick<BandRow, 'planTarget' | 'active' | 'startAt' | 'priority' | 'cls'>
+  const mk = (key: string, sleeve: Sleeve | null, planSleeve: PlanSleeve | null, w: PhaseWeight, x: Extra): BandRow => {
     const value = sleeve ? totals.bySleeve[sleeve.id] ?? 0 : 0
     const actual = mainValue > 0 ? (value / mainValue) * 100 : 0
     const status = mainValue > 0 ? (actual < w.min - 1e-9 ? 'below' : actual > w.max + 1e-9 ? 'above' : 'ok') : 'ok'
     return {
       key, sleeve, planSleeve, name: planSleeve?.name ?? sleeve?.name ?? key, layer: planSleeve?.layer ?? sleeve?.layer ?? 'growth',
       note: planSleeve?.note ?? sleeve?.note ?? null, accepts: planSleeve ? planSleeve.accepts_new_money : !!sleeve?.accepts_new_money,
-      value, actual, target: w.target, min: w.min, max: w.max, status, gap: (w.target / 100) * mainValue - value,
+      value, actual, target: w.target, min: w.min, max: w.max, status, gap: (w.target / 100) * mainValue - value, ...x,
     }
   }
   if (doc && phase) {
-    for (const ps of doc.sleeves) {
+    doc.sleeves.forEach((ps, i) => {
       const id = map[ps.key]
       const sl = id ? sleeves.find((s) => s.id === id) ?? null : null
       if (sl) used.add(sl.id)
-      bands.push(mk(ps.key, sl, ps, phase.weights[ps.key] ?? { target: 0, min: 0, max: 0 }))
-    }
+      const e = effective[i]
+      bands.push(mk(ps.key, sl, ps, { target: e.target, min: e.min, max: e.max },
+        { planTarget: e.planTarget, active: e.active, startAt: e.startAt, priority: ps.priority ?? i + 1, cls: ps.class }))
+    })
     for (const sl of sleeves) {
       if (used.has(sl.id) || !(totals.bySleeve[sl.id] > 0)) continue
-      bands.push(mk(`id:${sl.id}`, sl, null, bandOf({ target_now: 0, band_min: null, band_max: null }, settings)))
+      bands.push(mk(`id:${sl.id}`, sl, null, bandOf({ target_now: 0, band_min: null, band_max: null }, settings),
+        { planTarget: 0, active: true, startAt: null, priority: 1000 + (Number(sl.sort) || 0), cls: null }))
     }
   } else {
-    for (const sl of sleeves) bands.push(mk(`id:${sl.id}`, sl, null, bandOf(sl, settings)))
+    for (const sl of sleeves) {
+      const b = bandOf(sl, settings)
+      bands.push(mk(`id:${sl.id}`, sl, null, b, { planTarget: b.target, active: true, startAt: null, priority: Number(sl.sort) || 0, cls: null }))
+    }
   }
   const outOfBand = bands.filter((b) => b.status !== 'ok')
 
@@ -685,15 +880,6 @@ export function planContext(input: PlanInputs): PlanContext {
     }
   }
 
-  // ---- milestones ----
-  const expected = doc ? expectedValueAt(doc, today) : null
-  const gap = expected != null ? planValue - expected : null
-  const gapPct = expected != null && expected > 0 && gap != null ? (gap / expected) * 100 : null
-  const status = gapPct == null ? null : gapPct > 2 ? 'ahead' : gapPct < -2 ? 'behind' : 'on'
-  const ms = doc ? [...doc.milestones].sort((a, b) => a.date.localeCompare(b.date)) : []
-  const prevMilestone = [...ms].reverse().find((m) => m.date <= today) ?? null
-  const nextMilestone = ms.find((m) => m.date > today) ?? null
-
   // ---- emergency ----
   const em = doc?.emergency ?? null
   const emHoldings = holdings.filter((h) => !h.archived && h.goal_id && emergencyGoalIds.has(h.goal_id))
@@ -704,14 +890,14 @@ export function planContext(input: PlanInputs): PlanContext {
   const emergency: EmergencyStatus = {
     enabled: !!em || !!emergencyGoal, value: emValue, target: emTarget, months: em?.months ?? 0, monthlyExpense: em?.monthly_expense ?? 0,
     shortfall: Math.max(0, emTarget - emValue), coverMonths: em && em.monthly_expense > 0 ? emValue / em.monthly_expense : null,
-    pct: emTarget > 0 ? Math.min(1, emValue / emTarget) : 0, goal: emergencyGoal, holding: emHolding,
+    pct: emTarget > 0 ? Math.min(1, emValue / emTarget) : 0, goal: emergencyGoal, holding: emHolding, holdings: emHoldings,
     source: emergencyGoal ? 'goal' : totals.outside > 0 ? 'accounts' : 'none',
   }
 
-  // ---- treasury ----
+  // ---- income account ----
   const inc = doc?.income ?? null
   const started = !!inc?.start && today >= inc.start
-  const buildFrom = inc ? inc.build_from ?? inc.start : null
+  const buildFrom = treasuryWindowStart(inc)
   const building = !!buildFrom && today >= buildFrom
   const approved = !!inc && inc.method === 'percent' && doc!.state.income_annual != null
   const annual = !inc ? 0 : inc.method === 'fixed' ? (Number(inc.fixed_monthly) || 0) * 12 : doc!.state.income_annual ?? (planValue * (Number(inc.annual_pct) || 0)) / 100
@@ -721,7 +907,7 @@ export function planContext(input: PlanInputs): PlanContext {
   const tHolding = [...treasuryHoldings].sort((a, b) => Number(isLumpSum(b)) - Number(isLumpSum(a)) || holdingValue(b, fx) - holdingValue(a, fx))[0] ?? null
   const monthsLeft = inc?.start && !started ? Math.max(1, monthsBetween(today, inc.start)) : 1
   const treasury: TreasuryStatus = {
-    enabled: !!inc, started, building, value: treasuryValue, target: tTarget, monthlyIncome, annualIncome: annual, approved, shortfall: tShort,
+    enabled: !!inc, started, building, buildFrom, value: treasuryValue, target: tTarget, monthlyIncome, annualIncome: annual, approved, shortfall: tShort,
     coverMonths: monthlyIncome > 0 ? treasuryValue / monthlyIncome : null, goal: incomeGoal, holding: tHolding, holdings: treasuryHoldings,
     transferDate: inc && started ? ymd(year, M(today), inc.transfer_day) : null,
     transferredThisMonth: transactions.some((t) => t.kind === 'income' && t.tx_date.slice(0, 7) === thisMonth && (t.source === 'planner' || (!!t.holding_id && treasuryIds.has(t.holding_id)))),
@@ -759,7 +945,7 @@ export function planContext(input: PlanInputs): PlanContext {
   const last = doc ? [...doc.reviews].sort((a, b) => b.year - a.year)[0] ?? null : null
 
   const progress: PlanProgress = {
-    planValue, mainValue, treasuryValue, expected, gap, gapPct, status, prevMilestone, nextMilestone,
+    planValue, mainValue, treasuryValue,
     phase: doc ? phase : null, nextPhase: next, daysToNextPhase: next ? daysBetween(today, next.start) : null,
     emergency, treasury,
     contributions: { year, planned, actual: depYtd, diff: depYtd - planned, plannedThisMonth: month.reduce((a, o) => a + o.amount, 0), actualThisMonth: depMonth, items },
@@ -772,7 +958,7 @@ export function planContext(input: PlanInputs): PlanContext {
     drawdown, peakDate, crashDrawdown, crashBasis,
     review: { year, month: rm, done: !!entry, due: !!doc && !entry && today >= reviewStart && doc.created < reviewStart, entry, last },
   }
-  return { doc, today, input, totals, map, incomeGoal, emergencyGoal, progress }
+  return { doc, today, input, totals, map, incomeGoal, emergencyGoal, effective, sleeveClass, zakat, progress }
 }
 
 // =====================================================================================
@@ -788,15 +974,17 @@ const layersOut = (n: number) => (n === 2 ? 'طبقتان خارج نطاقهم�
 
 /**
  * Everything the owner should do to stay on plan, most urgent first (priority, then due date).
- * Works without a plan too (data items only), so the home screen always uses it.
+ * Works without a plan too (data, bands, maturities and zakat), so the home screen always uses it.
+ * Pass the roadmap (advisor.buildRoadmap) to add «الأولوية التالية».
  * Dismissed keys (doc.state.dismissed) and, for viewers, owner-only items are left out.
  */
-export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean } = {}): PlanAction[] {
+export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean; roadmap?: RoadmapItem[] } = {}): PlanAction[] {
   const { doc, today, input, progress: p } = ctx
   const { holdings, accounts, sleeves, fx } = input
   const out: PlanAction[] = []
   const ym = today.slice(0, 7)
   const add = (a: PlanAction) => out.push(a)
+  let treasuryShown = false
 
   if (doc) {
     // 1 · crash
@@ -810,7 +998,7 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
     if (e.target > 0 && e.shortfall > 0.5) {
       add({ key: `emergency:${ym}`, priority: 1, tone: 'warn', area: 'reserve', title: 'أكمل صندوق الطوارئ',
         detail: e.coverMonths != null ? `يغطي ${countMonths(e.coverMonths)} من ${e.months}` : `اكتمل ${Math.round(e.pct * 100)}%`,
-        amount: e.shortfall, due: null, owner: true, dismissible: true, cta: { label: 'أضف إليه', action: 'emergency' } })
+        amount: e.shortfall, due: null, owner: true, dismissible: true, cta: { label: 'اشتريته', action: 'buy', param: 'emergency', route: `deposit/${Math.round(e.shortfall)}` } })
     } else if (doc.emergency && doc.emergency.months > 0 && !(doc.emergency.monthly_expense > 0) && !(e.goal && Number(e.goal.target_amount) > 0)) {
       add({ key: 'emergency-expense', priority: 4, tone: '', area: 'data', title: 'حدّد مصروفك الشهري', detail: 'ليُحسب هدف صندوق الطوارئ',
         amount: null, due: null, owner: true, dismissible: true, cta: { label: 'حدّد', route: 'plan/doc' } })
@@ -832,7 +1020,7 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
     // 2 · monthly income transfer
     const t = p.treasury
     if (doc.income && t.started && t.transferDate && today >= t.transferDate && !t.transferredThisMonth && t.monthlyIncome > 0) {
-      add({ key: `withdraw:${ym}`, priority: 2, tone: 'accent', area: 'income', title: 'حوّل دخلك الشهري', detail: 'من خزانة الدخل إلى حسابك',
+      add({ key: `withdraw:${ym}`, priority: 2, tone: 'accent', area: 'income', title: 'حوّل دخلك الشهري', detail: 'من حساب الدخل إلى حسابك',
         amount: t.monthlyIncome, due: t.transferDate, owner: true, dismissible: true, cta: { label: 'سجّل التحويل', action: 'withdraw' } })
     }
   }
@@ -842,7 +1030,7 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
     const f = p.outOfBand[0]
     add({ key: `rebalance:${ym}`, priority: 3, tone: 'warn', area: 'rebalance',
       title: p.outOfBand.length === 1 ? `«${f.name}» خارج نطاقها` : layersOut(p.outOfBand.length),
-      detail: `«${f.name}» ${p0(f.actual)} والنطاق \u2066${r1(f.min)}–${r1(f.max)}%\u2069`, amount: null, due: null,
+      detail: `«${f.name}» ${p0(f.actual)} والنطاق ⁦${r1(f.min)}–${r1(f.max)}%⁩`, amount: null, due: null,
       owner: false, dismissible: true, cta: { label: 'أعد التوازن', action: 'rebalance' } })
   }
 
@@ -865,32 +1053,54 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
           cta: { label: 'خطّط إيداعك', route: 'deposit' } })
       }
     }
-    // 3 · income treasury
+    // 3 · income account
     const t = p.treasury
     if (doc.income && t.building && t.shortfall > 0.5 && !t.movedThisMonth) {
       if (t.holdSales) {
         add({ key: `treasury-hold:${ym}`, priority: 3, tone: '', area: 'info', title: `أجّل البيع: المحفظة دون قمتها بـ ${p0(p.drawdown)}`,
-          detail: 'اصرف من الخزانة والتوزيعات فقط', amount: null, due: null, owner: true, dismissible: true, cta: null })
+          detail: 'اصرف من حساب الدخل والتوزيعات فقط', amount: null, due: null, owner: true, dismissible: true, cta: null })
       } else if (t.monthlyMove > 0) {
-        add({ key: `treasury:${ym}`, priority: 3, tone: 'accent', area: 'income', title: 'انقل إلى خزانة الدخل',
-          detail: t.coverMonths != null ? `الخزانة تغطي ${countMonths(t.coverMonths)} من ${doc.income.treasury_months}` : null,
+        treasuryShown = true
+        add({ key: `treasury:${ym}`, priority: 3, tone: 'accent', area: 'income', title: 'انقل إلى حساب الدخل',
+          detail: t.coverMonths != null ? `الحساب يغطي ${countMonths(t.coverMonths)} من ${doc.income.treasury_months}` : null,
           amount: t.monthlyMove, due: null, owner: true, dismissible: true, cta: { label: 'انقل', action: 'treasury' } })
       }
     }
+    // 3 · the next priority of the roadmap (the emergency fund and a monthly move already have their own items)
+    const nx = opts.roadmap?.find((i) => i.status === 'next')
+    if (nx && nx.remaining > 0.5 && nx.kind !== 'emergency' && !(nx.kind === 'treasury' && treasuryShown)) {
+      const it = nx.pick?.item ?? null
+      const inst = it ? `${it.name}${it.symbol ? ` ${ltr(it.symbol)}` : ''}` : nx.pick?.holding?.name ?? null
+      add({ key: `next:${nx.key}:${ym}`, priority: 3, tone: 'accent', area: 'deposit', title: `الأولوية التالية: ${nx.title}`,
+        detail: inst ? `اشترِ ${inst}` : nx.why, amount: nx.remaining, due: null, owner: true, dismissible: true,
+        cta: { label: 'خطّط الشراء', route: `deposit/${Math.round(nx.remaining)}`, action: 'buy', param: nx.key } })
+    }
+  }
+
+  // 3 · maturities within 30 days (and those that matured in the last two weeks): reinvest by the plan
+  for (const h of holdings) {
+    if (h.archived || !h.maturity_date || !(Number(h.quantity) > 0)) continue
+    const n = daysBetween(today, h.maturity_date)
+    if (n < -14 || n > 30) continue
+    const amount = nominalValue(h, fx)
+    if (!(amount > 0)) continue
+    add({ key: `maturity:${h.id}:${h.maturity_date}`, priority: 3, tone: 'accent', area: 'deposit',
+      title: n >= 0 ? `يستحق «${h.name}» ${inDays(n)}` : `استحق «${h.name}» ${agoDays(-n)}`,
+      detail: doc ? 'أعد استثمار المبلغ حسب خطتك' : 'أعد استثمار المبلغ', amount, due: h.maturity_date, owner: true, dismissible: true,
+      cta: { label: 'خطّط إعادة الاستثمار', route: `deposit/${Math.round(amount)}` } })
   }
 
   // 3 · zakat within 14 days
-  for (const z of zakatSchedule(holdings, fx, today, 14)) {
+  for (const z of zakatSchedule(holdings, fx, today, 14, ctx.zakat)) {
     add({ key: `zakat:${z.holding.id}:${z.date}`, priority: 3, tone: 'warn', area: 'zakat', title: `زكاة ${z.holding.name} ${inDays(daysBetween(today, z.date))}`,
       detail: hijriLabel(z.date) || null, amount: z.amount, due: z.date, owner: false, dismissible: true, cta: { label: 'التفاصيل', route: 'income' } })
   }
 
   // 4 · data quality (what the home screen used to compute)
   const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
-  const stale = holdings.filter((h) => !h.archived && (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0 &&
-    (!h.price_updated_at || utc(today).getTime() - new Date(h.price_updated_at).getTime() > 35 * DAY))
+  const stale = holdings.filter((h) => isUpdateDue(h, today))
   if (stale.length) add({ key: 'data:stale', priority: 4, tone: 'warn', area: 'data', title: 'حدّث القيم اليدوية',
-    detail: `${countAssets(stale.length)} · مضى أكثر من شهر على آخر تحديث`, amount: null, due: null, owner: true, dismissible: false,
+    detail: `${countAssets(stale.length)} · حان موعد تحديثها`, amount: null, due: null, owner: true, dismissible: false,
     cta: { label: 'حدّث', route: 'update', action: 'update' } })
   const ibkr = input.ibkr ?? null
   if (ibkr?.last_status === 'error') add({ key: 'data:ibkr-error', priority: 4, tone: 'bad', area: 'data', title: 'تعذّرت مزامنة IBKR',
@@ -904,7 +1114,7 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
   const targetSum = sleeves.reduce((a, s) => a + Number(s.target_now), 0)
   if (sleeves.length && Math.round(targetSum) !== 100) add({ key: 'data:targets', priority: 4, tone: 'bad', area: 'data', title: `مجموع الأوزان المستهدفة ${p0(targetSum)}`,
     detail: 'اجعله 100%', amount: null, due: null, owner: true, dismissible: false, cta: { label: 'عدّل', route: 'plan/doc' } })
-  const noHaul = holdings.filter((h) => !h.archived && h.zakatable !== false && !h.zakat_start && Number(h.quantity) * Number(h.price) > 0)
+  const noHaul = holdings.filter((h) => !h.archived && !h.zakat_start && Number(h.quantity) * Number(h.price) > 0 && zakatRuleOf(h, ctx.zakat).factor > 0)
   if (noHaul.length) add({ key: 'data:haul', priority: 4, tone: '', area: 'data', title: 'حدّد بداية الحول',
     detail: `${countAssets(noHaul.length)} · ليصلك تنبيه الزكاة في موعده`, amount: null, due: null, owner: true, dismissible: true,
     cta: { label: 'حدّد', route: 'income' } })
@@ -916,16 +1126,9 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
   }
 
   // 4 · info
-  if (doc) {
-    if (p.nextPhase && p.daysToNextPhase != null && p.daysToNextPhase <= 60) {
-      add({ key: `phase:${p.nextPhase.key}`, priority: 4, tone: '', area: 'info', title: `تبدأ مرحلة «${p.nextPhase.name}» ${inDays(p.daysToNextPhase)}`,
-        detail: 'تتغير الأوزان المستهدفة', amount: null, due: p.nextPhase.start, owner: false, dismissible: true, cta: null })
-    }
-    if (p.gapPct != null && p.gapPct < -10 && p.gap != null) {
-      const ref = p.nextMilestone ?? p.prevMilestone
-      add({ key: `milestone:${ym}`, priority: 4, tone: '', area: 'info', title: ref ? `متأخر عن محطة ${Y(ref.date)}` : 'متأخر عن مسار الخطة',
-        detail: `أقل من المسار المخطط بـ ${p0(-p.gapPct)}`, amount: -p.gap, due: null, owner: false, dismissible: true, cta: null })
-    }
+  if (doc && p.nextPhase && p.daysToNextPhase != null && p.daysToNextPhase <= 60) {
+    add({ key: `phase:${p.nextPhase.key}`, priority: 4, tone: '', area: 'info', title: `تبدأ مرحلة «${p.nextPhase.name}» ${inDays(p.daysToNextPhase)}`,
+      detail: 'تتغير الأوزان المستهدفة', amount: null, due: p.nextPhase.start, owner: false, dismissible: true, cta: null })
   }
 
   const dismissed = doc?.state.dismissed ?? {}
@@ -936,7 +1139,7 @@ export function planActions(ctx: PlanContext, opts: { includeDismissed?: boolean
 }
 
 // =====================================================================================
-// Rebalance & treasury helpers
+// Rebalance & income-account helpers
 // =====================================================================================
 export interface RebalancePick { holding: Holding; amount: number }
 export interface RebalanceLine {
@@ -980,9 +1183,9 @@ function mainHoldingsBySleeve(ctx: PlanContext) {
 }
 
 /**
- * Bring sleeves outside their band back to target. New money goes to under-target sleeves first (rules.new_money_first);
- * only sleeves above max are sold and only sleeves below min are bought up to target; the rest of the cash follows the gaps,
- * then the target weights. Amounts are rounded to 100 SAR.
+ * Bring sleeves outside their band back to target (effective targets). New money goes to under-target sleeves first
+ * (rules.new_money_first); only sleeves above max are sold and only sleeves below min are bought up to target; the rest of
+ * the cash follows the gaps, then the target weights. Amounts are rounded to 100 SAR.
  */
 export function rebalancePlan(ctx: PlanContext, newMoney = 0): RebalancePlan {
   const p = ctx.progress
@@ -1051,8 +1254,9 @@ export interface TreasurySaleLine { holding: Holding; sleeve: Sleeve | null; amo
 export interface TreasurySale { lines: TreasurySaleLine[]; total: number; /** what could not be found to sell */ short: number; /** growth and hedge were left out because of the drawdown rule */ held: boolean }
 
 /**
- * Holdings to sell for the income treasury: the sleeves furthest above target first, never the treasury or the emergency fund
- * (goal holdings) nor payroll/excluded accounts. While the drawdown is at or beyond no_sell_drawdown_pct, growth and hedge are left out.
+ * Holdings to sell for the income account: the sleeves furthest above target first, never the income account or the
+ * emergency fund (goal holdings) nor payroll/excluded accounts. While the drawdown is at or beyond no_sell_drawdown_pct,
+ * growth and hedge are left out.
  */
 export function treasurySalePlan(ctx: PlanContext, amount: number): TreasurySale {
   const want = Math.max(0, Number(amount) || 0)
@@ -1101,13 +1305,14 @@ export function treasurySalePlan(ctx: PlanContext, amount: number): TreasurySale
 // =====================================================================================
 export interface PlanFile { app: 'masar'; kind: 'plan'; version: 1; exported_at: string; plan: PlanDoc }
 
-/** Portable JSON text of a plan (internal sleeve ids and dismissed reminders removed). */
+/** Portable JSON text of a plan in the current shape (internal sleeve ids and dismissed reminders removed). */
 export function exportPlan(doc: PlanDoc, sleeves: Sleeve[] = []): string {
   const map = doc.sleeve_map ?? {}
+  const clean = normalizePlan(doc, doc.created)
   const plan: PlanDoc = {
-    ...doc,
-    sleeves: doc.sleeves.map((s) => ({ ...s, note: s.note ?? sleeves.find((x) => x.id === map[s.key])?.note ?? null })),
-    state: { ...doc.state, dismissed: {} },
+    ...clean,
+    sleeves: clean.sleeves.map((s) => ({ ...s, note: s.note ?? sleeves.find((x) => x.id === map[s.key])?.note ?? null })),
+    state: { ...clean.state, dismissed: {} },
   }
   delete plan.sleeve_map
   const file: PlanFile = { app: 'masar', kind: 'plan', version: 1, exported_at: new Date().toISOString(), plan }
@@ -1120,20 +1325,28 @@ export const planFileName = (doc: PlanDoc, date: ISODate = todayISO()) => {
   return `خطة-${name}-${date}${PLAN_FILE_EXT}`
 }
 
-export interface PlanCheck { errors: string[]; warnings: string[] }
+/** Result of validatePlan (the advisor's PlanCheck is a different, per-heuristic check). */
+export interface PlanValidation { errors: string[]; warnings: string[] }
 
 /** Checks a plan before saving or importing. Errors block; warnings only inform. */
-export function validatePlan(doc: PlanDoc): PlanCheck {
+export function validatePlan(doc: PlanDoc): PlanValidation {
   const errors: string[] = []
   const warnings: string[] = []
   const keys = new Set<string>()
   if (!doc.name.trim()) errors.push('اكتب اسم الخطة')
   if (!doc.sleeves.length) errors.push('أضف فئات الأصول (الشرائح)')
+  const known = new Set([...CATALOG.map((c) => c.id), ...(doc.custom_instruments ?? []).map((c) => c.id)])
+  const unknown: string[] = []
   for (const s of doc.sleeves) {
     if (keys.has(s.key)) errors.push(`المفتاح «${s.key}» مكرر`)
     keys.add(s.key)
     if (!s.name.trim()) errors.push(`اكتب اسم الشريحة «${s.key}»`)
+    if (s.start_at != null && !(s.start_at >= 0)) errors.push(`«${s.name}»: حد البدء غير صحيح`)
+    if (s.priority != null && !(s.priority >= 1)) errors.push(`«${s.name}»: الأولوية تبدأ من 1`)
+    if (CATALOG.length) for (const id of s.instruments ?? []) if (!known.has(id)) unknown.push(id)
   }
+  if (CATALOG.length) for (const id of [...(doc.emergency?.instruments ?? []), ...(doc.income?.instruments ?? [])]) if (!known.has(id)) unknown.push(id)
+  if (unknown.length) warnings.push(`أدوات غير معروفة: ${[...new Set(unknown)].join('، ')}`)
   if (!doc.phases.length) errors.push('أضف مرحلة واحدة على الأقل')
   const starts = new Set<string>()
   for (const ph of doc.phases) {
@@ -1154,9 +1367,6 @@ export function validatePlan(doc: PlanDoc): PlanCheck {
   }
   const today = todayISO()
   if (doc.phases.length && !doc.phases.some((p) => p.start <= today)) warnings.push('لم تبدأ أي مرحلة بعد؛ تُطبَّق أوزان المرحلة الأولى حتى تبدأ')
-  if (doc.baseline && (!isISODate(doc.baseline.date) || !(doc.baseline.value >= 0))) errors.push('نقطة البداية غير صحيحة')
-  for (const m of doc.milestones) if (!isISODate(m.date) || !(m.value >= 0)) errors.push(`محطة غير صحيحة: ${m.date}`)
-  if (!doc.milestones.length) warnings.push('لا توجد محطات؛ لن تظهر المقارنة بالمسار المخطط')
   const ckeys = new Set<string>()
   for (const c of doc.contributions) {
     if (ckeys.has(c.key)) errors.push(`مفتاح الإيداع «${c.key}» مكرر`)
@@ -1171,23 +1381,30 @@ export function validatePlan(doc: PlanDoc): PlanCheck {
     if (c.until && c.date && c.until < c.date) errors.push(`«${c.name}»: تاريخ الانتهاء قبل البداية`)
   }
   if (doc.emergency) {
-    if (!(doc.emergency.months >= 0) || !(doc.emergency.monthly_expense >= 0)) errors.push('أرقام صندوق الطوارئ غير صحيحة')
-    else if (doc.emergency.months > 0 && doc.emergency.monthly_expense === 0) warnings.push('صندوق الطوارئ: حدّد مصروفك الشهري')
+    const em = doc.emergency
+    if (!(em.months >= 0) || !(em.monthly_expense >= 0)) errors.push('أرقام صندوق الطوارئ غير صحيحة')
+    else if (em.months > 0 && em.monthly_expense === 0) warnings.push('صندوق الطوارئ: حدّد مصروفك الشهري')
+    if (em.liquid_months != null && !(em.liquid_months >= 0 && em.liquid_months <= Math.max(em.months, 0))) errors.push('أشهر السيولة الفورية أكثر من أشهر صندوق الطوارئ')
   }
   const inc = doc.income
   if (inc) {
     if (inc.method === 'percent' && !(inc.annual_pct > 0 && inc.annual_pct <= 20)) errors.push('نسبة السحب السنوية يجب أن تكون بين 0 و20%')
     if (inc.method === 'fixed' && !(Number(inc.fixed_monthly) > 0)) errors.push('اكتب الدخل الشهري الثابت')
     if (!(inc.band_pct >= 0 && inc.band_pct <= 100)) errors.push('سقف تغيّر الدخل غير صحيح')
-    if (!(inc.treasury_months >= 0 && inc.treasury_months <= 120)) errors.push('أشهر خزانة الدخل غير صحيحة')
+    if (!(inc.treasury_months >= 0 && inc.treasury_months <= 120)) errors.push('أشهر حساب الدخل غير صحيحة')
     if (!(inc.transfer_day >= 1 && inc.transfer_day <= 28)) errors.push('يوم التحويل يجب أن يكون بين 1 و28')
     if (!(inc.no_sell_drawdown_pct >= 0 && inc.no_sell_drawdown_pct <= 100)) errors.push('نسبة إيقاف البيع غير صحيحة')
-    if (!inc.start) warnings.push('خزانة الدخل: حدّد تاريخ بدء الدخل')
-    if (inc.start && inc.build_from && inc.build_from > inc.start) warnings.push('بدء تعبئة الخزانة بعد بدء الدخل')
+    if (!inc.start) warnings.push('حساب الدخل: حدّد تاريخ بدء الدخل')
+    if (inc.start && inc.build_from && inc.build_from > inc.start) warnings.push('بدء تعبئة حساب الدخل بعد بدء الدخل')
   }
-  if (!(doc.rules.review_month >= 1 && doc.rules.review_month <= 12)) errors.push('شهر المراجعة بين 1 و12')
-  if (!(doc.rules.crash_pct >= 0 && doc.rules.crash_pct <= 100)) errors.push('نسبة الهبوط الكبير غير صحيحة')
-  for (const k of doc.rules.crash_sleeves) if (!keys.has(k)) errors.push(`قاعدة الهبوط: شريحة غير موجودة «${k}»`)
+  const rl = doc.rules
+  if (!(rl.review_month >= 1 && rl.review_month <= 12)) errors.push('شهر المراجعة بين 1 و12')
+  if (!(rl.crash_pct >= 0 && rl.crash_pct <= 100)) errors.push('نسبة الهبوط الكبير غير صحيحة')
+  for (const k of rl.crash_sleeves) if (!keys.has(k)) errors.push(`قاعدة الهبوط: شريحة غير موجودة «${k}»`)
+  if (!(rl.min_ticket >= 0)) errors.push('أصغر مبلغ شراء غير صحيح')
+  if (!(rl.max_lines >= 1 && rl.max_lines <= 10)) errors.push('عدد الطبقات في الإيداع الواحد بين 1 و10')
+  if (!(rl.min_position >= 0)) errors.push('أصغر مركز غير صحيح')
+  if (!(rl.inflation_pct >= 0 && rl.inflation_pct <= 30)) errors.push('نسبة التضخم غير صحيحة')
   const skeys = new Set<string>()
   for (const s of doc.steps) {
     if (skeys.has(s.key)) errors.push(`مفتاح الخطوة «${s.key}» مكرر`)
@@ -1199,7 +1416,10 @@ export function validatePlan(doc: PlanDoc): PlanCheck {
 
 export interface ParsedPlan { ok: boolean; doc: PlanDoc | null; errors: string[]; warnings: string[] }
 
-/** Reads an exported plan file (or a bare plan document), checks it, and returns the plan without device-specific data. */
+/**
+ * Reads an exported plan file (or a bare plan document), checks it, and returns the plan without device-specific data.
+ * Files from earlier versions are accepted: milestones and baseline are dropped silently.
+ */
 export function parsePlanFile(text: string): ParsedPlan {
   let raw: unknown
   try { raw = JSON.parse(String(text ?? '').replace(/^﻿/, '')) } catch { return { ok: false, doc: null, errors: ['الملف ليس بصيغة صحيحة'], warnings: [] } }
@@ -1219,7 +1439,6 @@ export function parsePlanFile(text: string): ParsedPlan {
   const errors: string[] = []
   for (const s of arr<any>(pr.sleeves)) if (s && s.layer != null && !isLayer(s.layer)) errors.push(`طبقة غير معروفة «${s.layer}» في «${s.name ?? s.key}»`)
   for (const ph of arr<any>(pr.phases)) if (ph && !isISODate(ph.start)) errors.push(`تاريخ بداية مرحلة «${ph.name ?? ''}» غير صحيح`)
-  for (const m of arr<any>(pr.milestones)) if (m && (!isISODate(m.date) || !Number.isFinite(Number(m.value)))) errors.push('محطة بتاريخ أو قيمة غير صحيحة')
   for (const c of arr<any>(pr.contributions)) {
     for (const f of ['date', 'until']) if (c && c[f] != null && !isISODate(c[f])) errors.push(`«${c.name ?? c.key}»: تاريخ غير صحيح`)
     if (c && !['monthly', 'yearly', 'once'].includes(c.kind)) errors.push(`«${c.name ?? c.key}»: نوع الإيداع غير معروف`)
@@ -1232,10 +1451,6 @@ export function parsePlanFile(text: string): ParsedPlan {
   const all = [...new Set([...errors, ...check.errors])]
   return { ok: all.length === 0, doc, errors: all, warnings: [...warnings, ...check.warnings] }
 }
-
-/** Sets the plan's starting point to the current plan value when it has none. */
-export const withBaseline = (doc: PlanDoc, value: number, today: ISODate = todayISO()): PlanDoc =>
-  doc.baseline || !(value > 0) ? doc : { ...doc, baseline: { date: today, value: Math.round(value) } }
 
 /** Keeps dismissed reminders for about a year. */
 export function pruneDismissed(d: Record<string, ISODate>, today: ISODate = todayISO()): Record<string, ISODate> {

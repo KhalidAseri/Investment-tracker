@@ -1,8 +1,12 @@
 // Development-only in-memory stand-in for Supabase, used with ?demo to review the interface.
 // Never included in production builds (guarded by import.meta.env.DEV in supabase.ts).
 import { PLAN_TEMPLATES } from './planTemplates'
-import type { PlanDoc } from './plan'
+import { DEFAULT_RULES, type PlanDoc } from './plan'
+import { catalogForClass, type AssetClass, type CatalogItem } from './catalog'
+import { MOCK_MARKET_TABLES, mockMarketInvoke } from './mockMarket'
 type Row = Record<string, any>
+/** the market agent's demo tables (market_series, market_facts, instrument_profiles), copied per client */
+const marketTables = (): Record<string, Row[]> => JSON.parse(JSON.stringify(MOCK_MARKET_TABLES))
 const uid = 'demo-user'
 const id = () => Math.random().toString(36).slice(2, 10)
 const iso = (d: Date) => d.toISOString().slice(0, 10)
@@ -28,22 +32,27 @@ function fixture() {
     a('صندوق الطوارئ', 'bank', { exclude_from_portfolio: true, note: 'خارج المحفظة' }, 4),
   ]
   const old = new Date(Date.now() - 50 * 86400000).toISOString()
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString()
   const h = (name: string, acc: number, sl: number | null, qty: number, price: number, extra: Row = {}, sort = 0) => ({
     id: id(), user_id: uid, account_id: accounts[acc].id, sleeve_id: sl == null ? null : sleeves[sl].id, name, symbol: null, price_source: 'manual',
     currency: 'SAR', quantity: qty, price, price_updated_at: new Date().toISOString(), ibkr_conid: null, cost_basis: null, note: null, archived: false, zakatable: true,
     goal_id: null, goal_bucket: null, zakat_start: null, payout_freq: 'none', payout_next: null, payout_basis: 'rate', payout_rate: null, payout_per_unit: null, payout_nominal: null, maturity_date: null, sort, ...extra,
   })
   const holdings = [
-    h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISWD.L', price_source: 'yahoo', currency: 'USD' }, 1),
+    h('iShares MSCI World Islamic', 0, 0, 0, 0, { symbol: 'ISDW.L', price_source: 'yahoo', currency: 'USD' }, 1),
     h('صندوق الراجحي للتوزيعات الشهرية', 1, 5, 9200, 9.665, { price_updated_at: old, price_source: 'nav', symbol: '5885', cost_basis: 88000, fee_pct: 1, purification_pct: 1.2, payout_freq: 'monthly', payout_rate: 7.5, payout_next: iso(new Date(Date.now() + 12 * 86400000)), zakat_start: '2025-03-01' }, 2),
     h('صندوق الراجحي للتوزيعات الشهرية 2', 1, 5, 2300, 9.93, { payout_freq: 'monthly', payout_next: iso(new Date(Date.now() + 14 * 86400000)) }, 3),
     h('صكوك الحكومة 2029', 1, 3, 20, 985, { cost_basis: 19900, payout_freq: 'semiannual', payout_rate: 5.2, payout_nominal: 1000, payout_next: iso(new Date(Date.now() + 40 * 86400000)), maturity_date: '2029-06-30', zakat_start: '2026-01-15' }, 10),
     h('صندوق البلاد للذهب', 1, 7, 0, 21.3, { symbol: '9405.SR', price_source: 'yahoo' }, 4),
-    h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, { fee_pct: 0.75 }, 5),
+    // updated by hand every 3 months (last update 50 days ago: not due yet); zakat on its zakatable share
+    h('برنامج الادخار: محفظة النمو', 2, 1, 1, 24850, { fee_pct: 0.75, update_every_days: 91, price_updated_at: daysAgo(50), zakat_method: 'zakatable_assets', zakat_ratio: 30 }, 5),
     h('برنامج الادخار: الدخل المتحفظ', 2, 3, 1, 23900, {}, 6),
-    h('صندوق مرابحة', 1, 6, 1, 15000, {}, 7),
+    // updated by hand every week (last update 10 days ago: due)
+    h('صندوق مرابحة', 1, 6, 1, 15000, { update_every_days: 7, price_updated_at: daysAgo(10) }, 7),
     h('حساب الطوارئ', 3, null, 1, 80000, {}, 8),
-    h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false, cost_basis: 12600, purification_pct: 0.8 }, 9),
+    h('مصرف الراجحي', 1, 2, 120, 98.4, { symbol: '1120.SR', price_source: 'yahoo', zakatable: false, cost_basis: 12600, purification_pct: 0.8, zakat_method: 'paid_by_entity' }, 9),
+    // matures in three weeks: «يستحق … أعد استثمار المبلغ حسب خطتك»
+    h('صكوك حكومية قصيرة', 1, 3, 10, 998, { cost_basis: 9950, payout_freq: 'semiannual', payout_rate: 4.8, payout_nominal: 1000, maturity_date: iso(new Date(Date.now() + 21 * 86400000)), zakat_start: '2026-02-10', zakat_method: 'market' }, 11),
   ]
   const today = new Date()
   // a believable 4-month history that ends near today's value, with a 10,000 deposit 20 days ago
@@ -100,14 +109,14 @@ function fixture() {
   const goals = [
     { id: goalId, user_id: uid, kind: 'goal', name: 'الدفعة الأولى للبيت', target_amount: 300000, target_date: iso(new Date(Date.now() + 3.2 * 365 * 86400000)), expected_return: 5,
       allocation: [{ key: 'cash', name: 'سيولة ومرابحة', weight: 60 }, { key: 'sukuk', name: 'صكوك', weight: 40 }], priority: 1, note: null, archived: false, sort: 1 },
-    // special kinds: the emergency fund (below its target) and the income treasury
+    // special kinds: the emergency fund (below its target) and the income account
     { id: emergencyId, user_id: uid, kind: 'emergency', name: 'صندوق الطوارئ', target_amount: 120000, target_date: null, expected_return: 0, allocation: cashAlloc, priority: 1, note: null, archived: false, sort: -2 },
-    { id: treasuryId, user_id: uid, kind: 'income', name: 'خزانة الدخل', target_amount: 0, target_date: null, expected_return: 0, allocation: cashAlloc, priority: 1, note: null, archived: false, sort: -1 },
+    { id: treasuryId, user_id: uid, kind: 'income', name: 'حساب الدخل', target_amount: 0, target_date: null, expected_return: 0, allocation: cashAlloc, priority: 1, note: null, archived: false, sort: -1 },
   ]
   holdings.push(h('مرابحة الدفعة الأولى', 1, null, 1, 42000, { goal_id: goalId, goal_bucket: 'cash' }, 20))
   const emergencyHolding = holdings.find((x) => x.name === 'حساب الطوارئ')!
   Object.assign(emergencyHolding, { goal_id: emergencyId, goal_bucket: 'cash', zakat_start: '2025-09-01' })
-  holdings.push(h('نقد خزانة الدخل', 1, null, 1, 6000, { goal_id: treasuryId, goal_bucket: 'cash', cost_basis: 6000 }, 21))
+  holdings.push(h('نقد حساب الدخل', 1, null, 1, 6000, { goal_id: treasuryId, goal_bucket: 'cash', cost_basis: 6000 }, 21))
   const plans = [
     { id: id(), user_id: uid, name: 'خطة الاستقلال المالي', is_active: true, doc: demoPlan(today, sleeves, snapshots[0]), created_at: snapshots[0].snap_date + 'T08:00:00Z', updated_at: new Date().toISOString() },
     { id: id(), user_id: uid, name: 'خطة دخل (مسودة)', is_active: false, doc: { ...PLAN_TEMPLATES[1].build(iso(today)), name: 'خطة دخل (مسودة)' }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -123,16 +132,18 @@ function fixture() {
   const other_assets = [{ id: id(), user_id: uid, name: 'البيت', kind: 'real_estate', value: 1250000, value_date: iso(new Date(Date.now() - 200 * 86400000)), appreciation_pct: 2, note: null, sort: 1 },
     { id: id(), user_id: uid, name: 'السيارة', kind: 'vehicle', value: 95000, value_date: iso(new Date(Date.now() - 300 * 86400000)), appreciation_pct: -12, note: null, sort: 2 }]
   if (typeof location !== 'undefined' && /onboard/.test(location.search)) {
-    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [], other_assets: [], plans: [] }
+    return { plan_settings: [], sleeves: [], accounts: [], holdings: [], snapshots: [], events: [], transactions: [], fx_rates, ibkr_connection: [] as Row[], watchlist: [], portfolio_viewers: [], income_streams: [], obligations: [], goals: [], other_assets: [], plans: [], ...marketTables() }
   }
-  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals, other_assets, plans }
+  return { plan_settings: [settings], sleeves, accounts, holdings, snapshots, events, transactions, fx_rates, ibkr_connection: [] as Row[], watchlist, portfolio_viewers, income_streams, obligations, goals, other_assets, plans, ...marketTables() }
 }
 
 /**
  * An active plan that exercises every part of the feature around the demo values: 3 phases with bands (the next one starts in
- * 45 days), milestones a little ahead of the portfolio, monthly/yearly/once contributions due now, an emergency fund below
- * target, an income treasury that is being built (?income-now: income already started), rules, steps done/overdue/upcoming
- * and one past review.
+ * 45 days), a build order with one sleeve waiting for its start threshold (REIT), instruments looked up in the catalog at
+ * runtime (none when the catalog is empty) and one instrument of the owner's own (the monthly-distribution fund he holds),
+ * monthly/yearly/once contributions due now, an emergency fund below target with two liquid months, an income account that is
+ * being built (?income-now: income already started), the designer's answers, rules, steps done/overdue/upcoming and one past
+ * review. No milestones: progress is the structure.
  */
 export function demoPlan(today: Date, sleeves: Row[], first: Row): PlanDoc {
   const day = (n: number) => iso(new Date(today.getTime() + n * 86400000))
@@ -140,26 +151,33 @@ export function demoPlan(today: Date, sleeves: Row[], first: Row): PlanDoc {
   const ym = (yy: number, mm: number, dd: number) => iso(new Date(Date.UTC(yy, mm - 1, dd, 12)))
   const incomeNow = typeof location !== 'undefined' && /income-now/.test(location.search)
   const keys = ['global', 'saudi', 'direct', 'sukuk', 'reit', 'dist', 'cash', 'gold']
+  const classes: AssetClass[] = ['equity_global', 'equity_sa', 'equity_direct', 'sukuk_sar', 'reit_sa', 'mixed_income', 'money_market', 'gold']
+  const priority = [1, 3, 8, 2, 6, 7, 5, 4]
+  const startAt: Array<number | null> = [null, null, null, null, 250000, null, null, null]
+  const own: CatalogItem = {
+    id: 'own-monthly-dist', name: 'صندوق الراجحي للتوزيعات الشهرية', name_en: null, class: 'mixed_income', layer: 'income', source: 'nav', symbol: null,
+    fund_id: '5885', currency: 'SAR', exchange: null, platforms: ['alrajhi'], ter: 1, distribution: 'dist', pay_freq: 'monthly', duration_years: null,
+    liquidity: 'daily', min_investment: null, shariah: 'هيئة شرعية للصندوق', countries: { SA: 100 }, sectors: null, as_of: null, source_url: null,
+    inception: null, zakat: { method: 'market', ratio: null, note: null }, note: 'أداة أضافها المالك',
+  }
+  /** catalog ids of a class (whatever the research data holds; none when the catalog is empty) */
+  const ids = (cls: AssetClass, n = 2) => catalogForClass(cls).slice(0, n).map((c) => c.id)
+  const instruments = (i: number) => (keys[i] === 'dist' ? [own.id] : keys[i] === 'direct' ? [] : ids(classes[i]))
   const band = (targets: number[], widths: number[]) => Object.fromEntries(keys.map((k, i) => [k, { target: targets[i], min: Math.max(0, targets[i] - widths[i]), max: targets[i] + widths[i] }]))
   const created = first.snap_date as string
   const phase3 = ym(y + 5, 1, 1)
   return {
     version: 1, name: 'خطة الاستقلال المالي', created,
-    baseline: { date: created, value: Number(first.total_sar) },
     goal: { monthly_income: 15000, target_capital: 4500000, target_date: ym(y + 12, 1, 1), note: 'دخل شهري 15 ألف ريال بقيمة اليوم' },
-    sleeves: sleeves.map((s, i) => ({ key: keys[i], name: s.name, layer: s.layer, accepts_new_money: !!s.accepts_new_money, note: s.note || null })),
+    sleeves: sleeves.map((s, i) => ({
+      key: keys[i], name: s.name, layer: s.layer, accepts_new_money: !!s.accepts_new_money, note: s.note || null,
+      class: classes[i], priority: priority[i], start_at: startAt[i], instruments: instruments(i),
+    })),
     sleeve_map: Object.fromEntries(sleeves.map((s, i) => [keys[i], s.id])),
     phases: [
       { key: 'build', name: 'البناء', start: created, note: 'الأموال الجديدة للفئات الناقصة', weights: band([45, 12, 8, 10, 5, 5, 5, 10], [5, 3, 8, 3, 3, 3, 2, 3]) },
       { key: 'shift', name: 'الانتقال', start: day(45), note: 'انتقال تدريجي نحو الدخل', weights: band([38, 11, 6, 18, 8, 5, 6, 8], [5, 3, 6, 3, 3, 3, 2, 3]) },
-      { key: 'income', name: 'الدخل', start: phase3, note: 'السيولة هي خزانة الدخل', weights: band([30, 9, 4, 24, 10, 6, 10, 7], [5, 3, 4, 4, 3, 3, 3, 2]) },
-    ],
-    milestones: [
-      { date: day(50), value: 320000, label: 'محطة الربع' },
-      { date: ym(y + 1, 12, 31), value: 450000, label: null },
-      { date: ym(y + 2, 12, 31), value: 650000, label: null },
-      { date: ym(y + 3, 12, 31), value: 900000, label: null },
-      { date: ym(y + 5, 12, 31), value: 1500000, label: 'بداية الدخل' },
+      { key: 'income', name: 'الدخل', start: phase3, note: 'حساب الدخل يغطي السحب الشهري', weights: band([30, 9, 4, 24, 10, 6, 10, 7], [5, 3, 4, 4, 3, 3, 3, 2]) },
     ],
     contributions: [
       { key: 'salary', name: 'الفائض الشهري من الراتب', kind: 'monthly', amount: 4000, day: Math.max(1, d - 2), month: null, date: created, until: null, split_months: null, growth_pct: 4, note: 'يرتفع مع العلاوة' },
@@ -167,10 +185,10 @@ export function demoPlan(today: Date, sleeves: Row[], first: Row): PlanDoc {
       { key: 'bonus', name: 'المكافأة السنوية', kind: 'yearly', amount: 60000, day: 1, month: m, date: null, until: null, split_months: 3, growth_pct: null, note: 'على ثلاث دفعات' },
       { key: 'advance', name: 'دفعة استثنائية', kind: 'once', amount: 100000, day: null, month: null, date: ym(y, m + 5, 15), until: null, split_months: 6, growth_pct: null, note: 'على ستة أشهر' },
     ],
-    emergency: { months: 6, monthly_expense: 20000 },
+    emergency: { months: 6, monthly_expense: 20000, instruments: [...ids('money_market', 2), ...ids('savings_sukuk', 1)], liquid_months: 2 },
     income: { start: incomeNow ? day(-60) : phase3, method: 'percent', annual_pct: 4, fixed_monthly: null, band_pct: 10, treasury_months: 24, transfer_day: incomeNow ? 1 : 27,
-      no_sell_drawdown_pct: 20, build_from: day(-30) },
-    rules: { review_month: m, crash_pct: 25, crash_sleeves: ['global'], new_money_first: true },
+      no_sell_drawdown_pct: 20, build_from: day(-30), instruments: [...ids('money_market', 1), ...ids('sukuk_sar', 1)] },
+    rules: { ...DEFAULT_RULES, review_month: m, crash_sleeves: ['global'] },
     steps: [
       { key: 'emergency', title: 'افصل صندوق الطوارئ عن المحفظة', detail: 'ستة أشهر من المصروف', due: day(-100), done_at: day(-98), recurring: 'none' },
       { key: 'account', title: 'افتح حساب الوساطة العالمي', detail: null, due: day(-80), done_at: day(-85), recurring: 'none' },
@@ -185,6 +203,8 @@ export function demoPlan(today: Date, sleeves: Row[], first: Row): PlanDoc {
       { year: y - 1, date: ym(y - 1, m, 22), value: 160000, zakat_paid: 3200, purification_paid: 150, rebalanced: true, income_annual: null, notes: 'أول مراجعة' },
     ],
     state: { income_year: null, income_annual: null, dismissed: {} },
+    profile: { drawdown: 35, income_year: y + 5, platforms: ['alrajhi', 'ibkr', 'mof'], direct_pct: 10, emergency_months: 6, source: 'manual' },
+    custom_instruments: [own],
   }
 }
 
@@ -258,6 +278,9 @@ export function createMockClient(): any {
     },
     functions: { invoke: async (_name: string, opts?: { body?: Row }) => {
       const mode = opts?.body?.mode
+      // market data modes ('series', 'profile', …) answered by the market agent's demo
+      const market = mockMarketInvoke(String(mode ?? ''), opts?.body ?? {})
+      if (market != null) return { data: market, error: null }
       if (mode === 'search') return { data: { results: [
         { symbol: '2222.SR', name: 'Saudi Arabian Oil Company', exchange: 'Saudi Stock Exchange', type: 'EQUITY' },
         { symbol: '9405.SR', name: 'Albilad Gold ETF', exchange: 'Saudi Stock Exchange', type: 'ETF' },

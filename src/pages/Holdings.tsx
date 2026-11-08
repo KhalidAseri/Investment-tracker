@@ -2,7 +2,11 @@
 // and the helper that records an asset added to or removed from the app as a transfer.
 import { useState } from 'react'
 import { useStore } from '../lib/store'
-import { ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
+import { ZAKAT_RATE, holdingValue, rateOf, zakatRuleOf } from '../lib/calc'
+import { ZAKAT_METHOD_LABEL, type ZakatMethod } from '../lib/catalog'
+import { usePlan } from '../lib/usePlan'
+import { UpdateModeField, autoSourceOf } from '../components/UpdateModeField'
+import { zakatMethodText } from '../components/ZakatMethodSheet'
 import { dateLong, dateShort, num0, num2, sar, signedPct, todayISO } from '../lib/format'
 import { FREQ_LABEL, PER_YEAR, hijriLabel, nextHaul, payoutPerPayment } from '../lib/income'
 import type { Holding, Region } from '../lib/types'
@@ -37,15 +41,16 @@ export async function recordTransfer(ctx: TransferCtx, x: Holding, sign: 1 | -1)
 
 export function HoldingSheet({ initial, onClose, onDeleted }: { initial: Partial<Holding>; onClose: () => void; onDeleted?: () => void }) {
   const { upsert, remove, fx, notify, accounts, sleeves, holdings, goals, refreshMarket, insertMany } = useStore()
+  const plan = usePlan()
   const [h, setH] = useState<Partial<Holding>>(initial)
   const [lumpSum, setLumpSum] = useState(initial.price_source === 'manual' && Number(initial.quantity) === 1 && Number(initial.price) > 50)
   const set = (patch: Partial<Holding>) => setH((x) => ({ ...x, ...patch }))
   const isIbkr = h.price_source === 'ibkr'
-  const [searching, setSearching] = useState(initial.price_source === 'yahoo' && !initial.symbol)
+  const [searching, setSearching] = useState(false)
   const [quoting, setQuoting] = useState(false)
   const pick = async (r: SymbolResult) => {
     const keepName = !!h.name?.trim()
-    set({ symbol: r.symbol, price_source: 'yahoo', ...(keepName ? {} : { name: r.name }), ...(h.sleeve_id || h.goal_id ? {} : { sleeve_id: guessSleeve(r, sleeves) }) })
+    set({ symbol: r.symbol, price_source: 'yahoo', update_every_days: null, ...(keepName ? {} : { name: r.name }), ...(h.sleeve_id || h.goal_id ? {} : { sleeve_id: guessSleeve(r, sleeves) }) })
     setLumpSum(false)
     setSearching(false)
     setQuoting(true)
@@ -70,6 +75,9 @@ export function HoldingSheet({ initial, onClose, onDeleted }: { initial: Partial
       cost_basis: h.cost_basis != null && Number(h.cost_basis) > 0 ? Number(h.cost_basis) : null, fee_pct: h.fee_pct || null,
       purification_pct: h.purification_pct || null, region: h.region ?? null,
       goal_id: h.goal_id || null, goal_bucket: h.goal_id ? h.goal_bucket ?? null : null, ...(h.goal_id ? { sleeve_id: null } : {}),
+      update_every_days: h.price_source === 'manual' || h.price_source === 'nav' ? h.update_every_days ?? null : null,
+      zakat_method: h.zakat_method ?? null, zakat_ratio: h.zakat_method === 'zakatable_assets' ? h.zakat_ratio ?? null : null,
+      ...(h.zakat_method ? { zakatable: h.zakat_method !== 'exempt' } : {}),
       ...(priceChanged && (h.price_source === 'manual' || h.price_source === 'nav') ? { price_updated_at: new Date().toISOString() } : {}),
       ...(h.price_source === 'yahoo' && h.price_updated_at && h.price_updated_at !== initial.price_updated_at ? { price_updated_at: h.price_updated_at } : {}),
     }
@@ -98,9 +106,10 @@ export function HoldingSheet({ initial, onClose, onDeleted }: { initial: Partial
   const paySum = freq !== 'none'
     ? [FREQ_LABEL[freq], h.payout_basis !== 'per_unit' && Number(h.payout_rate) > 0 ? isolate(`${num2(Number(h.payout_rate))}%`) : null].filter(Boolean).join(' · ')
     : h.maturity_date ? `يستحق ${dateLong(h.maturity_date)}` : 'لا يوزّع'
-  const zak = h.zakatable !== false
+  const zrule = zakatRuleOf({ ...(h as Holding), zakatable: h.zakatable !== false } as Holding, plan.ctx?.zakat ?? {})
+  const zak = zrule.factor > 0
   const haul = zak && h.zakat_start ? nextHaul(h.zakat_start, todayISO()) : null
-  const zakSum = !zak ? 'لا زكاة عليه' : haul ? `${sar((value * ZAKAT_RATE) / 100)} · ${dateShort(haul)}` : 'حدّد بداية الحول'
+  const zakSum = zrule.method === 'exempt' ? 'لا زكاة عليه' : !zak ? zakatMethodText(zrule.method, zrule.ratio) : haul ? `${sar((value * zrule.factor * ZAKAT_RATE) / 100)} · ${dateShort(haul)}` : 'حدّد بداية الحول'
   const liveGoals = goals.filter((g) => !g.archived || g.id === h.goal_id)
 
   return (
@@ -129,32 +138,30 @@ export function HoldingSheet({ initial, onClose, onDeleted }: { initial: Partial
         </div>
 
         {isIbkr ? (
-          <p className="small muted">يتحدث من تقرير IBKR اليومي؛ يمكنك تعديل الاسم والطبقة فقط.</p>
+          <>
+            <UpdateModeField value={{ price_source: 'ibkr', symbol: h.symbol ?? null, update_every_days: null }} onChange={() => undefined} />
+            <p className="small muted">يمكنك تعديل الاسم والطبقة والزكاة فقط.</p>
+          </>
         ) : <>
-          <div className="field hs-seg">
-            <span>تحديث السعر</span>
-            <Segmented label="تحديث السعر" value={h.price_source ?? 'manual'} onChange={(v) => {
-              set({ price_source: v })
-              if (v !== 'manual') setLumpSum(false)
-              setSearching(v === 'yahoo' && !h.symbol)
-            }} options={[{ value: 'manual', label: 'يدوي' }, { value: 'yahoo', label: 'من السوق' }, { value: 'nav', label: 'من مباشر' }]} />
-          </div>
-          {h.price_source === 'yahoo' && (searching ? (
+          {searching ? (
             <div className="stack" style={{ gap: 6 }}>
               <SymbolSearch onPick={pick} hint="للأسهم والصناديق المتداولة محلياً وعالمياً" />
-              {h.symbol && <button type="button" className="btn quiet small hs-inline-btn" onClick={() => setSearching(false)}>إلغاء البحث</button>}
+              <button type="button" className="btn quiet small hs-inline-btn" onClick={() => setSearching(false)}>إلغاء البحث</button>
             </div>
           ) : (
             <div className="stack" style={{ gap: 4 }}>
-              <TextField label="رمز التداول" value={h.symbol ?? ''} onChange={(v) => set({ symbol: v.toUpperCase() })} ltr
-                hint={quoting ? 'نجلب السعر…' : 'يتحدث السعر يومياً من السوق'} />
-              <button type="button" className="btn quiet small hs-inline-btn" onClick={() => setSearching(true)}>ابحث عن رمز آخر</button>
+              <TextField label="رمز التداول أو رقم الصندوق" value={h.symbol ?? ''} ltr placeholder="ISWD.L · 1120.SR · 5885"
+                onChange={(v) => {
+                  const sym = /^\s*\d+\s*$/.test(v) ? v.replace(/[^0-9]/g, '') : v.toUpperCase()
+                  const auto = h.price_source === 'yahoo' || h.price_source === 'nav'
+                  set(auto ? { symbol: sym, ...(autoSourceOf(sym) ? { price_source: autoSourceOf(sym)! } : { price_source: 'manual', update_every_days: h.update_every_days ?? null }) } : { symbol: sym })
+                }}
+                hint={quoting ? 'نجلب السعر…' : 'اختياري: رقم الصندوق في مباشر، أو رمز التداول'} />
+              <button type="button" className="btn quiet small hs-inline-btn" onClick={() => setSearching(true)}>ابحث عن رمز</button>
             </div>
-          ))}
-          {h.price_source === 'nav' && (
-            <TextField label="رقم الصندوق في مباشر" value={h.symbol ?? ''} onChange={(v) => set({ symbol: v.replace(/[^0-9]/g, '') })} ltr placeholder="5885"
-              hint="5885 لصندوق الراجحي للتوزيعات الشهرية، و6046 للصندوق 2" />
           )}
+          <UpdateModeField value={{ price_source: h.price_source ?? 'manual', symbol: h.symbol ?? null, update_every_days: h.update_every_days ?? null }}
+            onChange={(patch) => { set(patch); if (patch.price_source && patch.price_source !== 'manual') setLumpSum(false) }} />
           {h.price_source === 'manual' && (
             <Switch label="أعرف القيمة الإجمالية فقط" hint="لبرامج الادخار والحسابات التي لا تعرض الوحدات"
               checked={lumpSum} onChange={(v) => { setLumpSum(v); if (v) set({ quantity: 1, price: Number(h.quantity ?? 0) * Number(h.price ?? 0) || Number(h.price ?? 0) }) }} />
@@ -189,8 +196,7 @@ export function HoldingSheet({ initial, onClose, onDeleted }: { initial: Partial
         <details className="more">
           <summary>الزكاة<span className="sum-sub" style={zak && !h.zakat_start ? { color: 'var(--warn)' } : undefined}>{zakSum}</span></summary>
           <div className="more-body">
-            <Switch label="عليه زكاة" hint={zak ? `زكاته التقديرية ${sar((value * ZAKAT_RATE) / 100)}` : 'لا يدخل في حساب الزكاة'}
-              checked={zak} onChange={(v) => set({ zakatable: v })} />
+            <ZakatFields h={h} set={set} value={value} />
             {zak && <ZakatStart h={h} set={set} />}
           </div>
         </details>
@@ -216,6 +222,25 @@ function CostFields({ h, set, value }: { h: Partial<Holding>; set: (p: Partial<H
     </div>
     <SelectField label="السوق الذي يستثمر فيه" value={h.region ?? ''} onChange={(v) => set({ region: (v || null) as Region | null })}
       options={[{ value: '', label: `تلقائي: ${REGION_LABEL[guessed]}` }, ...(Object.keys(REGION_LABEL) as Region[]).map((r) => ({ value: r, label: REGION_LABEL[r] }))]} />
+  </>
+}
+
+/** The zakat method of this holding: the default of its instrument or class, or the owner's choice. */
+function ZakatFields({ h, set, value }: { h: Partial<Holding>; set: (p: Partial<Holding>) => void; value: number }) {
+  const { ctx } = usePlan()
+  const opts = ctx?.zakat ?? {}
+  const base = zakatRuleOf({ ...(h as Holding), zakat_method: null, zakat_ratio: null, zakatable: true } as Holding, opts)
+  const own: ZakatMethod | '' = h.zakat_method ?? (h.zakatable === false ? 'exempt' : '')
+  const rule = zakatRuleOf({ ...(h as Holding), zakatable: h.zakatable !== false } as Holding, opts)
+  const methods = Object.keys(ZAKAT_METHOD_LABEL) as ZakatMethod[]
+  return <>
+    <SelectField label="طريقة الحساب" value={own} onChange={(v) => set(v ? { zakat_method: v as ZakatMethod, zakatable: v !== 'exempt', zakat_ratio: v === 'zakatable_assets' ? h.zakat_ratio ?? base.ratio ?? 25 : null } : { zakat_method: null, zakat_ratio: null, zakatable: true })}
+      options={[{ value: '', label: `الافتراضي: ${zakatMethodText(base.method, base.ratio)}` }, ...methods.map((m) => ({ value: m, label: ZAKAT_METHOD_LABEL[m] }))]} />
+    {own === 'zakatable_assets' && (
+      <NumberField label="الجزء الزكوي من القيمة" value={h.zakat_ratio ?? null} suffix="%" decimals={1} min={0} max={100} onChange={(v) => set({ zakat_ratio: v })}
+        hint="من إفصاح الصندوق؛ ويُقدَّر بالربع (25%) عند تعذّر حسابه." />
+    )}
+    <p className="small muted">{rule.factor > 0 ? <>زكاته التقديرية <b className="figure">{sar((value * rule.factor * ZAKAT_RATE) / 100)}</b> في السنة.</> : 'لا زكاة على أصله بهذه الطريقة.'} الإرشاد والمصادر في صفحة الأصل.</p>
   </>
 }
 

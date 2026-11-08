@@ -1,6 +1,10 @@
 /* Quick update of manual values */
 .qu { display: flex; flex-direction: column; gap: 14px; }
 .qu-intro { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+.qu-group { display: flex; flex-direction: column; gap: 10px; }
+.qu-gh { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; margin: 4px 2px 0; }
+.qu-gh span { font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 999px; background: var(--sunken); color: var(--ink-2); font-family: var(--font-display); }
+.qu-gh.due span { background: var(--warn-soft); color: var(--warn); }
 .qu-list { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 960px) { .qu-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
 

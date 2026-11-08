@@ -6,6 +6,10 @@ import { payoutSchedule, virtualOccurrences, zakatSchedule } from './income'
 import { goalStatus, profileOccurrences } from './profile'
 import type { Layer, Sleeve } from './types'
 
+// ---------- update frequency of hand-entered values (lib/staleness.ts) ----------
+export { UPDATE_EVERY_OPTIONS, DEFAULT_UPDATE_DAYS, NAV_STALE_DAYS, updateEveryDays, overdueDays, isStaleHolding, nextUpdateDue, updateEveryLabel } from './staleness'
+import { isStaleHolding, overdueDays } from './staleness'
+
 export const LAYER_VAR: Record<Layer, string> = {
   growth: 'var(--growth)', income: 'var(--income)', safety: 'var(--safety)', hedge: 'var(--hedge)',
 }
@@ -43,8 +47,10 @@ export function useDerived() {
     const change = before && Number(before.total_sar) > 0 ? totals.total - Number(before.total_sar) : null
     const excluded = new Set(accounts.filter((a) => a.exclude_from_portfolio).map((a) => a.id))
     const unassigned = holdings.filter((h) => !h.archived && !h.sleeve_id && Number(h.quantity) !== 0 && !(h.account_id && excluded.has(h.account_id)))
-    const staleManual = holdings.filter((h) => !h.archived && (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0 &&
-      (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000))
+    // due for an update by each holding's own frequency (see isStaleHolding), most overdue first
+    const nowMs = Date.now()
+    const staleManual = holdings.filter((h) => !h.archived && Number(h.quantity) > 0 && isStaleHolding(h, nowMs))
+      .sort((a, b) => (overdueDays(b, nowMs) ?? 0) - (overdueDays(a, nowMs) ?? 0))
     const targetSum = { now: sleeves.reduce((a, s) => a + Number(s.target_now), 0) }
     return {
       totals, drift, outOfBand, zakat, soon, change, unassigned, staleManual, targetSum, payouts, zakatDue, virtual, goalStats,

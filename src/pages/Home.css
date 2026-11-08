@@ -22,3 +22,19 @@
 .attn-more .chev { width: 16px; height: 16px; }
 .goal-mini .gm-sub { display: block; font-size: 12.5px; color: var(--muted); }
 .goal-mini .gm-sub .money { display: inline; font-size: inherit; color: inherit; }
+
+/* «هيكل محفظتك» (replaces the plan card) */
+.struct-card .card-head h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.struct-card .sc-phase { font-size: 11.5px; padding: 1px 8px; font-weight: 500; }
+.struct-card .sc-top { display: flex; align-items: baseline; gap: 10px; }
+.struct-card .sc-bar { margin: 8px 0 12px; height: 7px; }
+.struct-card .sc-next { display: flex; align-items: center; gap: 12px; padding: 12px; margin: 0 -4px; border-radius: var(--radius-s); background: var(--surface-2); border: 1px solid var(--line); color: inherit; text-decoration: none; }
+.struct-card .sc-n { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+.struct-card .sc-next .grow { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.struct-card .sc-next small { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+.struct-card .sc-next b { font-weight: 600; font-size: 14.5px; }
+.struct-card .sc-next .grow > span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.struct-card .sc-next .money { color: var(--ink-2); font-weight: 600; }
+.struct-card .sc-done { display: flex; align-items: center; gap: 6px; }
+.struct-card .sc-cta { margin-top: 12px; }
+.struct-card:active { transform: none; }

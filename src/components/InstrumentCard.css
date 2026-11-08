@@ -1,0 +1,29 @@
+/* Instrument card (InstrumentCard.tsx): the instrument to buy, with cost, yield, tenor and units */
+.ic { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--surface-2); border: 1px solid var(--line); min-width: 0; }
+.ic.compact { gap: 8px; padding: 10px 12px; }
+.ic-empty { background: var(--sunken); border-style: dashed; }
+.ic-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.ic-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ic-name { font-weight: 600; font-size: 14.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ic-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12.5px; color: var(--muted); }
+.ic-sub > * + *::before { content: '·'; margin-inline-end: 8px; color: var(--ink-3); }
+.ic-tk { font-family: var(--font-display); font-weight: 600; color: var(--ink-2); letter-spacing: 0.2px; }
+.ic-own { flex: none; font-size: 11.5px; padding: 2px 8px; }
+.ic-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ic-facts > span { font-size: 12px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.ic-facts b { font-family: var(--font-display); font-weight: 600; }
+.ic-facts .money { font-weight: 600; }
+.ic-units { font-size: 13px; color: var(--ink-2); }
+.ic-units b { font-weight: 600; }
+.ic-dur { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.ic-tenor { background: color-mix(in srgb, var(--income) 13%, transparent); color: var(--income); font-weight: 600; font-size: 12px; white-space: normal; }
+.ic-dur small { font-size: 12px; color: var(--muted); line-height: 1.55; }
+.ic-why { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.ic-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ic-actions .btn { flex: 1 1 120px; }
+
+/* numbered badges on a coloured fill: dark text in dark mode (the layer colours are light there) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) :is(.ph-now-n, .rm-item.next .rm-n, .rm-item.done .rm-n, .sc-n, .dp-n, .dz-n, .pd-ord, .pe-ord) { color: #0a100e; }
+}
+:root[data-theme='dark'] :is(.ph-now-n, .rm-item.next .rm-n, .rm-item.done .rm-n, .sc-n, .dp-n, .dz-n, .pd-ord, .pe-ord) { color: #0a100e; }

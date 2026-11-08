@@ -41,24 +41,6 @@
 .plan-page .ph-mini .kv:first-of-type { padding-top: 2px; }
 .plan-page .banner { text-decoration: none; color: var(--ink); }
 
-/* ---------- milestone chart ---------- */
-.plan-page .ph-chart .segmented { margin-bottom: 12px; }
-.plan-page .ph-chart .segmented button { font-size: 13px; padding: 6px 12px; min-height: 32px; }
-.plan-page .pc { position: relative; }
-.plan-page .pc-read { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; min-height: 22px; }
-.plan-page .pc-date { color: var(--ink); font-weight: 600; font-size: 13px; margin-inline-end: auto; }
-.plan-page .pc-key { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-.plan-page .pc-key .money, .plan-page .pc-key b { color: var(--ink); font-weight: 600; }
-.plan-page .pc-dash, .plan-page .pc-solid { display: inline-block; width: 16px; height: 0; align-self: center; }
-.plan-page .pc-dash { border-top: 2px dashed var(--ink-2); opacity: 0.75; }
-.plan-page .pc-solid { border-top: 2.5px solid var(--accent); }
-.plan-page .pc-box { position: relative; touch-action: pan-y; }
-.plan-page .pc-svg { display: block; width: 100%; height: auto; cursor: crosshair; }
-.plan-page .pc-y { position: absolute; inset: 0; pointer-events: none; }
-.plan-page .pc-y span { position: absolute; right: 0; transform: translateY(-50%); font-size: 10.5px; line-height: 1.2; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; font-family: var(--font-ui); }
-.plan-page .pc-today { position: absolute; top: -2px; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); background: var(--surface); padding: 0 4px; border-radius: 4px; pointer-events: none; }
-.plan-page .pc-x { position: relative; height: 18px; margin-top: 4px; }
-.plan-page .pc-x span { position: absolute; top: 0; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
 .plan-page .ph-cta { margin-top: 12px; }
 
 /* ---------- band track ---------- */
@@ -269,10 +251,64 @@
 .plan-page .pe-foot-issues .pe-errors { max-height: 120px; overflow-y: auto; }
 .plan-page .pe-foot-issues:empty { display: none; }
 
-/* progress on phones: reserves before the long weight list */
+/* structure on phones: the next priority and the roadmap, then the checks and reserves, then the rest */
 @media (max-width: 959px) {
-  .plan-page .ph-cols.prog .ph-col { display: contents; }
-  .plan-page .prog .ph-hero { order: 1; } .plan-page .prog .ph-chart { order: 2; } .plan-page .prog .ph-reserve { order: 3; }
-  .plan-page .prog .ph-treasury { order: 4; } .plan-page .prog .ph-contrib { order: 5; } .plan-page .prog .ph-bands { order: 6; }
-  .plan-page .prog .ph-steps { order: 7; } .plan-page .prog .ph-reviews { order: 8; } .plan-page .prog .ph-link { order: 9; }
+  .plan-page .ph-cols.struct .ph-col { display: contents; }
+  .plan-page .struct .ph-hero { order: 1; } .plan-page .struct .ph-now { order: 2; } .plan-page .struct .ph-road { order: 3; }
+  .plan-page .struct .ph-checks { order: 4; } .plan-page .struct .ph-reserve { order: 5; } .plan-page .struct .ph-treasury { order: 6; }
+  .plan-page .struct .ph-bands { order: 7; } .plan-page .struct .ph-contrib { order: 8; } .plan-page .struct .ph-steps { order: 9; }
+  .plan-page .struct .ph-reviews { order: 10; } .plan-page .struct .ph-link { order: 11; }
 }
+
+/* ---------- «صمّم خطتي» entry ---------- */
+.plan-page .ph-design { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--radius); color: #fff;
+  background: radial-gradient(120% 140% at 100% 0%, var(--hero-3), var(--hero-2) 45%, var(--hero-1)); box-shadow: var(--shadow-2); }
+.plan-page .ph-design-main { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.plan-page .ph-design .ico { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex: none; background: rgba(255, 255, 255, 0.14); color: #b9f5dc; }
+.plan-page .ph-design .ico svg { width: 22px; height: 22px; }
+.plan-page .ph-design b { display: block; font-weight: 600; font-size: 16px; }
+.plan-page .ph-design .grow > span { display: block; font-size: 12.5px; color: rgba(255, 255, 255, 0.78); line-height: 1.5; }
+.plan-page .ph-design .chev { color: rgba(255, 255, 255, 0.7); }
+.plan-page .ph-design-cmp { align-self: flex-start; background: rgba(255, 255, 255, 0.14); color: #fff; }
+
+/* ---------- structure: hero bar, next priority, checks ---------- */
+.plan-page .ph-hero-bar { margin-top: 12px; }
+.plan-page .ph-mini-bar { height: 6px; margin: -4px 0 6px; }
+.plan-page .ph-now { display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.plan-page .ph-now-top { display: flex; align-items: center; gap: 12px; }
+.plan-page .ph-now-n { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600; font-size: 16px; color: #fff; background: var(--c); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 16%, transparent); }
+.plan-page .ph-kicker { display: block; font-size: 12px; color: var(--accent); font-weight: 600; }
+.plan-page .ph-now h3 { font-size: 17px; line-height: 1.35; }
+.plan-page .ph-now .ph-progress { margin: 0; }
+.plan-page .ph-now .ph-ctas { margin-top: 2px; }
+.plan-page .ph-why { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.plan-page .ph-road .card-head .link { min-height: 32px; padding: 4px 10px; border-radius: 10px; background: var(--accent-soft); }
+.plan-page .ph-checks .ph-check { padding: 11px 16px; }
+.plan-page .ph-checks .ph-check .attn-cta { text-decoration: none; white-space: nowrap; }
+.plan-page .ph-check-counts { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 2px 16px 10px; font-size: 13px; font-weight: 600; }
+.plan-page .ph-check-counts span { display: inline-flex; align-items: center; gap: 5px; }
+.plan-page .ph-check-counts svg { width: 15px; height: 15px; }
+.plan-page .ph-band.wait { opacity: 0.7; }
+
+/* ---------- editor: ordered lists (build order, instruments) ---------- */
+.plan-page .pe-irow { cursor: default; gap: 6px; padding: 9px 8px 9px 10px; padding-inline-start: 10px; }
+.plan-page .pe-ord { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600; font-size: 12px; background: var(--accent); color: #fff; }
+.plan-page .pe-mv { width: 32px; height: 32px; font-size: 16px; font-weight: 600; color: var(--ink-2); flex: none; }
+.plan-page .pe-mv:disabled { opacity: 0.3; cursor: default; }
+.plan-page .pe-irow .pe-main span { white-space: normal; }
+.plan-page .pe-w { font-family: var(--font-display); font-weight: 500; font-size: 12.5px; color: var(--muted); }
+.plan-page .pe-add { align-self: flex-start; }
+.plan-page .pe-inst .pe-list { margin-top: 2px; }
+.plan-page .pe-cands { max-height: 280px; overflow-y: auto; }
+.plan-page .pe-cands .pe-row svg { flex: none; color: var(--accent); }
+.plan-page .pe-cands .pe-main span { white-space: normal; }
+
+/* the plan document: build order card */
+.plan-page .pd-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.plan-page .pd-order li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.plan-page .pd-order li:last-child { border-bottom: 0; }
+.plan-page .pd-ord { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 11.5px; margin-top: 2px; }
+.plan-page .pd-oname { min-width: 0; display: flex; flex-direction: column; }
+.plan-page .pd-oname b { font-weight: 500; font-size: 14px; }
+.plan-page .pd-oname small { font-size: 12px; color: var(--muted); }
+.plan-page .pd-oname .money { font-weight: 600; }

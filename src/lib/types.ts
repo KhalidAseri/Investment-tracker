@@ -1,3 +1,4 @@
+import type { AssetClass, SectorKey, ZakatMethod } from './catalog'
 import type { PlanDoc } from './plan'
 
 export type Layer = 'safety' | 'income' | 'growth' | 'hedge'
@@ -118,6 +119,24 @@ export interface Holding {
   goal_id: string | null
   goal_bucket: string | null
   sort: number
+  /** manual holdings: remind to update every N days (null = 30); ignored for automatic sources */
+  update_every_days?: number | null
+  /** link to an instrument in the catalog (lib/catalog.ts) */
+  catalog_id?: string | null
+  /** owner override of the look-through breakdown */
+  profile?: HoldingProfile | null
+  /** how zakat is worked out for this holding (null = the class default from the zakat guide) */
+  zakat_method?: ZakatMethod | null
+  /** % of the value that is zakatable when zakat_method = 'zakatable_assets' */
+  zakat_ratio?: number | null
+}
+
+export interface HoldingProfile {
+  class?: AssetClass | null
+  countries?: Record<string, number> | null
+  sectors?: Partial<Record<SectorKey, number>> | null
+  industry?: string | null
+  duration_years?: number | null
 }
 
 export type TxKind = 'deposit' | 'buy' | 'sell' | 'dividend' | 'withdrawal' | 'fee' | 'tax' | 'zakat' | 'transfer' | 'income'
@@ -244,7 +263,7 @@ export interface OtherAsset {
 }
 
 export interface GoalBucket { key: string; name: string; weight: number }
-/** 'emergency' = the emergency fund, 'income' = the income treasury; both are kept outside the main portfolio */
+/** 'emergency' = the emergency fund, 'income' = the income account («حساب الدخل»); both are kept outside the main portfolio */
 export type GoalKind = 'goal' | 'emergency' | 'income'
 export interface Goal {
   id: string

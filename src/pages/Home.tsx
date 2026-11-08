@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
 import { usePlan } from '../lib/usePlan'
+import { useMarketInputs } from '../lib/market'
+import { roadColor } from '../components/RoadmapList'
+import { Ticker, shortName } from '../components/InstrumentCard'
 import { LAYER_NAMES, LAYER_ORDER } from '../lib/calc'
 import { ago, dateLong, dateShort, num0, relativeDays, sarShort, todayISO } from '../lib/format'
 import { mainFlows, netWorth, performance, periodStart, PERIODS, type Period } from '../lib/wealth'
@@ -9,7 +12,7 @@ import { haptic, layerColor, openAction, useCountUp } from '../lib/ui'
 import { AssetRow, Card, DateBadge, Money, Pct, Pill, StackBar, Tile, Chev } from '../components/kit'
 import { AreaChart, Donut } from '../components/viz'
 import { ActionRow } from '../components/PlanActions'
-import { IconAlert, IconChart, IconCheck, IconCoins, IconRefresh, IconScale, IconShield, IconTarget } from '../components/icons'
+import { IconAlert, IconChart, IconCheck, IconCoins, IconRefresh, IconScale, IconShield, IconSparkle } from '../components/icons'
 import type { PlanView } from '../lib/usePlan'
 import type { Go, Route } from '../App'
 import type { Goal, Layer } from '../lib/types'
@@ -20,7 +23,7 @@ const ROUTE_OF: Record<string, Route> = { payouts: 'income', holdings: 'portfoli
 export default function Home({ go }: { go: Go }) {
   const { settings, snapshots, transactions, holdings, accounts, otherAssets, obligations, sleeves, fx, fxUpdatedAt, readOnly, refreshMarket, refreshing, notify } = useStore()
   const d = useDerived()
-  const plan = usePlan()
+  const plan = usePlan(useMarketInputs())
   const today = todayISO()
   const total = d?.totals.total ?? 0
   const firstSnap = snapshots.find((s) => Number(s.total_sar) > 0)?.snap_date
@@ -167,8 +170,8 @@ export default function Home({ go }: { go: Go }) {
           )}
         </Card>
 
-        {/* the plan at a glance */}
-        <PlanCard plan={plan} readOnly={readOnly} />
+        {/* the portfolio's structure at a glance */}
+        <StructureCard plan={plan} readOnly={readOnly} />
 
         {/* upcoming */}
         <Card className="soon-card" flush title="القادم" action={{ label: 'التقويم', href: '#/calendar' }}>
@@ -212,42 +215,41 @@ export default function Home({ go }: { go: Go }) {
 
 const moreText = (n: number) => (n === 1 ? 'وإجراء آخر' : n === 2 ? 'وإجراءان آخران' : n <= 10 ? `و${n} إجراءات أخرى` : `و${n} إجراءً آخر`)
 
-/** «خطتك»: plan value against the plan's path for today, the phase, and the next milestone. */
-function PlanCard({ plan, readOnly }: { plan: PlanView; readOnly: boolean }) {
+/** «هيكل محفظتك»: how complete the structure is, the next priority (what is left, which instrument), and where to deposit. */
+function StructureCard({ plan, readOnly }: { plan: PlanView; readOnly: boolean }) {
   const p = plan.progress
   if (!plan.doc || !p) {
     if (readOnly) return null
     return (
-      <a className="card plan-card plan-invite" href="#/plan/doc" onClick={() => haptic()}>
-        <span className="ico"><IconTarget /></span>
-        <p><b>ابنِ خطتك</b><small>المراحل والأوزان والمحطات، ثم يخبرك التطبيق بما تفعله</small></p>
+      <a className="card plan-card plan-invite" href="#/design" onClick={() => haptic()}>
+        <span className="ico"><IconSparkle /></span>
+        <p><b>صمّم خطتي</b><small>خمسة أسئلة، ويقترح التطبيق هيكل محفظتك وترتيب بنائها</small></p>
         <Chev />
       </a>
     )
   }
-  const next = p.nextMilestone
-  const toNext = next && next.value > 0 ? Math.min(1, Math.max(0, p.planValue / next.value)) : null
-  const status = p.status === 'ahead' ? 'متقدم على خطتك' : p.status === 'behind' ? 'متأخر عن خطتك' : p.status === 'on' ? 'على المسار' : null
+  const st = plan.structure
+  const next = plan.roadmap.find((r) => r.status === 'next') ?? null
+  const it = next?.pick?.item ?? null
+  const inst = it ? shortName(it.name) : next?.pick?.holding?.name ?? null
   return (
-    <a className="card plan-card" href="#/plan/progress" onClick={() => haptic()} aria-label="تقدم خطتك">
-      <div className="card-head">
-        <h3>خطتك</h3>
-        {p.phase && <span className="chip accent">مرحلة {p.phase.name}</span>}
-      </div>
-      <div className="pc-value"><Money v={p.planValue} /></div>
-      {p.expected != null ? (
-        <div className="pc-line">
-          {p.gapPct != null && <Pill pct={p.gapPct} label={status ?? undefined} />}
-          <span className="muted">المخطط اليوم <Money v={p.expected} /></span>
-        </div>
-      ) : <div className="pc-line muted">أضف محطات لخطتك لتقارن قيمتها بالمسار.</div>}
-      {next && toNext != null && (
-        <div className="pc-next">
-          <div className="row between"><span>المحطة القادمة{next.label ? ` · ${next.label}` : ''}</span><span className="muted">{dateLong(next.date)}</span></div>
-          <div className="progress"><i style={{ width: `${toNext * 100}%` }} /></div>
-          <div className="row between tiny muted"><span><Pct v={toNext * 100} digits={0} /> منها</span><Money v={next.value} /></div>
-        </div>
-      )}
-    </a>
+    <Card className="plan-card struct-card" title={<>هيكل محفظتك{p.phase && <span className="chip accent sc-phase">مرحلة {p.phase.name}</span>}</>} action={{ label: 'التفاصيل', href: '#/plan/structure' }}>
+      {st && <>
+        <div className="sc-top"><span className="pc-value"><bdi dir="ltr">{st.pct}%</bdi></span><span className="muted small">مكتمل · <bdi dir="ltr">{st.done}/{st.total}</bdi></span></div>
+        <div className="progress sc-bar"><i style={{ width: `${st.pct}%` }} /></div>
+      </>}
+      {next ? (
+        <a className="sc-next" href="#/plan/structure" onClick={() => haptic()}>
+          <span className="sc-n" style={{ ['--c' as string]: roadColor(next) }}>{next.order}</span>
+          <span className="grow">
+            <small>الأولوية الآن</small>
+            <b>{next.title}</b>
+            <span>{next.remaining > 0.5 ? <>ينقصه <Money v={next.remaining} /></> : next.why}{inst && <> · <bdi>{inst}</bdi>{it?.symbol && <> <Ticker v={it.symbol} /></>}</>}</span>
+          </span>
+          <Chev />
+        </a>
+      ) : <p className="small good sc-done"><IconCheck width={16} height={16} /> الهيكل مكتمل الآن</p>}
+      {!readOnly && <a className="btn soft block sc-cta" href="#/deposit" onClick={() => haptic()}>أين أضع إيداعي؟</a>}
+    </Card>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useStore } from './lib/store'
 import { supabase } from './lib/supabase'
 import Home from './pages/Home'
@@ -7,6 +7,7 @@ import Asset from './pages/Asset'
 import QuickUpdate from './pages/QuickUpdate'
 import Deposit from './pages/Deposit'
 import Plan from './pages/Plan'
+import Design from './pages/Design'
 import Calendar from './pages/Calendar'
 import Activity, { TxSheet } from './pages/Activity'
 import Settings from './pages/Settings'
@@ -21,6 +22,7 @@ import Report from './pages/Report'
 import Me from './pages/Me'
 import Review from './pages/Review'
 import { EmergencySheet, RebalanceSheet, TreasurySheet, WithdrawSheet } from './components/PlanSheets'
+import { BuySheet } from './components/BuySheet'
 import { LockGate } from './components/LockGate'
 import { AddAssetSheet } from './components/AddAsset'
 import { Sheet } from './components/ui'
@@ -35,17 +37,17 @@ import {
 } from './components/icons'
 
 export type Route = 'home' | 'portfolio' | 'goals' | 'watch' | 'asset' | 'update' | 'deposit' | 'income' | 'analysis' | 'networth' | 'me'
-  | 'calendar' | 'activity' | 'import' | 'report' | 'plan' | 'review' | 'settings'
+  | 'calendar' | 'activity' | 'import' | 'report' | 'plan' | 'design' | 'review' | 'settings'
 export type Go = (r: Route, param?: string) => void
 
 const TITLES: Record<Route, string> = {
   home: 'الرئيسية', portfolio: 'المحفظة', goals: 'المحفظة', watch: 'المحفظة', asset: 'تفاصيل الأصل', update: 'تحديث القيم',
   deposit: 'إيداع جديد', income: 'الدخل', analysis: 'التحليل', networth: 'صافي الثروة', me: 'حسابي', calendar: 'التقويم',
-  activity: 'العمليات', import: 'الاستيراد من دراهم', report: 'التقرير السنوي', plan: 'الخطة', review: 'المراجعة السنوية', settings: 'الإعدادات',
+  activity: 'العمليات', import: 'الاستيراد من دراهم', report: 'التقرير السنوي', plan: 'الخطة', design: 'صمّم خطتي', review: 'المراجعة السنوية', settings: 'الإعدادات',
 }
 const ALIASES: Record<string, Route> = { holdings: 'portfolio', payouts: 'income', performance: 'analysis', more: 'me', outlook: 'home', profile: 'home' }
 /** which bottom tab a page belongs to */
-const PARENT: Partial<Record<Route, Route>> = { goals: 'portfolio', watch: 'portfolio', asset: 'portfolio', update: 'portfolio', review: 'plan', analysis: 'home' }
+const PARENT: Partial<Record<Route, Route>> = { goals: 'portfolio', watch: 'portfolio', asset: 'portfolio', update: 'portfolio', review: 'plan', design: 'plan', analysis: 'home' }
 const MAIN: Route[] = ['home', 'portfolio', 'goals', 'watch', 'plan', 'income']
 
 type Nav = { r: Route; label: string; icon: (p: any) => JSX.Element }
@@ -74,7 +76,7 @@ const SECONDARY: Nav[] = [
   { r: 'report', label: 'التقرير السنوي', icon: IconDoc },
   { r: 'settings', label: 'الإعدادات', icon: IconSettings },
 ]
-const VIEWER_HIDDEN: Route[] = ['deposit', 'import', 'update']
+const VIEWER_HIDDEN: Route[] = ['deposit', 'import', 'update', 'design']
 
 const readRoute = (): { route: Route; param: string } => {
   const raw = location.hash.replace(/^#\/?/, '')
@@ -89,6 +91,8 @@ export default function App() {
   const [req, setReq] = useState<ActionRequest | null>(null)
   const action = req?.kind ?? null
   const setAction = (k: ActionKind | null, param?: string) => setReq(k ? { kind: k, param } : null)
+  // stable: a sheet re-focuses its first field whenever onClose changes
+  const closeAction = useCallback(() => setReq(null), [])
   useEffect(() => {
     const on = () => { setLoc(readRoute()); window.scrollTo({ top: 0 }) }
     const act = (e: Event) => {
@@ -118,7 +122,7 @@ export default function App() {
   const page: Record<Route, ReactNode> = {
     home: <Home go={go} />, portfolio: <Portfolio go={go} />, goals: <Goals />, watch: <Watchlist />, asset: <Asset id={param} go={go} />,
     update: <QuickUpdate go={go} />, deposit: <Deposit param={param} />, income: <Payouts />, analysis: <Analysis />, networth: <NetWorth />,
-    me: <Me go={go} />, calendar: <Calendar />, activity: <Activity />, import: <Import />, report: <Report />, plan: <Plan go={go} param={param} />,
+    me: <Me go={go} />, calendar: <Calendar />, activity: <Activity />, import: <Import />, report: <Report />, plan: <Plan go={go} param={param} />, design: <Design param={param} />,
     review: <Review go={go} />, settings: <Settings />,
   }
   // a sidebar entry is current when it is the page itself, or the page's parent when the page has no entry of its own
@@ -150,14 +154,15 @@ export default function App() {
         {!readOnly && <div className="fab-slot"><button className="fab" aria-label="إضافة" onClick={() => { haptic(12); setAction('sheet') }}><IconPlus /></button></div>}
         {TABS[1].map((n) => <TabButton key={n.r} n={n} active={tab === n.r} onClick={() => go(n.r)} />)}
       </nav>
-      {action === 'sheet' && <ActionSheet go={go} onPick={(k) => setAction(k)} onClose={() => setAction(null)} />}
-      {action === 'asset' && <AddAssetSheet onClose={() => setAction(null)} />}
-      {action === 'payout' && <RecordPayoutSheet initial={{ date: todayISO() }} onClose={() => setAction(null)} />}
-      {action === 'tx' && <TxSheet initial={{ kind: 'withdrawal', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' }} onClose={() => setAction(null)} />}
-      {action === 'rebalance' && <RebalanceSheet param={req?.param} onClose={() => setAction(null)} />}
-      {action === 'treasury' && <TreasurySheet param={req?.param} onClose={() => setAction(null)} />}
-      {action === 'withdraw' && <WithdrawSheet param={req?.param} onClose={() => setAction(null)} />}
-      {action === 'emergency' && <EmergencySheet param={req?.param} onClose={() => setAction(null)} />}
+      {action === 'sheet' && <ActionSheet go={go} onPick={(k) => setAction(k)} onClose={closeAction} />}
+      {action === 'asset' && <AddAssetSheet onClose={closeAction} />}
+      {action === 'payout' && <RecordPayoutSheet initial={{ date: todayISO() }} onClose={closeAction} />}
+      {action === 'tx' && <TxSheet initial={{ kind: 'withdrawal', tx_date: todayISO(), amount_sar: 0, currency: 'SAR', source: 'manual' }} onClose={closeAction} />}
+      {action === 'rebalance' && <RebalanceSheet param={req?.param} onClose={closeAction} />}
+      {action === 'treasury' && <TreasurySheet param={req?.param} onClose={closeAction} />}
+      {action === 'withdraw' && <WithdrawSheet param={req?.param} onClose={closeAction} />}
+      {action === 'emergency' && <EmergencySheet param={req?.param} onClose={closeAction} />}
+      {action === 'buy' && <BuySheet key={req?.param ?? ''} param={req?.param} onClose={closeAction} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
     </LockGate>
@@ -202,14 +207,14 @@ function ActionSheet({ go, onPick, onClose }: { go: Go; onPick: (k: ActionKind) 
     { key: 'import', icon: <IconImport />, title: 'استيراد من دراهم', text: 'التقرير الشهري أو ملف العمليات', run: () => to('import') },
     { key: 'tx', icon: <IconCash />, title: 'عملية أخرى', text: 'سحب، زكاة مدفوعة، رسوم', run: () => onPick('tx') },
   ]
-  // from the active plan: the emergency fund and the income treasury
+  // from the active plan: the emergency fund and the income account
   const em = progress?.emergency
   const tr = progress?.treasury
   const plan: ActionTile[] = []
   if (em?.enabled) plan.push({ key: 'emergency', icon: <IconShield />, title: 'صندوق الطوارئ', text: em.shortfall > 0.5 ? 'أكمل احتياطيك' : 'أضف إلى احتياطيك', run: () => onPick('emergency') })
   if (doc?.income && tr) {
-    plan.push({ key: 'treasury', icon: <IconBuilding />, title: 'خزانة الدخل', text: 'بيع من المحفظة أو إيداع مباشر', run: () => onPick('treasury') })
-    if (tr.started) plan.push({ key: 'withdraw', icon: <IconIncome />, title: 'تحويل الدخل الشهري', text: 'من الخزانة إلى حسابك', run: () => onPick('withdraw') })
+    plan.push({ key: 'treasury', icon: <IconBuilding />, title: 'حساب الدخل', text: 'بيع من المحفظة أو إيداع مباشر', run: () => onPick('treasury') })
+    if (tr.started) plan.push({ key: 'withdraw', icon: <IconIncome />, title: 'تحويل الدخل الشهري', text: 'من حساب الدخل إلى حسابك', run: () => onPick('withdraw') })
   }
   const tile = (t: ActionTile, wide = false) => (
     <button key={t.key} type="button" className={`action-tile ${wide ? 'wide' : ''}`} onClick={() => { haptic(); t.run() }}>

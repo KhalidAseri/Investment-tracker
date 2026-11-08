@@ -1,231 +1,135 @@
+// «أين أضع إيداعي؟»: the deposit planner. An amount → how much goes to each layer and reserve, WHICH instrument to buy for
+// each line (with the sukuk tenor and ≈ units at today's price), and «اشتريته» to record each purchase (BuySheet).
+// The split is the advisor's (allocateDeposit): reserves first, then the sleeves with the largest gaps, in a few lines.
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
-import { sleeveColors, useDerived } from '../lib/derived'
-import { planDeposit, rateOf, type DepositLine } from '../lib/calc'
-import { num0, num2, parseNum, pct, sar, todayISO } from '../lib/format'
-import type { Goal, Holding } from '../lib/types'
-import { NumberField, Segmented, Sheet, Switch } from '../components/ui'
 import { usePlan } from '../lib/usePlan'
-import { openAction } from '../lib/ui'
-import { Money } from '../components/kit'
-import { IconShield } from '../components/icons'
+import { useMarketInputs } from '../lib/market'
+import type { DepositLine } from '../lib/advisor'
+import { LAYER_NAMES } from '../lib/calc'
+import { num0, parseNum } from '../lib/format'
+import { buyParam, haptic, layerColor, openAction } from '../lib/ui'
+import type { Layer } from '../lib/types'
+import { Card, Money, StackBar } from '../components/kit'
+import { Switch } from '../components/ui'
+import { InstrumentCard } from '../components/InstrumentCard'
+import { IconAlert, IconSparkle } from '../components/icons'
+import './Deposit.css'
 
-/** an amount passed in the route (#/deposit/<riyals>), e.g. from the rebalance sheet */
+/** an amount passed in the route (#/deposit/<riyals>), e.g. from a plan action or the rebalance sheet */
 const amountFrom = (param?: string) => { const n = Number(String(param ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? Math.round(n) : null }
 
-export default function Deposit({ param }: { param?: string }) {
-  const { settings, sleeves, holdings, accounts } = useStore()
-  const d = useDerived()
-  const { doc, progress } = usePlan()
-  const colors = useMemo(() => sleeveColors(sleeves), [sleeves])
-  const [text, setText] = useState(() => num0(amountFrom(param) ?? 10000))
-  const [mode, setMode] = useState<'gaps' | 'weights'>('gaps')
-  const [months, setMonths] = useState<'1' | '3' | '6'>('1')
-  const [recording, setRecording] = useState(false)
-  const [useGoals, setUseGoals] = useState(true)
-  const [goalOverride, setGoalOverride] = useState<Record<string, number>>({})
-  const amount = parseNum(text)
-  const n = Number(months)
-  const goalLines = useMemo(() => {
-    if (!d || !useGoals || amount <= 0) return [] as Array<{ goal: Goal; amount: number; suggested: number }>
-    let left = amount
-    return [...d.goalStats].sort((a, b) => a.goal.priority - b.goal.priority).map((g) => {
-      const gap = Math.max(0, Number(g.goal.target_amount) - g.value)
-      const suggested = Math.round(Math.min(g.need * n, gap) / 100) * 100
-      const want = goalOverride[g.goal.id] ?? suggested
-      const take = Math.max(0, Math.min(want, left))
-      left -= take
-      return { goal: g.goal, amount: take, suggested }
-    }).filter((l) => l.amount > 0 || goalOverride[l.goal.id] != null)
-  }, [d, useGoals, amount, n, goalOverride])
-  const goalsTotal = goalLines.reduce((a, l) => a + l.amount, 0)
-  const fiAmount = Math.max(0, amount - goalsTotal)
-  const lines = useMemo(() => (d && settings && fiAmount > 0 ? planDeposit(fiAmount, sleeves, d.totals, settings, mode) : []), [fiAmount, sleeves, d, settings, mode])
-  if (!settings || !d) return null
-  const quick = [2000, 5000, 10000, 20000].map((v) => ({ label: num0(v), v }))
-  const suggestion = (sleeveId: string) => {
-    const note = sleeves.find((s) => s.id === sleeveId)?.note
-    if (note) return note
-    return holdings.find((h) => h.sleeve_id === sleeveId && !h.archived && !/برنامج الادخار/.test(h.name))?.name ?? ''
-  }
+type Seg = 'emergency' | 'treasury' | Layer
+const SEG_NAME: Record<Seg, string> = { emergency: 'الطوارئ', treasury: 'حساب الدخل', ...LAYER_NAMES }
+const SEG_COLOR: Record<Seg, string> = { emergency: 'var(--accent)', treasury: 'var(--mint)', growth: layerColor('growth'), income: layerColor('income'), safety: layerColor('safety'), hedge: layerColor('hedge') }
+const SEG_ORDER: Seg[] = ['emergency', 'treasury', 'growth', 'income', 'safety', 'hedge']
+const segOf = (l: DepositLine): Seg => (l.kind === 'emergency' ? 'emergency' : l.kind === 'treasury' ? 'treasury' : (l.layer as Layer))
 
-  // with an active plan: the emergency fund comes first, and this month's planned contribution is a one-tap amount
-  const em = doc && progress ? progress.emergency : null
-  const shortfall = em && em.target > 0 && em.shortfall > 0.5 ? Math.round(em.shortfall) : 0
-  const month = doc && progress ? progress.contributions : null
-  const remaining = month ? Math.max(0, Math.round(month.plannedThisMonth - month.actualThisMonth)) : 0
+export default function Deposit({ param }: { param?: string }) {
+  const market = useMarketInputs()
+  const view = usePlan(market)
+  const { readOnly } = useStore()
+  const p = view.progress
+  const planned = view.doc && p ? Math.max(0, Math.round(p.contributions.plannedThisMonth - p.contributions.actualThisMonth)) : 0
+  const [text, setText] = useState(() => num0(amountFrom(param) ?? (planned > 0 ? planned : 10000)))
+  const [reserveFirst, setReserveFirst] = useState(true)
+  const amount = parseNum(text)
+  const plan = useMemo(() => (amount > 0 ? view.allocate(amount, market, { reserveFirst }) : null), [view, amount, market, reserveFirst])
+  if (!view.ctx) return null
+
+  const chips = [
+    ...(planned > 0 ? [{ label: 'خطتك هذا الشهر', v: planned }] : []),
+    ...[5000, 10000, 50000].filter((v) => v !== planned).map((v) => ({ label: num0(v), v })),
+  ]
+  const segs = plan ? SEG_ORDER.map((k) => ({ k, v: plan.lines.filter((l) => segOf(l) === k).reduce((a, l) => a + l.amount, 0) })).filter((x) => x.v > 0) : []
+  const hasReserve = !!p && ((p.emergency.target > 0 && p.emergency.shortfall > 0.5) || (!!view.doc?.income && p.treasury.building && p.treasury.shortfall > 0.5))
 
   return (
-    <>
-      {shortfall > 0 && (
-        <button type="button" className="banner" style={{ marginBottom: 14 }} onClick={() => openAction('emergency', String(shortfall))}>
-          <span className="ico"><IconShield /></span>
-          <p>أكمل صندوق الطوارئ أولاً<small>ينقصه <Money v={shortfall} /> حسب خطتك</small></p>
-          <span className="attn-cta" style={{ color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)' }}>أضف إليه</span>
-        </button>
+    <div className="dp">
+      {!view.doc && !readOnly && (
+        <a className="dp-invite" href="#/design" onClick={() => haptic()}>
+          <span className="ico"><IconSparkle /></span>
+          <p><b>صمّم خطتي</b><small>بلا خطة يُقسَّم المبلغ على أوزانك الحالية فقط</small></p>
+        </a>
       )}
-      <p className="muted" style={{ marginBottom: 14 }}>اكتب المبلغ الذي ستستثمره، وأقسّمه لك على الطبقات بحيث تقترب المحفظة من أوزانها المستهدفة.</p>
-      <div className="panel amount-hero">
-        <label htmlFor="amt" className="small muted">مبلغ الإيداع بالريال</label>
-        <input id="amt" className="amount-input" inputMode="decimal" value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => setText(amount ? num0(amount) : '')} />
-        <div className="quick">
-          {quick.map((q) => <button key={q.label} className="btn ghost small" onClick={() => setText(num0(q.v))}>{q.label}</button>)}
+
+      <section className="card dp-amount">
+        <label htmlFor="dp-amt" className="small muted">المبلغ الذي ستستثمره</label>
+        <div className="dp-input">
+          <input id="dp-amt" className="amount-input" inputMode="decimal" value={text}
+            onChange={(e) => setText(e.target.value)} onBlur={() => setText(amount ? num0(amount) : '')} onFocus={(e) => e.target.select()} />
+          <span>ريال</span>
         </div>
-        {month && month.plannedThisMonth > 0 && (
-          <div className="callout row wrap" style={{ gap: 8, justifyContent: 'space-between' }}>
-            <span className="small">خطتك لهذا الشهر <b><Money v={month.plannedThisMonth} /></b><span className="muted"> · أودعت <Money v={month.actualThisMonth} /></span></span>
-            {remaining > 0
-              ? <button type="button" className="btn soft small" onClick={() => setText(num0(remaining))}>استخدم الباقي <Money v={remaining} /></button>
-              : <span className="small good">اكتمل إيداع الشهر</span>}
+        <div className="dp-chips">
+          {chips.map((c) => (
+            <button key={c.label} type="button" aria-pressed={amount === c.v} onClick={() => { haptic(); setText(num0(c.v)) }}>
+              {c.label === num0(c.v) ? <bdi dir="ltr">{c.label}</bdi> : <>{c.label} <Money v={c.v} short /></>}
+            </button>
+          ))}
+        </div>
+        {(view.doc || hasReserve) && (
+          <Switch label="الطوارئ أولاً" hint={hasReserve ? 'يكتمل صندوق الطوارئ وحساب الدخل قبل الاستثمار' : 'الاحتياطيات مكتملة الآن'} checked={reserveFirst} onChange={(v) => { haptic(); setReserveFirst(v) }} />
+        )}
+      </section>
+
+      {plan && plan.lines.length > 0 && (
+        <Card className="dp-sum" title="التقسيم">
+          <StackBar parts={segs.map((s) => ({ key: s.k, value: s.v, color: SEG_COLOR[s.k], label: SEG_NAME[s.k] }))} />
+          <div className="dp-legend">
+            {segs.map((s) => (
+              <span key={s.k}><i style={{ background: SEG_COLOR[s.k] }} />{SEG_NAME[s.k]}<b><Money v={s.v} /></b></span>
+            ))}
+            {plan.leftover > 0 && <span><i style={{ background: 'var(--line-strong)' }} />يبقى نقداً<b><Money v={plan.leftover} /></b></span>}
+          </div>
+        </Card>
+      )}
+
+      {plan && plan.lines.map((l, i) => lineCard(l, i + 1))}
+
+      {plan && plan.notes.length > 0 && (
+        <div className="dp-notes">
+          {plan.notes.map((n) => <p key={n}><IconAlert />{n}</p>)}
+        </div>
+      )}
+      {plan && !plan.lines.length && <div className="card"><p className="small muted">لا توجد طبقة تستقبل هذا المبلغ الآن.</p></div>}
+      {!plan && <div className="card"><p className="small muted">اكتب المبلغ لترى أين تضعه.</p></div>}
+      {plan && plan.lines.length > 0 && <p className="dp-foot">اشترِ كل سطر لدى منصته، ثم اضغط «اشتريته» ليتابعه التطبيق تلقائياً.</p>}
+    </div>
+  )
+
+  function lineCard(l: DepositLine, n: number) {
+    const color = SEG_COLOR[segOf(l)]
+    const scale = Math.max(l.after, l.targetAfter, 1)
+    const wasPct = (l.before / scale) * 100
+    const addPct = (l.amount / scale) * 100
+    const tgtPct = (l.targetAfter / scale) * 100
+    const pick = l.pick
+    return (
+      <section key={l.key} className="card dp-line" style={{ ['--c' as string]: color }}>
+        <div className="dp-line-head">
+          <span className="dp-n">{n}</span>
+          <div className="grow">
+            <span className="dp-kind">{SEG_NAME[segOf(l)]}</span>
+            <b>{l.name}</b>
+          </div>
+          <span className="dp-amt"><Money v={l.amount} /></span>
+        </div>
+        <InstrumentCard pick={pick} market={market} amount={l.amount} />
+        {l.targetAfter > 0 && (
+          <div className="dp-fill">
+            <div className="dp-track" role="img" aria-label="القيمة قبل الإيداع وبعده مقارنة بالهدف">
+              <i className="was" style={{ width: `${Math.min(100, wasPct)}%` }} />
+              <i className="add" style={{ insetInlineStart: `${Math.min(100, wasPct)}%`, width: `${Math.min(100 - Math.min(100, wasPct), addPct)}%` }} />
+              <i className="tgt" style={{ insetInlineStart: `${Math.min(100, tgtPct)}%` }} />
+            </div>
+            <small><Money v={l.before} short /> ← <Money v={l.after} short /> · الهدف <Money v={l.targetAfter} short /></small>
           </div>
         )}
-        <div className="row wrap" style={{ gap: 10, marginTop: 6 }}>
-          <Segmented label="طريقة التقسيم" value={mode} onChange={setMode} options={[{ value: 'gaps', label: 'سدّ النقص أولاً' }, { value: 'weights', label: 'حسب الأوزان' }]} />
-          <Segmented label="التوزيع على الأشهر" value={months} onChange={setMonths} options={[{ value: '1', label: 'دفعة واحدة' }, { value: '3', label: '3 أشهر' }, { value: '6', label: '6 أشهر' }]} />
-        </div>
-        <p className="tiny muted">{mode === 'gaps' ? 'يذهب المبلغ أولاً للطبقات الناقصة عن هدفها، والباقي حسب الأوزان.' : 'يُقسم المبلغ بنسب الأوزان المستهدفة كما هي.'}{n > 1 ? ' الدفعات الكبيرة على عدة أشهر تقلل أثر توقيت الشراء.' : ''}</p>
-      </div>
-
-      {amount > 0 && d.goalStats.length > 0 && (
-        <section className="section">
-          <div className="section-head"><h2>نصيب الأهداف</h2><p>{sar(goalsTotal)}</p></div>
-          <div className="panel stack">
-            <Switch label="خصّص جزءاً لأهدافك أولاً" hint="المقترح لكل هدف ما يحتاجه شهرياً ليصل في موعده" checked={useGoals} onChange={setUseGoals} />
-            {useGoals && goalLines.map((l) => (
-              <div key={l.goal.id} className="row" style={{ gap: 10, alignItems: 'flex-end' }}>
-                <div className="grow"><div>{l.goal.name}</div><div className="tiny muted">المقترح {sar(l.suggested)}</div></div>
-                <div style={{ width: 150 }}><NumberField label="" value={l.amount} suffix="ريال" onChange={(v) => setGoalOverride((o) => ({ ...o, [l.goal.id]: v }))} /></div>
-              </div>
-            ))}
-            {useGoals && goalLines.length === 0 && <p className="small muted">أهدافك لا تحتاج إيداعاً الآن.</p>}
-          </div>
-        </section>
-      )}
-
-      {amount > 0 && (
-        <section className="section">
-          <div className="section-head"><h2>{goalsTotal > 0 ? 'لالمحفظة الرئيسية' : 'التقسيم المقترح'}</h2><p>{goalsTotal > 0 ? sar(fiAmount) : n > 1 ? `${n} دفعات شهرية` : 'دفعة واحدة'}</p></div>
-          <div className="panel">
-            {lines.map((l) => (
-              <div key={l.sleeve.id} className={`split-row ${l.amount === 0 ? 'zero' : ''}`}>
-                <div className="row" style={{ gap: 8 }}><span className="dot" style={{ background: colors[l.sleeve.id]?.color, opacity: colors[l.sleeve.id]?.opacity }} />{l.sleeve.name}</div>
-                <div className="amt">{num0(l.amount / n)}{n > 1 && <span className="tiny muted"> شهرياً</span>}</div>
-                <div className="sub">
-                  {!l.sleeve.accepts_new_money ? 'مغلقة أمام الإيداع الجديد حسب الخطة' : <>تصبح {pct(l.afterPct)} والهدف {pct(l.target)}{suggestion(l.sleeve.id) ? `؛ المقترح: ${suggestion(l.sleeve.id)}` : ''}</>}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="row" style={{ marginTop: 14, gap: 10 }}>
-            <button className="btn primary grow" disabled={!lines.some((l) => l.amount > 0) && !goalLines.some((l) => l.amount > 0)} onClick={() => setRecording(true)}>سجّل الإيداع{n > 1 ? ' الأول' : ''}</button>
-          </div>
-          <p className="tiny muted" style={{ marginTop: 8 }}>التسجيل يحفظ العملية ويضيف الوحدات للأصول اليدوية.{accounts.some((x) => x.is_ibkr) ? ' أصول IBKR تتحدث تلقائياً من التقرير اليومي.' : ''}</p>
-        </section>
-      )}
-
-      {recording && <RecordSheet lines={lines.filter((l) => l.amount > 0)} goalLines={goalLines.filter((l) => l.amount > 0)} divisor={n} onClose={() => setRecording(false)} />}
-    </>
-  )
-}
-
-function RecordSheet({ lines, goalLines, divisor, onClose }: { lines: DepositLine[]; goalLines: Array<{ goal: Goal; amount: number }>; divisor: number; onClose: () => void }) {
-  const { holdings, accounts, fx, insertMany, upsert, notify } = useStore()
-  const [date, setDate] = useState(todayISO())
-  const payroll = new Set(accounts.filter((a) => a.kind === 'savings_program' || a.exclude_from_portfolio).map((a) => a.id))
-  const targetsFor = (sleeveId: string) => holdings.filter((h) => h.sleeve_id === sleeveId && !h.archived && !(h.account_id && payroll.has(h.account_id)))
-  const goalTargets = (goalId: string) => holdings.filter((h) => h.goal_id === goalId && !h.archived)
-  const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries([
-    ...lines.map((l) => [l.sleeve.id, targetsFor(l.sleeve.id)[0]?.id ?? '']),
-    ...goalLines.map((l) => [`g:${l.goal.id}`, goalTargets(l.goal.id)[0]?.id ?? '']),
-  ]))
-  const [busy, setBusy] = useState(false)
-  const byId = new Map(holdings.map((h) => [h.id, h]))
-  const isLump = (h: Holding) => h.price_source === 'manual' && Number(h.quantity) === 1 && Number(h.price) > 50
-  const unitsFor = (h: Holding | undefined, amount: number) => {
-    if (!h || h.price_source === 'ibkr' || !(Number(h.price) > 0) || isLump(h)) return null
-    return amount / (Number(h.price) * rateOf(h.currency, fx))
+        {l.note && <p className="dp-note">{l.note}</p>}
+        {!readOnly && (
+          <button type="button" className="btn primary block" onClick={() => openAction('buy', buyParam({ key: l.key, amount: l.amount }))}>اشتريته</button>
+        )}
+      </section>
+    )
   }
-  /** what was paid grows with each deposit; unknown stays unknown unless the holding started empty */
-  const costAfter = (h: Holding, amount: number) => (h.cost_basis != null || Number(h.quantity) === 0 ? (Number(h.cost_basis) || 0) + amount : null)
-  const confirm = async () => {
-    setBusy(true)
-    const rows = lines.map((l) => {
-      const amount = Math.round(l.amount / divisor)
-      const h = byId.get(choice[l.sleeve.id])
-      const units = unitsFor(h, amount)
-      return {
-        tx_date: date, kind: 'deposit', amount_sar: amount, sleeve_id: l.sleeve.id, holding_id: h?.id ?? null, account_id: h?.account_id ?? null,
-        quantity: units, price: h ? Number(h.price) : null, currency: 'SAR', source: 'planner', note: `إيداع موزّع: ${l.sleeve.name}`,
-      }
-    })
-    for (const l of goalLines) {
-      const amount = Math.round(l.amount / divisor)
-      const h = byId.get(choice[`g:${l.goal.id}`])
-      rows.push({
-        tx_date: date, kind: 'deposit', amount_sar: amount, sleeve_id: null as never, holding_id: h?.id ?? null, account_id: h?.account_id ?? null,
-        quantity: unitsFor(h, amount), price: h ? Number(h.price) : null, currency: 'SAR', source: 'planner', note: `إيداع لهدف: ${l.goal.name}`,
-      })
-    }
-    const ok = await insertMany('transactions', rows)
-    if (ok) {
-      for (const l of goalLines) {
-        const h = byId.get(choice[`g:${l.goal.id}`])
-        if (!h || h.price_source === 'ibkr') continue
-        const amount = Math.round(l.amount / divisor)
-        const units = unitsFor(h, amount)
-        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units, cost_basis: costAfter(h, amount) })
-        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString(), cost_basis: costAfter(h, amount) })
-      }
-      for (const l of lines) {
-        const h = byId.get(choice[l.sleeve.id])
-        if (!h || h.price_source === 'ibkr') continue
-        const amount = Math.round(l.amount / divisor)
-        const units = unitsFor(h, amount)
-        if (units != null) await upsert('holdings', { id: h.id, quantity: Number(h.quantity) + units, cost_basis: costAfter(h, amount) })
-        else if (isLump(h)) await upsert('holdings', { id: h.id, price: Number(h.price) + amount / rateOf(h.currency, fx), price_updated_at: new Date().toISOString(), cost_basis: costAfter(h, amount) })
-      }
-      notify('سُجّل الإيداع وحُدّثت الأصول')
-      onClose()
-    }
-    setBusy(false)
-  }
-  return (
-    <Sheet title="تسجيل الإيداع" onClose={onClose} footer={<button className="btn primary" disabled={busy} onClick={confirm}>{busy ? 'جارٍ الحفظ…' : 'تأكيد التسجيل'}</button>}>
-      <div className="stack">
-        <label className="field"><span>تاريخ الإيداع</span><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-        {goalLines.map((l) => {
-          const amount = Math.round(l.amount / divisor)
-          const options = goalTargets(l.goal.id)
-          return (
-            <div key={l.goal.id} className="field">
-              <span>هدف {l.goal.name}: <b className="figure">{sar(amount)}</b></span>
-              <select className="select" value={choice[`g:${l.goal.id}`] ?? ''} onChange={(e) => setChoice((c) => ({ ...c, [`g:${l.goal.id}`]: e.target.value }))}>
-                <option value="">سجّل العملية فقط</option>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-              {!options.length && <small>لا أصول لهذا الهدف بعد؛ أضفها من صفحة الأهداف.</small>}
-            </div>
-          )
-        })}
-        {lines.map((l) => {
-          const amount = Math.round(l.amount / divisor)
-          const options = targetsFor(l.sleeve.id)
-          const h = byId.get(choice[l.sleeve.id])
-          const units = unitsFor(h, amount)
-          return (
-            <div key={l.sleeve.id} className="field">
-              <span>{l.sleeve.name}: <b className="figure">{sar(amount)}</b></span>
-              <select className="select" value={choice[l.sleeve.id] ?? ''} onChange={(e) => setChoice((c) => ({ ...c, [l.sleeve.id]: e.target.value }))}>
-                <option value="">سجّل العملية فقط</option>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-              <small>{!h ? 'تُسجَّل العملية فقط دون تغيير أي أصل.' : h.price_source === 'ibkr' ? 'يتحدث الرصيد من IBKR بعد الشراء.' : units != null ? `يُضاف نحو ${num2(units)} وحدة.` : isLump(h) ? 'تُضاف القيمة إلى رصيد الأصل.' : 'لا سعر لهذا الأصل بعد؛ حدّث عدد الوحدات بعد الشراء.'}</small>
-            </div>
-          )
-        })}
-      </div>
-    </Sheet>
-  )
 }

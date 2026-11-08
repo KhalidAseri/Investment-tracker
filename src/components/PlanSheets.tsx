@@ -155,7 +155,7 @@ function RebalanceRow({ l }: { l: RebalanceLine }) {
 }
 
 // =====================================================================================
-// خزانة الدخل
+// حساب الدخل
 // =====================================================================================
 export function TreasurySheet({ param, onClose }: PlanSheetProps) {
   const { readOnly, notify } = useStore()
@@ -170,7 +170,7 @@ export function TreasurySheet({ param, onClose }: PlanSheetProps) {
   const [date, setDate] = useState(todayISO())
   const [busy, submit] = useSubmit(onClose)
   const sale = useMemo(() => (ctx && mode === 'sell' ? treasurySalePlan(ctx, amount) : null), [ctx, mode, amount])
-  if (!ctx || !t) return <Waiting title="خزانة الدخل" onClose={onClose} />
+  if (!ctx || !t) return <Waiting title="حساب الدخل" onClose={onClose} />
   const p = ctx.progress
 
   const record = () => submit(async () => {
@@ -183,21 +183,21 @@ export function TreasurySheet({ param, onClose }: PlanSheetProps) {
   })
 
   return (
-    <Sheet title="خزانة الدخل" onClose={onClose} footer={readOnly ? undefined : (
+    <Sheet title="حساب الدخل" onClose={onClose} footer={readOnly ? undefined : (
       <button className="btn primary" disabled={busy || !(amount > 0) || (mode === 'sell' && !sale?.lines.length)} onClick={record}>
-        {busy ? 'جارٍ الحفظ…' : mode === 'sell' ? 'سجّل البيع' : 'أضف إلى الخزانة'}
+        {busy ? 'جارٍ الحفظ…' : mode === 'sell' ? 'سجّل البيع' : 'أضف إلى الحساب'}
       </button>
     )}>
       <div className="ps">
         <div className="ps-stats">
-          <Stat label="في الخزانة"><Money v={t.value} /></Stat>
+          <Stat label="في الحساب"><Money v={t.value} /></Stat>
           {t.target > 0 && <Stat label="هدفها"><Money v={t.target} /></Stat>}
         </div>
         {t.target > 0 && <div className="progress" aria-hidden><i style={{ width: `${Math.min(100, (t.value / t.target) * 100)}%` }} /></div>}
         {t.coverMonths != null && (
           <p className="ps-hint">تغطي دخل {monthsText(t.coverMonths)}{doc?.income?.treasury_months ? ` من ${doc.income.treasury_months}` : ''}{t.shortfall > 0.5 && <> · ينقصها <Money v={t.shortfall} /></>}</p>
         )}
-        {!doc?.income && <p className="ps-hint">لم تحدّد خزانة الدخل في خطتك بعد. {!readOnly && <a href="#/plan/doc" onClick={onClose}>حدّدها</a>}</p>}
+        {!doc?.income && <p className="ps-hint">لم تحدّد حساب الدخل في خطتك بعد. {!readOnly && <a href="#/plan/doc" onClick={onClose}>حدّدها</a>}</p>}
 
         {!readOnly && <>
           <Segmented label="طريقة التعبئة" value={mode} onChange={setMode}
@@ -225,7 +225,7 @@ export function TreasurySheet({ param, onClose }: PlanSheetProps) {
           {sale.short > 0.5 && sale.lines.length > 0 && <Note>لا يكفي ما يمكن بيعه؛ ينقص <Money v={sale.short} />.</Note>}
           {!readOnly && sale.lines.length > 0 && <>
             <DateInput label="تاريخ البيع" value={date} onChange={setDate} />
-            <p className="ps-hint">سجّل البيع بعد تنفيذه لدى الوسيط؛ تنقص الوحدات ويُضاف المبلغ إلى نقد الخزانة.</p>
+            <p className="ps-hint">سجّل البيع بعد تنفيذه لدى الوسيط؛ تنقص الوحدات ويُضاف المبلغ إلى نقد حساب الدخل.</p>
           </>}
         </>}
 
@@ -234,7 +234,7 @@ export function TreasurySheet({ param, onClose }: PlanSheetProps) {
             options={[{ value: 'transfer', label: 'توزيع أو تحويل' }, { value: 'deposit', label: 'مال جديد' }]} />
           <TextField label="ملاحظة" value={note} onChange={setNote} placeholder={kind === 'transfer' ? 'مثال: توزيع صندوق الصكوك' : 'مثال: من المكافأة'} />
           <DateInput value={date} onChange={setDate} />
-          <p className="ps-hint">{kind === 'deposit' ? 'يُحسب ضمن إيداعات خطتك لهذه السنة.' : 'لا يُحسب إيداعاً جديداً؛ هو مال انتقل إلى الخزانة.'}</p>
+          <p className="ps-hint">{kind === 'deposit' ? 'يُحسب ضمن إيداعات خطتك لهذه السنة.' : 'لا يُحسب إيداعاً جديداً؛ هو مال انتقل إلى حساب الدخل.'}</p>
         </>}
       </div>
     </Sheet>
@@ -266,7 +266,7 @@ export function WithdrawSheet({ param, onClose }: PlanSheetProps) {
       <div className="ps">
         <div className="ps-stats">
           <Stat label="دخلك الشهري حسب خطتك"><Money v={t.monthlyIncome} /></Stat>
-          <Stat label="في الخزانة"><Money v={t.value} /></Stat>
+          <Stat label="في الحساب"><Money v={t.value} /></Stat>
         </div>
         <p className="ps-hint">
           {t.approved && doc?.state.income_year ? `معتمد في مراجعة ${doc.state.income_year}.`
@@ -279,10 +279,10 @@ export function WithdrawSheet({ param, onClose }: PlanSheetProps) {
             <DateInput value={date} onChange={setDate} />
           </div>
           <div className={`ps-after ${after < 0 ? 'bad' : ''}`}>
-            <span>يبقى في الخزانة</span><Money v={Math.max(0, after)} />
+            <span>يبقى في الحساب</span><Money v={Math.max(0, after)} />
           </div>
-          {after < 0 && <Note tone="bad">رصيد الخزانة لا يكفي لهذا المبلغ.</Note>}
-          <p className="ps-hint">يُسجَّل تحويلاً من الخزانة إلى حسابك، ولا يُحسب توزيعاً.</p>
+          {after < 0 && <Note tone="bad">رصيد حساب الدخل لا يكفي لهذا المبلغ.</Note>}
+          <p className="ps-hint">يُسجَّل تحويلاً من حساب الدخل إلى حسابك الجاري، ولا يُحسب توزيعاً.</p>
         </>}
       </div>
     </Sheet>

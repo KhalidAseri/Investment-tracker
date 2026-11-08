@@ -1,5 +1,5 @@
 // Distributions, per-holding zakat (Hijri haul), and the annual income engine.
-import { ZAKAT_RATE, currentTarget, holdingValue, rateOf, type Totals } from './calc'
+import { ZAKAT_RATE, currentTarget, holdingValue, rateOf, zakatRuleOf, type Totals, type ZakatOpts } from './calc'
 import type { Fx, Holding, MoneyEvent, PlanSettings, Sleeve, Snapshot, Transaction } from './types'
 
 // ---------- dates ----------
@@ -56,14 +56,17 @@ export function haulDates(startISO: string, fromISO: string, toISO: string): str
 export const nextHaul = (startISO: string, fromISO: string) => haulDates(startISO, fromISO, isoOf(new Date(utc(fromISO).getTime() + 400 * DAY)))[0] ?? null
 
 export interface ZakatDue { holding: Holding; date: string; amount: number }
-export function zakatSchedule(holdings: Holding[], fx: Fx, fromISO: string, days: number): ZakatDue[] {
+/** Zakat anniversaries in the window, each at today's value and the holding's zakat method (see zakatRuleOf in calc.ts). */
+export function zakatSchedule(holdings: Holding[], fx: Fx, fromISO: string, days: number, opts: ZakatOpts = {}): ZakatDue[] {
   const to = isoOf(new Date(utc(fromISO).getTime() + days * DAY))
   const out: ZakatDue[] = []
   for (const h of holdings) {
-    if (h.archived || h.zakatable === false || !h.zakat_start) continue
+    if (h.archived || !h.zakat_start) continue
     const v = holdingValue(h, fx)
     if (v <= 0) continue
-    for (const date of haulDates(h.zakat_start, fromISO, to)) out.push({ holding: h, date, amount: (v * ZAKAT_RATE) / 100 })
+    const factor = zakatRuleOf(h, opts).factor
+    if (factor <= 0) continue
+    for (const date of haulDates(h.zakat_start, fromISO, to)) out.push({ holding: h, date, amount: (v * factor * ZAKAT_RATE) / 100 })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }

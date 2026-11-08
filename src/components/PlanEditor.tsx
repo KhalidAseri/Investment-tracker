@@ -14,14 +14,19 @@ import type { Layer, Sleeve } from '../lib/types'
 import { Card, Chev, KV, Money, Pct, StackBar } from './kit'
 import { NumberField, Segmented, SelectField, Sheet, Switch, TextField } from './ui'
 import { IconAlert, IconCheck, IconClose, IconPlus } from './icons'
+import {
+  ASSET_CLASS_LABEL, CASH_CLASSES, CATALOG, CLASS_LAYER, OPEN_PLATFORMS, findInstrument, normalizeCatalogItem, rankedForClass,
+  type AssetClass, type CatalogItem, type Platform,
+} from '../lib/catalog'
+import { Ticker, platformShort, shortName } from './InstrumentCard'
 
 // =====================================================================================
 // Shared bits
 // =====================================================================================
-export type PlanSection = 'goal' | 'phases' | 'milestones' | 'contributions' | 'emergency' | 'income' | 'rules' | 'steps'
+export type PlanSection = 'goal' | 'phases' | 'sleeves' | 'contributions' | 'emergency' | 'income' | 'rules' | 'steps'
 export const SECTION_TITLE: Record<PlanSection, string> = {
-  goal: 'الهدف', phases: 'المراحل والأوزان', milestones: 'المحطات', contributions: 'مصادر الإيداع',
-  emergency: 'صندوق الطوارئ', income: 'خزانة الدخل', rules: 'القواعد', steps: 'الخطوات',
+  goal: 'الهدف', phases: 'المراحل والأوزان', sleeves: 'ترتيب البناء والأدوات', contributions: 'مصادر الإيداع',
+  emergency: 'صندوق الطوارئ', income: 'حساب الدخل', rules: 'القواعد', steps: 'الخطوات',
 }
 
 /** Arabic counted noun: 1, 2, 3–10, 11+ */
@@ -33,7 +38,6 @@ export const monthsText = (n: number) => {
 }
 export const sleevesText = (n: number) => counted(n, 'طبقة واحدة', 'طبقتان', 'طبقات', 'طبقة')
 export const phasesText = (n: number) => counted(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')
-export const milestonesText = (n: number) => counted(n, 'محطة واحدة', 'محطتان', 'محطات', 'محطة')
 export const stepsText = (n: number) => counted(n, 'خطوة واحدة', 'خطوتان', 'خطوات', 'خطوة')
 /** noun after a number of percentage points */
 const pointsWord = (n: number) => (Number.isInteger(n) && n >= 3 && n <= 10 ? 'نقاط' : 'نقطة')
@@ -129,6 +133,175 @@ function Editor({ title, onClose, busy, onSave, extra, issues, children, saveLab
 }
 
 // =====================================================================================
+// Instruments: ordered picks from the catalog (filtered by class and the plan's platforms) or the owner's own
+// =====================================================================================
+const CLASS_OPTIONS = (Object.keys(ASSET_CLASS_LABEL) as AssetClass[]).map((c) => ({ value: c, label: ASSET_CLASS_LABEL[c] }))
+const nameOfItem = (id: string, custom: CatalogItem[]) => { const n = findInstrument(id, custom)?.name; return n ? shortName(n) : id }
+
+/** «الأولى» marks the instrument the advisor buys first. */
+export function InstrumentPicker({ label, value, onChange, classes, platforms, custom, onAddCustom, hint }: {
+  label: string; value: string[]; onChange: (ids: string[]) => void; classes: AssetClass[]; platforms: Platform[]
+  custom: CatalogItem[]; onAddCustom: (it: CatalogItem) => void; hint?: string
+}) {
+  const [adding, setAdding] = useState(false)
+  const [onlyMine, setOnlyMine] = useState(platforms.length > 0)
+  const [own, setOwn] = useState<{ name: string; code: string; kind: 'yahoo' | 'nav'; currency: string } | null>(null)
+  const candidates = useMemo(() => {
+    const seen = new Set<string>()
+    const out: CatalogItem[] = []
+    const ownOfClass = custom.filter((c) => !classes.length || classes.includes(c.class))
+    const fromCatalog = classes.length
+      ? classes.flatMap((c) => rankedForClass(c, onlyMine ? platforms : null, CASH_CLASSES.includes(c) ? OPEN_PLATFORMS : []))
+      : CATALOG
+    for (const it of [...ownOfClass, ...fromCatalog]) if (!seen.has(it.id) && !value.includes(it.id)) { seen.add(it.id); out.push(it) }
+    return out
+  }, [classes, platforms, onlyMine, custom, value])
+  const move = (i: number, d: number) => { const j = i + d; if (j < 0 || j >= value.length) return; const n = [...value]; [n[i], n[j]] = [n[j], n[i]]; haptic(); onChange(n) }
+  const saveOwn = () => {
+    if (!own || !own.name.trim()) return
+    const code = own.code.trim()
+    const id = `own-${Date.now().toString(36)}`
+    const it = normalizeCatalogItem({
+      id, name: own.name.trim(), class: classes[0] ?? 'other', source: code ? own.kind : 'manual',
+      symbol: own.kind === 'yahoo' && code ? code.toUpperCase() : null, fund_id: own.kind === 'nav' && code ? code : null,
+      currency: own.currency || 'SAR', platforms,
+    })
+    if (!it) return
+    onAddCustom(it)
+    onChange([...value, it.id])
+    setOwn(null); setAdding(false)
+  }
+  return (
+    <div className="field pe-inst">
+      <span>{label}</span>
+      {value.length > 0 ? (
+        <div className="pe-list">
+          {value.map((id, i) => {
+            const it = findInstrument(id, custom)
+            return (
+              <div key={id} className="pe-row pe-irow">
+                <span className="pe-ord">{i + 1}</span>
+                <span className="pe-main"><b>{it?.name ?? id}</b>
+                  <span>{it?.symbol ? <Ticker v={it.symbol} /> : it?.fund_id ? <>صندوق <Ticker v={it.fund_id} /></> : 'تُحدَّث يدوياً'}{it?.platforms[0] ? ` · ${platformShort(it.platforms[0])}` : ''}{i === 0 ? ' · تُشترى أولاً' : ''}</span>
+                </span>
+                <button type="button" className="icon-btn plain pe-mv" aria-label={`قدّم ${it?.name ?? id}`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                <button type="button" className="icon-btn plain pe-mv" aria-label={`أخّر ${it?.name ?? id}`} disabled={i === value.length - 1} onClick={() => move(i, 1)}>↓</button>
+                <button type="button" className="icon-btn plain pe-del" aria-label={`أزل ${it?.name ?? id}`} onClick={() => { haptic(); onChange(value.filter((x) => x !== id)) }}><IconClose /></button>
+              </div>
+            )
+          })}
+        </div>
+      ) : <small>بلا أداة: يقترح التطبيق الأقل رسوماً من فئتها.</small>}
+      {hint && <small>{hint}</small>}
+      {!adding ? (
+        <button type="button" className="btn soft small pe-add" onClick={() => { haptic(); setAdding(true) }}><IconPlus />أضف أداة</button>
+      ) : own ? (
+        <div className="pe-box">
+          <TextField label="اسم الأداة" value={own.name} onChange={(v) => setOwn({ ...own, name: v })} placeholder="كما يظهر لدى الوسيط" />
+          <Segmented<'yahoo' | 'nav'> label="نوعها" value={own.kind} onChange={(v) => setOwn({ ...own, kind: v })} options={[{ value: 'yahoo', label: 'مدرجة برمز' }, { value: 'nav', label: 'صندوق برقم' }]} />
+          <div className="grid2">
+            <TextField label={own.kind === 'yahoo' ? 'الرمز' : 'رقم الصندوق'} value={own.code} onChange={(v) => setOwn({ ...own, code: v })} ltr placeholder={own.kind === 'yahoo' ? 'مثال: SPUS أو 2222.SR' : 'مثال: 1888'} />
+            <SelectField label="العملة" value={own.currency} onChange={(v) => setOwn({ ...own, currency: v })} options={['SAR', 'USD', 'EUR', 'GBP'].map((c) => ({ value: c, label: c }))} />
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn ghost small" onClick={() => setOwn(null)}>رجوع</button>
+            <button type="button" className="btn primary small grow" disabled={!own.name.trim()} onClick={saveOwn}>أضفها</button>
+          </div>
+        </div>
+      ) : (
+        <div className="pe-box">
+          {platforms.length > 0 && <Switch label="على منصاتك فقط" checked={onlyMine} onChange={setOnlyMine} />}
+          <div className="pe-list pe-cands">
+            {candidates.slice(0, 12).map((it) => (
+              <button key={it.id} type="button" className="pe-row" onClick={() => { haptic(); onChange([...value, it.id]) }}>
+                <span className="pe-main"><b>{it.name}</b>
+                  <span>{it.symbol ? <Ticker v={it.symbol} /> : it.fund_id ? <>صندوق <Ticker v={it.fund_id} /></> : ASSET_CLASS_LABEL[it.class]}{it.platforms[0] ? ` · ${platformShort(it.platforms[0])}` : ''}{it.ter != null ? <> · رسوم <Pct v={it.ter} digits={2} /></> : null}</span>
+                </span>
+                <IconPlus width={16} height={16} />
+              </button>
+            ))}
+            {!candidates.length && <p className="small muted pe-pad">لا أدوات أخرى في القائمة لهذه الفئة.</p>}
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn ghost small" onClick={() => setAdding(false)}>تم</button>
+            <button type="button" className="btn quiet small grow" onClick={() => setOwn({ name: '', code: '', kind: 'yahoo', currency: 'SAR' })}>أداة غير موجودة</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** class, new money, start threshold and instruments of one plan sleeve */
+function SleeveFields({ ps, set, platforms, custom, onAddCustom }: {
+  ps: PlanSleeve; set: (p: Partial<PlanSleeve>) => void; platforms: Platform[]; custom: CatalogItem[]; onAddCustom: (it: CatalogItem) => void
+}) {
+  return <>
+    <SelectField<string> label="ما تحمله الطبقة" value={ps.class ?? ''} onChange={(v) => { const c = (v || null) as AssetClass | null; set(c ? { class: c, layer: CLASS_LAYER[c] } : { class: null }) }}
+      options={[{ value: '', label: 'اختر الفئة' }, ...CLASS_OPTIONS]} />
+    <Switch label="تقبل الأموال الجديدة" hint="إن أُغلقت لا يوجَّه إليها إيداع تلقائي" checked={ps.accepts_new_money} onChange={(v) => set({ accepts_new_money: v })} />
+    <NumberField label="تبدأ عندما تبلغ المحفظة" value={ps.start_at ?? 0} suffix="ريال" min={0} onChange={(v) => set({ start_at: v > 0 ? v : null })}
+      hint={ps.start_at ? 'حتى ذلك تذهب حصتها إلى الطبقات الأخرى' : 'صفر = تبدأ الآن'} />
+    <InstrumentPicker label="الأدوات بالترتيب" value={ps.instruments} onChange={(ids) => set({ instruments: ids })} classes={ps.class ? [ps.class] : []}
+      platforms={platforms} custom={custom} onAddCustom={onAddCustom} />
+  </>
+}
+
+// ---------- build order & instruments ----------
+const byPriority = (list: PlanSleeve[]) => list.map((ps, i) => ({ ps, i })).sort((a, b) => (a.ps.priority ?? 999) - (b.ps.priority ?? 999) || a.i - b.i).map((x) => x.ps)
+
+function SleevesEditor({ doc, onClose }: EP) {
+  const { today } = usePlan()
+  const s = useSection(doc, 'sleeves', onClose)
+  const d = s.draft
+  const [order, setOrder] = useState<string[]>(() => byPriority(doc.sleeves).map((x) => x.key))
+  const [sub, setSub] = useState<PlanSleeve | null>(null)
+  const phase = activePhase(d, today)
+  const platforms = d.profile?.platforms ?? []
+  const addCustom = (it: CatalogItem) => s.setDraft((x) => ({ ...x, custom_instruments: [...x.custom_instruments.filter((c) => c.id !== it.id), it] }))
+  const move = (i: number, dir: number) => { const j = i + dir; if (j < 0 || j >= order.length) return; haptic(); setOrder((o) => { const n = [...o]; [n[i], n[j]] = [n[j], n[i]]; return n }) }
+  const finish = (x: PlanDoc): PlanDoc => ({ ...x, sleeves: x.sleeves.map((ps) => ({ ...ps, priority: order.indexOf(ps.key) + 1 })) })
+  if (sub) {
+    const set = (p: Partial<PlanSleeve>) => setSub((v) => (v ? { ...v, ...p } : v))
+    return (
+      <Sheet title={sub.name} onClose={onClose} footer={<>
+        <button type="button" className="btn ghost" onClick={() => setSub(null)}>رجوع</button>
+        <button type="button" className="btn primary" onClick={() => { s.setDraft((x) => ({ ...x, sleeves: x.sleeves.map((p) => (p.key === sub.key ? sub : p)) })); setSub(null) }}>تم</button>
+      </>}>
+        <div className="stack pe">
+          <SleeveFields ps={sub} set={set} platforms={platforms} custom={d.custom_instruments} onAddCustom={addCustom} />
+        </div>
+      </Sheet>
+    )
+  }
+  return (
+    <Editor title="ترتيب البناء والأدوات" onClose={onClose} busy={s.busy} onSave={() => s.save(finish)} issues={<Issues errors={s.errors} warnings={s.warnings} />}>
+      <p className="small muted">يبدأ صندوق الطوارئ أولاً، ثم الطبقات بهذا الترتيب.</p>
+      <div className="pe-list">
+        {order.map((k, i) => {
+          const ps = d.sleeves.find((x) => x.key === k)
+          if (!ps) return null
+          const w = phase?.weights[k]?.target ?? 0
+          const first = ps.instruments[0] ? nameOfItem(ps.instruments[0], d.custom_instruments) : null
+          return (
+            <div key={k} className="pe-row pe-irow">
+              <span className="pe-ord" style={{ background: layerColor(ps.layer) }}>{i + 1}</span>
+              <button type="button" className="pe-main pe-open" onClick={() => { haptic(); setSub({ ...ps }) }}>
+                <b>{ps.name} <span className="pe-w"><Pct v={w} /></span></b>
+                <span>{ps.class ? ASSET_CLASS_LABEL[ps.class] : 'بلا فئة'}{first ? ` · ${first}` : ' · بلا أداة'}{ps.start_at ? <> · تبدأ عند <Money v={ps.start_at} short /></> : null}{!ps.accepts_new_money ? ' · مغلقة للإيداع' : ''}</span>
+              </button>
+              <button type="button" className="icon-btn plain pe-mv" aria-label={`قدّم ${ps.name}`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+              <button type="button" className="icon-btn plain pe-mv" aria-label={`أخّر ${ps.name}`} disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</button>
+            </div>
+          )
+        })}
+        {!order.length && <p className="small muted pe-pad">أضف طبقات خطتك من «المراحل والأوزان».</p>}
+      </div>
+    </Editor>
+  )
+}
+
+// =====================================================================================
 // Section sheets
 // =====================================================================================
 /** Opens the editor of one section of the active plan. onClose must be stable (Sheet re-focuses when it changes). */
@@ -139,7 +312,7 @@ export function PlanSectionSheet({ section, onClose }: { section: PlanSection; o
   switch (section) {
     case 'goal': return <GoalEditor {...props} />
     case 'phases': return <PhasesEditor {...props} />
-    case 'milestones': return <MilestonesEditor {...props} />
+    case 'sleeves': return <SleevesEditor {...props} />
     case 'contributions': return <ContributionsEditor {...props} />
     case 'emergency': return <EmergencyEditor {...props} />
     case 'income': return <IncomeEditor {...props} />
@@ -230,7 +403,7 @@ function PhasesEditor({ doc, onClose }: EP) {
     haptic()
     setSub(ps
       ? { key: ps.key, ps: { ...ps }, link: resolved[ps.key] ?? '' }
-      : { key: null, ps: { key: '', name: '', layer: 'growth', accepts_new_money: true, note: null }, link: '' })
+      : { key: null, ps: { key: '', name: '', layer: 'growth', accepts_new_money: true, note: null, class: null, priority: null, start_at: null, instruments: [] }, link: '' })
   }
   const applySleeve = () => {
     if (!sub) return
@@ -245,7 +418,7 @@ function PhasesEditor({ doc, onClose }: EP) {
       const key = uniqueKey(sub.ps.layer, [...x.sleeves.map((p) => p.key), ...Object.keys(map)])
       if (sub.link) map[key] = sub.link
       return {
-        ...x, sleeves: [...x.sleeves, { ...sub.ps, key, name }], sleeve_map: map,
+        ...x, sleeves: [...x.sleeves, { ...sub.ps, key, name, priority: sub.ps.priority ?? Math.max(0, ...x.sleeves.map((p) => p.priority ?? 0)) + 1 }], sleeve_map: map,
         phases: x.phases.map((p) => ({ ...p, weights: { ...p.weights, [key]: { target: 0, min: 0, max: 0 } } })),
       }
     })
@@ -272,7 +445,7 @@ function PhasesEditor({ doc, onClose }: EP) {
     s.setDraft((x) => {
       const key = uniqueKey(row.layer, [...x.sleeves.map((p) => p.key), ...Object.keys(x.sleeve_map ?? {})])
       return {
-        ...x, sleeves: [...x.sleeves, { key, name: row.name, layer: row.layer, accepts_new_money: !!row.accepts_new_money, note: row.note }],
+        ...x, sleeves: [...x.sleeves, { key, name: row.name, layer: row.layer, accepts_new_money: !!row.accepts_new_money, note: row.note, class: null, priority: null, start_at: null, instruments: [] }],
         sleeve_map: { ...(x.sleeve_map ?? {}), [key]: row.id },
         phases: x.phases.map((p) => ({ ...p, weights: { ...p.weights, [key]: { target: 0, min: 0, max: 0 } } })),
       }
@@ -310,11 +483,17 @@ function PhasesEditor({ doc, onClose }: EP) {
       </>}>
         <div className="stack pe">
           <TextField label="الاسم" value={sub.ps.name} onChange={(v) => set({ name: v })} placeholder="مثال: صكوك حكومية سعودية" />
-          <SelectField<Layer> label="المجموعة" value={sub.ps.layer} onChange={(v) => set({ layer: v })} options={LAYERS.map((l) => ({ value: l, label: LAYER_NAMES[l] }))} />
-          <Switch label="تقبل الأموال الجديدة" hint="إن أُغلقت لا يوجَّه إليها إيداع" checked={sub.ps.accepts_new_money} onChange={(v) => set({ accepts_new_money: v })} />
-          <SelectField label="في محفظتك" value={sub.link} onChange={(v) => setSub((x) => (x ? { ...x, link: v } : x))} options={options} />
-          <TextField label="الأداة المقترحة أو ملاحظة" value={sub.ps.note ?? ''} onChange={(v) => set({ note: v.trim() ? v : null })} />
-          {sub.link && usedBy(sub.link) > 0 && <p className="tiny muted">فيها {countAssets(usedBy(sub.link))}</p>}
+          <SleeveFields ps={sub.ps} set={set} platforms={d.profile?.platforms ?? []} custom={d.custom_instruments}
+            onAddCustom={(it) => s.setDraft((x) => ({ ...x, custom_instruments: [...x.custom_instruments.filter((c) => c.id !== it.id), it] }))} />
+          <details className="more">
+            <summary>خيارات إضافية</summary>
+            <div className="more-body">
+              <SelectField<Layer> label="المجموعة" value={sub.ps.layer} onChange={(v) => set({ layer: v })} options={LAYERS.map((l) => ({ value: l, label: LAYER_NAMES[l] }))} />
+              <SelectField label="في محفظتك" value={sub.link} onChange={(v) => setSub((x) => (x ? { ...x, link: v } : x))} options={options} />
+              <TextField label="ملاحظة" value={sub.ps.note ?? ''} onChange={(v) => set({ note: v.trim() ? v : null })} />
+              {sub.link && usedBy(sub.link) > 0 && <p className="tiny muted">فيها {countAssets(usedBy(sub.link))}</p>}
+            </div>
+          </details>
         </div>
       </Sheet>
     )
@@ -411,51 +590,6 @@ function PhasesEditor({ doc, onClose }: EP) {
   )
 }
 
-// ---------- milestones ----------
-function MilestonesEditor({ doc, onClose }: EP) {
-  const { progress, today } = usePlan()
-  const s = useSection(doc, 'milestones', onClose)
-  const d = s.draft
-  const planValue = progress?.planValue ?? 0
-  const setM = (i: number, p: Partial<(typeof d.milestones)[number]>) => s.setDraft((x) => ({ ...x, milestones: x.milestones.map((m, j) => (j === i ? { ...m, ...p } : m)) }))
-  const add = () => {
-    haptic()
-    const last = [...d.milestones].sort((a, b) => b.date.localeCompare(a.date))[0]
-    const base = last?.date ?? today
-    s.setDraft((x) => ({ ...x, milestones: [...x.milestones, { date: addMonthsISO(base, 12), value: Math.round(last?.value ?? planValue), label: null }] }))
-  }
-  const finish = (x: PlanDoc): PlanDoc => ({ ...x, milestones: [...x.milestones].sort((a, b) => a.date.localeCompare(b.date)) })
-  return (
-    <Editor title="المحطات" onClose={onClose} busy={s.busy} onSave={() => s.save(finish)} issues={<Issues errors={s.errors} warnings={s.warnings} />}>
-      <div className="pe-box">
-        <div className="pe-head"><h3>نقطة البداية</h3>
-          <button type="button" className="btn soft small" onClick={() => { haptic(); s.setDraft((x) => ({ ...x, baseline: { date: today, value: Math.round(planValue) } })) }}>ابدأ من قيمتها اليوم</button>
-        </div>
-        {d.baseline ? (
-          <div className="grid2">
-            <DateField label="التاريخ" value={d.baseline.date} onChange={(v) => v && s.setDraft((x) => ({ ...x, baseline: { ...x.baseline!, date: v } }))} />
-            <NumberField label="القيمة" value={d.baseline.value} suffix="ريال" onChange={(v) => s.setDraft((x) => ({ ...x, baseline: { ...x.baseline!, value: v } }))} />
-          </div>
-        ) : <p className="small muted">بلا نقطة بداية يبدأ المسار من أول محطة.</p>}
-      </div>
-      <div className="pe-head"><h3>{d.milestones.length ? milestonesText(d.milestones.length) : 'المحطات'}</h3><button type="button" className="btn soft small" onClick={add}><IconPlus />محطة</button></div>
-      {d.milestones.map((m, i) => (
-        <div key={i} className="pe-box">
-          <div className="pe-head"><span className="tiny muted">المحطة {i + 1}</span>
-            <button type="button" className="icon-btn plain pe-del" aria-label="احذف المحطة" onClick={() => s.setDraft((x) => ({ ...x, milestones: x.milestones.filter((_, j) => j !== i) }))}><IconClose /></button>
-          </div>
-          <div className="grid2">
-            <DateField label="التاريخ" value={m.date} onChange={(v) => v && setM(i, { date: v })} />
-            <NumberField label="القيمة المخططة" value={m.value} suffix="ريال" onChange={(v) => setM(i, { value: v })} />
-          </div>
-          <TextField label="الوصف" value={m.label ?? ''} onChange={(v) => setM(i, { label: v.trim() ? v : null })} placeholder="اختياري" />
-        </div>
-      ))}
-      {!d.milestones.length && <p className="small muted">المحطة قيمة تريد بلوغها في تاريخ محدد، وبها يقيس التطبيق تقدمك.</p>}
-    </Editor>
-  )
-}
-
 // ---------- contributions ----------
 function ContributionsEditor({ doc, onClose }: EP) {
   const s = useSection(doc, 'contributions', onClose)
@@ -540,10 +674,10 @@ function EmergencyEditor({ doc, onClose }: EP) {
   const { progress } = usePlan()
   const s = useSection(doc, 'emergency', onClose)
   const e = s.draft.emergency
-  const set = (p: Partial<NonNullable<PlanDoc['emergency']>>) => s.setDraft((x) => ({ ...x, emergency: { months: 6, monthly_expense: 0, ...x.emergency, ...p } }))
+  const set = (p: Partial<NonNullable<PlanDoc['emergency']>>) => s.setDraft((x) => ({ ...x, emergency: { months: 6, monthly_expense: 0, instruments: [], liquid_months: null, ...x.emergency, ...p } }))
   return (
     <Editor title="صندوق الطوارئ" onClose={onClose} busy={s.busy} onSave={() => s.save()} issues={<Issues errors={s.errors} warnings={s.warnings} />}>
-      <Switch label="صندوق طوارئ في خطتك" hint="سيولة متاحة خارج المحفظة" checked={!!e} onChange={(v) => s.setDraft((x) => ({ ...x, emergency: v ? { months: 6, monthly_expense: 0 } : null }))} />
+      <Switch label="صندوق طوارئ في خطتك" hint="سيولة متاحة خارج المحفظة" checked={!!e} onChange={(v) => s.setDraft((x) => ({ ...x, emergency: v ? { months: 6, monthly_expense: 0, instruments: [], liquid_months: null } : null }))} />
       {e && <>
         <div className="grid2">
           <NumberField label="يغطي" value={e.months} plain min={0} max={36} suffix="أشهر" onChange={(v) => set({ months: Math.round(v) })} />
@@ -554,13 +688,18 @@ function EmergencyEditor({ doc, onClose }: EP) {
           {e.monthly_expense > 0 ? <Money v={e.months * e.monthly_expense} /> : <span className="warn small">اكتب مصروفك الشهري</span>}
         </div>
         {progress && progress.emergency.value > 0 && <div className="pe-total soft"><span>لديك الآن</span><Money v={progress.emergency.value} /></div>}
+        <NumberField label="أشهر متاحة فوراً" value={e.liquid_months ?? 0} plain min={0} max={e.months} suffix="أشهر" onChange={(v) => set({ liquid_months: v > 0 ? Math.round(v) : null })}
+          hint="سيولة يومية، والباقي في أدوات قصيرة أعلى عائداً" />
+        <InstrumentPicker label="أين تضعه" value={e.instruments} onChange={(ids) => set({ instruments: ids })} classes={['money_market', 'savings_sukuk', 'murabaha', 'cash']}
+          platforms={s.draft.profile?.platforms ?? []} custom={s.draft.custom_instruments}
+          onAddCustom={(it) => s.setDraft((x) => ({ ...x, custom_instruments: [...x.custom_instruments.filter((c) => c.id !== it.id), it] }))} />
       </>}
     </Editor>
   )
 }
 
 // ---------- income treasury ----------
-const DEFAULT_INCOME: PlanIncome = { start: null, method: 'percent', annual_pct: 4, fixed_monthly: null, band_pct: 10, treasury_months: 24, transfer_day: 27, no_sell_drawdown_pct: 20, build_from: null }
+const DEFAULT_INCOME: PlanIncome = { start: null, method: 'percent', annual_pct: 4, fixed_monthly: null, band_pct: 10, treasury_months: 24, transfer_day: 27, no_sell_drawdown_pct: 20, build_from: null, instruments: [] }
 
 function IncomeEditor({ doc, onClose }: EP) {
   const { progress } = usePlan()
@@ -571,8 +710,8 @@ function IncomeEditor({ doc, onClose }: EP) {
   const approved = s.draft.state.income_annual
   const monthly = !inc ? 0 : inc.method === 'fixed' ? Number(inc.fixed_monthly) || 0 : (approved ?? (planValue * (Number(inc.annual_pct) || 0)) / 100) / 12
   return (
-    <Editor title="خزانة الدخل" onClose={onClose} busy={s.busy} onSave={() => s.save()} issues={<Issues errors={s.errors} warnings={s.warnings} />}>
-      <Switch label="خزانة دخل في خطتك" hint="تُبنى من المحفظة وتحوّل منها دخلك الشهري" checked={!!inc} onChange={(v) => s.setDraft((x) => ({ ...x, income: v ? { ...DEFAULT_INCOME } : null }))} />
+    <Editor title="حساب الدخل" onClose={onClose} busy={s.busy} onSave={() => s.save()} issues={<Issues errors={s.errors} warnings={s.warnings} />}>
+      <Switch label="حساب دخل في خطتك" hint="يُنقل إليه دخل السنة مرة واحدة، وتسحب منه مبلغاً ثابتاً كل شهر" checked={!!inc} onChange={(v) => s.setDraft((x) => ({ ...x, income: v ? { ...DEFAULT_INCOME } : null }))} />
       {inc && <>
         <DateField label="يبدأ الدخل في" value={inc.start} onChange={(v) => set({ start: v })} />
         <Segmented<'percent' | 'fixed'> label="طريقة الدخل" value={inc.method} onChange={(v) => set({ method: v, fixed_monthly: v === 'fixed' ? inc.fixed_monthly ?? Math.round(monthly) : inc.fixed_monthly })}
@@ -581,7 +720,7 @@ function IncomeEditor({ doc, onClose }: EP) {
           ? <NumberField label="نسبة السحب السنوية" value={inc.annual_pct} suffix="%" decimals={2} onChange={(v) => set({ annual_pct: v })} />
           : <NumberField label="الدخل الشهري" value={inc.fixed_monthly} suffix="ريال" onChange={(v) => set({ fixed_monthly: v || null })} />}
         <div className="grid2">
-          <NumberField label="حجم الخزانة" value={inc.treasury_months} plain min={0} max={120} suffix="شهراً" onChange={(v) => set({ treasury_months: Math.round(v) })} />
+          <NumberField label="يغطي دخل" value={inc.treasury_months} plain min={0} max={120} suffix="شهراً" onChange={(v) => set({ treasury_months: Math.round(v) })} />
           <NumberField label="يوم التحويل" value={inc.transfer_day} plain min={1} max={28} onChange={(v) => set({ transfer_day: Math.round(v) || 1 })} />
         </div>
         {monthly > 0 && (
@@ -594,10 +733,13 @@ function IncomeEditor({ doc, onClose }: EP) {
           <summary>قواعد إضافية</summary>
           <div className="more-body">
             {inc.method === 'percent' && <NumberField label="أقصى تغيّر للدخل بين سنة وأخرى" value={inc.band_pct} suffix="%" decimals={1} onChange={(v) => set({ band_pct: v })} />}
-            <NumberField label="أوقف بيع الأسهم عند هبوطها من القمة" value={inc.no_sell_drawdown_pct} suffix="%" onChange={(v) => set({ no_sell_drawdown_pct: v })} hint="عندها يُصرف من الخزانة والتوزيعات فقط" />
-            <DateField label="ابدأ تعبئة الخزانة من" value={inc.build_from} onChange={(v) => set({ build_from: v })} hint="بلا تاريخ تبدأ مع بدء الدخل" />
+            <NumberField label="أوقف بيع الأسهم عند هبوطها من القمة" value={inc.no_sell_drawdown_pct} suffix="%" onChange={(v) => set({ no_sell_drawdown_pct: v })} hint="عندها يُصرف من حساب الدخل والتوزيعات فقط" />
+            <DateField label="ابدأ بناء الحساب من" value={inc.build_from} onChange={(v) => set({ build_from: v })} hint="بلا تاريخ يبدأ قبل الدخل بمدة تغطيته" />
           </div>
         </details>
+        <InstrumentPicker label="أين تضعه" value={inc.instruments} onChange={(ids) => set({ instruments: ids })} classes={['money_market', 'sukuk_sar', 'murabaha', 'savings_sukuk']}
+          platforms={s.draft.profile?.platforms ?? []} custom={s.draft.custom_instruments} hint="سيولة وصكوك قصيرة تستحق على مواعيد السحب"
+          onAddCustom={(it) => s.setDraft((x) => ({ ...x, custom_instruments: [...x.custom_instruments.filter((c) => c.id !== it.id), it] }))} />
       </>}
     </Editor>
   )
@@ -629,6 +771,15 @@ function RulesEditor({ doc, onClose }: EP) {
         <small>بلا اختيار يُقاس هبوط المحفظة كلها</small>
       </div>
       <NumberField label="النطاق الاحتياطي" value={band} suffix="نقطة" decimals={1} onChange={setBand} hint="لطبقة بلا حد أدنى وأعلى في خطتك" />
+      <div className="pe-block">
+        <div className="pe-head"><h3>تقسيم الإيداع</h3></div>
+        <div className="grid2">
+          <NumberField label="أصغر شراء" value={r.min_ticket} suffix="ريال" min={0} onChange={(v) => set({ min_ticket: v })} />
+          <NumberField label="طبقات في كل إيداع" value={r.max_lines} plain min={1} max={9} onChange={(v) => set({ max_lines: Math.max(1, Math.round(v)) })} />
+        </div>
+        <NumberField label="أصغر مركز يستحق الفتح" value={r.min_position} suffix="ريال" min={0} onChange={(v) => set({ min_position: v })} hint="يُحسب منه حدّ بدء الطبقات الصغيرة" />
+        <NumberField label="التضخم المتوقع" value={r.inflation_pct} suffix="%" decimals={1} min={0} max={20} onChange={(v) => set({ inflation_pct: v })} hint="في حساب الدخل الآمن وفحص السيولة" />
+      </div>
     </Editor>
   )
 }
@@ -701,8 +852,6 @@ export function planGaps(doc: PlanDoc): Missing[] {
   for (const e of check.errors.slice(0, 3)) out.push({ key: `e:${e}`, title: e, section: /إيداع|المبلغ|اليوم يجب|الشهر يجب|دفعات/.test(e) ? 'contributions' : /الدخل|التحويل|السحب|الخزانة|البيع/.test(e) ? 'income' : 'phases', tone: 'bad' })
   if (doc.emergency && doc.emergency.months > 0 && !(doc.emergency.monthly_expense > 0)) out.push({ key: 'expense', title: 'حدّد مصروفك الشهري', section: 'emergency', tone: 'warn' })
   if (!doc.contributions.length || doc.contributions.every((c) => !(c.amount > 0))) out.push({ key: 'contrib', title: 'اكتب مبالغ الإيداع', section: 'contributions', tone: 'warn' })
-  if (!doc.milestones.length) out.push({ key: 'milestones', title: 'أضف محطات تقيس بها تقدمك', section: 'milestones', tone: 'warn' })
-  else if (!doc.baseline) out.push({ key: 'baseline', title: 'حدّد نقطة البداية', section: 'milestones', tone: 'warn' })
   if (doc.income && !doc.income.start) out.push({ key: 'income-start', title: 'حدّد تاريخ بدء الدخل', section: 'income', tone: 'warn' })
   if (doc.goal.monthly_income == null && doc.goal.target_capital == null) out.push({ key: 'goal', title: 'اكتب هدفك', section: 'goal', tone: 'warn' })
   return out
@@ -723,9 +872,6 @@ export function PlanSections({ doc, onEdit }: { doc: PlanDoc; onEdit?: (s: PlanS
   const { today, progress } = usePlan()
   const phase = activePhase(doc, today)
   const phases = [...doc.phases].sort((a, b) => a.start.localeCompare(b.start))
-  const ms = [...doc.milestones].sort((a, b) => a.date.localeCompare(b.date))
-  const shownMs = ms.filter((m) => m.date >= today).slice(0, 4)
-  const passed = ms.length - ms.filter((m) => m.date >= today).length
   const nameOf = (k: string) => doc.sleeves.find((s) => s.key === k)?.name ?? k
   const steps = doc.steps
   // the same count as the progress view (a yearly step counts as done only for its year)
@@ -768,11 +914,22 @@ export function PlanSections({ doc, onEdit }: { doc: PlanDoc; onEdit?: (s: PlanS
         {doc.sleeves.some((s) => !map[s.key]) && <p className="tiny muted" style={{ marginTop: 8 }}>تُنشأ الطبقات الجديدة في محفظتك تلقائياً.</p>}
       </SectionCard>
 
-      <SectionCard section="milestones" onEdit={onEdit} sub={ms.length ? milestonesText(ms.length) : undefined}>
-        {doc.baseline && <KV label={<>البداية<small>{dateLong(doc.baseline.date)}</small></>} value={<Money v={doc.baseline.value} />} />}
-        {shownMs.map((m) => <KV key={m.date} label={<>{m.label ?? m.date.slice(0, 4)}<small>{dateLong(m.date)}</small></>} value={<Money v={m.value} />} />)}
-        {!ms.length && <p className="small muted">لا محطات بعد.</p>}
-        {(passed > 0 || ms.filter((m) => m.date >= today).length > 4) && <p className="tiny muted pd-more">{passed > 0 ? `${milestonesText(passed)} مضت` : ''}{passed > 0 && ms.filter((m) => m.date >= today).length > 4 ? ' · ' : ''}{ms.filter((m) => m.date >= today).length > 4 ? `و${milestonesText(ms.filter((m) => m.date >= today).length - 4)} لاحقاً` : ''}</p>}
+      <SectionCard section="sleeves" onEdit={onEdit} sub={doc.sleeves.length ? sleevesText(doc.sleeves.length) : undefined}>
+        {doc.sleeves.length ? (
+          <ol className="pd-order">
+            {byPriority(doc.sleeves).map((ps, i) => {
+              const first = ps.instruments[0] ? findInstrument(ps.instruments[0], doc.custom_instruments) : null
+              return (
+                <li key={ps.key}>
+                  <span className="pd-ord" style={{ background: layerColor(ps.layer) }}>{i + 1}</span>
+                  <span className="pd-oname"><b>{ps.name}</b>
+                    <small>{first ? <>{shortName(first.name)}{first.symbol && <> <Ticker v={first.symbol} /></>}</> : ps.class ? ASSET_CLASS_LABEL[ps.class] : 'بلا أداة'}{ps.start_at ? <> · تبدأ عند <Money v={ps.start_at} short /></> : null}</small>
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+        ) : <p className="small muted">لا طبقات بعد.</p>}
       </SectionCard>
 
       <SectionCard section="contributions" onEdit={onEdit}>
@@ -786,6 +943,8 @@ export function PlanSections({ doc, onEdit }: { doc: PlanDoc; onEdit?: (s: PlanS
           <KV label="يغطي" value={monthsText(em.months)} />
           <KV label="المصروف الشهري" value={em.monthly_expense > 0 ? <Money v={em.monthly_expense} /> : <span className="warn small">لم يُحدَّد</span>} />
           {em.monthly_expense > 0 && <KV label="الهدف" value={<Money v={em.months * em.monthly_expense} />} />}
+          {em.liquid_months ? <KV label="متاح فوراً" value={monthsText(em.liquid_months)} /> : null}
+          {em.instruments.length > 0 && <KV label="أين تضعه" value={<span className="pd-step">{nameOfItem(em.instruments[0], doc.custom_instruments)}</span>} sub={em.instruments.length > 1 ? `و${em.instruments.length - 1} بديل` : undefined} />}
         </> : <p className="small muted">غير مضمَّن في الخطة.</p>}
       </SectionCard>
 
@@ -794,10 +953,11 @@ export function PlanSections({ doc, onEdit }: { doc: PlanDoc; onEdit?: (s: PlanS
           <KV label="يبدأ الدخل" value={inc.start ? dateLong(inc.start) : <span className="warn small">لم يُحدَّد</span>} />
           <KV label="القاعدة" value={inc.method === 'percent' ? <><Pct v={inc.annual_pct} digits={2} /> سنوياً</> : <><Money v={inc.fixed_monthly ?? 0} /> شهرياً</>}
             sub={inc.method === 'percent' ? <>أقصى تغيّر <Pct v={inc.band_pct} /> بين سنة وأخرى</> : undefined} />
-          <KV label="حجم الخزانة" value={`دخل ${monthsText(inc.treasury_months)}`} />
+          <KV label="يغطي" value={`دخل ${monthsText(inc.treasury_months)}`} />
           <KV label="يوم التحويل" value={<>{inc.transfer_day} من كل شهر</>} />
           <KV label="إيقاف البيع" value={<>عند هبوط <Pct v={inc.no_sell_drawdown_pct} /></>} />
-        </> : <p className="small muted">غير مفعّلة.</p>}
+          {inc.instruments.length > 0 && <KV label="أين تضعه" value={<span className="pd-step">{nameOfItem(inc.instruments[0], doc.custom_instruments)}</span>} />}
+        </> : <p className="small muted">غير مفعّل.</p>}
       </SectionCard>
 
       <SectionCard section="rules" onEdit={onEdit}>
@@ -805,6 +965,8 @@ export function PlanSections({ doc, onEdit }: { doc: PlanDoc; onEdit?: (s: PlanS
         <KV label="الهبوط الكبير" value={<Pct v={doc.rules.crash_pct} />} sub={doc.rules.crash_sleeves.length ? doc.rules.crash_sleeves.map(nameOf).join('، ') : 'المحفظة كلها'} />
         <KV label="الأموال الجديدة" value={doc.rules.new_money_first ? 'للناقص أولاً' : 'حسب الأوزان'} />
         <KV label="النطاق الاحتياطي" value={<><bdi dir="ltr">±{Number(settings?.rebalance_band ?? 0)}</bdi> {pointsWord(Number(settings?.rebalance_band ?? 0))}</>} />
+        <KV label="أصغر شراء" value={<Money v={doc.rules.min_ticket} />} sub={`حتى ${doc.rules.max_lines} طبقات في الإيداع`} />
+        <KV label="التضخم المتوقع" value={<Pct v={doc.rules.inflation_pct} />} />
       </SectionCard>
 
       <SectionCard section="steps" onEdit={onEdit} sub={steps.length ? <><bdi dir="ltr">{done}/{steps.length}</bdi></> : undefined}>

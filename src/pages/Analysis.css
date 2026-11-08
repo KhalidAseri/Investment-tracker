@@ -58,7 +58,7 @@
 /* diversification: two independent columns on desktop, blocks 1–4 in order on phones */
 .an-cols { display: flex; flex-direction: column; gap: 16px; }
 .an-c { display: contents; }
-.an-o1 { order: 1; } .an-o2 { order: 2; } .an-o3 { order: 3; } .an-o4 { order: 4; }
+.an-o1 { order: 1; } .an-o2 { order: 2; } .an-o3 { order: 3; } .an-o4 { order: 4; } .an-o5 { order: 5; } .an-o6 { order: 6; } .an-o7 { order: 7; } .an-o8 { order: 8; }
 @media (min-width: 960px) {
   .an-cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
   .an-c { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -96,3 +96,23 @@
 /* allowed range of the active plan phase on the actual-vs-target bars */
 .alloc-bar .band { position: absolute; inset-block: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .alloc-nums .an-range { display: block; font-size: 11.5px; color: var(--muted); font-family: var(--font-ui); line-height: 1.3; }
+
+/* allocation (التوزيع): map, lists, coverage */
+.an-scope { margin: -4px 0 12px; }
+.an-scope .segmented { display: flex; width: 100%; }
+@media (min-width: 600px) { .an-scope .segmented { display: inline-flex; width: auto; } }
+.an-map-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.an-map-facts span { display: inline-flex; align-items: center; gap: 6px; }
+.an-map-facts b { color: var(--ink-2); font-weight: 600; font-family: var(--font-display); }
+.an-map-facts .dot { width: 8px; height: 8px; }
+.btn.an-more { align-self: flex-start; min-height: 30px; padding: 0 2px; }
+.an-foot.flat { margin-top: 0; }
+.an-cov-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.an-cov-top b { font-family: var(--font-display); font-weight: 600; font-size: 24px; color: var(--accent); }
+.an-cov-top span { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
+.an-unknown { margin: 6px -16px 0; border-top: 1px solid var(--line); }
+.an-unknown .ri { padding: 10px 16px; }
+.an-unknown .ri .chev { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.an-lead { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.an-expo .expo-track { height: 6px; }
+.an-expo .expo-track { background: color-mix(in srgb, var(--line) 80%, transparent); }

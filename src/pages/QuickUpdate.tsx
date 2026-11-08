@@ -8,7 +8,8 @@ import { assetColor, haptic, usePrivacy } from '../lib/ui'
 import type { Fx, Holding } from '../lib/types'
 import { Avatar, Empty, Money, Pill } from '../components/kit'
 import { IconCheck } from '../components/icons'
-import { SignedSar, curLabel, isLump, isStale, updatedLabel } from './Asset'
+import { SignedSar, curLabel, dueText, isLump, isStale, updatedLabel } from './Asset'
+import { overdueDays, updateEveryLabel } from '../lib/staleness'
 import './QuickUpdate.css'
 
 type Edit = { price: number | null; qty: number | null; ok: boolean }
@@ -32,10 +33,15 @@ const needLabel = (n: number) =>
 export default function QuickUpdate({ go }: { go: Go }) {
   const { holdings, accounts, sleeves, fx, upsert, notify, readOnly } = useStore()
   // the order is fixed when the screen opens, so rows don't jump while saving
-  const [order] = useState(() => holdings
-    .filter((h) => !h.archived && (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0)
-    .sort((a, b) => (a.price_updated_at ?? '').localeCompare(b.price_updated_at ?? ''))
-    .map((h) => h.id))
+  // due ones first (most overdue first), then the rest by how soon they fall due
+  const [order] = useState(() => {
+    const now = Date.now()
+    return holdings
+      .filter((h) => !h.archived && (h.price_source === 'manual' || h.price_source === 'nav') && Number(h.quantity) > 0)
+      .map((h) => ({ h, od: overdueDays(h, now) ?? -Infinity }))
+      .sort((a, b) => b.od - a.od || (a.h.price_updated_at ?? '').localeCompare(b.h.price_updated_at ?? ''))
+      .map((x) => x.h.id)
+  })
   const [edits, setEdits] = useState<Record<string, Edit>>({})
   const [busy, setBusy] = useState(false)
 
@@ -77,12 +83,18 @@ export default function QuickUpdate({ go }: { go: Go }) {
         <p>حدّث ما تغيّر، وأكّد ما بقي على حاله.</p>
         {stale > 0 && <span className="chip warn">{needLabel(stale)}</span>}
       </div>
-      <div className="qu-list">
-        {rows.map((r) => (
-          <UpdateRow key={r.h.id} r={r} color={assetColor(r.h, sleeves)} account={accounts.find((a) => a.id === r.h.account_id)?.name ?? null}
-            onEdit={(p) => setEdit(r.h.id, p)} />
+      {[{ key: 'due', title: 'مستحق الآن', list: rows.filter((r) => isStale(r.h)) }, { key: 'later', title: 'لاحقاً', list: rows.filter((r) => !isStale(r.h)) }]
+        .filter((g) => g.list.length > 0).map((g) => (
+          <section key={g.key} className="qu-group">
+            <h3 className={`qu-gh ${g.key}`}>{g.title}<span>{g.list.length}</span></h3>
+            <div className="qu-list">
+              {g.list.map((r) => (
+                <UpdateRow key={r.h.id} r={r} color={assetColor(r.h, sleeves)} account={accounts.find((a) => a.id === r.h.account_id)?.name ?? null}
+                  onEdit={(p) => setEdit(r.h.id, p)} />
+              ))}
+            </div>
+          </section>
         ))}
-      </div>
       <div className="qu-bar">
         {Math.abs(net) >= 1 && <span className="qu-net">التغيّر<b className={net > 0 ? 'good' : 'bad'}><SignedSar v={net} /></b></span>}
         <button type="button" className="btn primary" disabled={!toSave.length || busy} onClick={saveAll}>
@@ -100,7 +112,8 @@ function UpdateRow({ r, color, account, onEdit }: { r: RowState; color: string; 
   const hint = (s: string) => (hidden ? '' : s)
   const cur = curLabel(h.currency)
   const diff = after - before
-  const sub = [account, h.price_source === 'nav' ? 'يتحدث من مباشر' : null].filter(Boolean).join(' · ')
+  const sub = [h.price_source === 'nav' && h.update_every_days == null ? 'يتحدث من مباشر' : updateEveryLabel(h), account].filter(Boolean).join(' · ')
+  const due = dueText(h)
   return (
     <article className={`qu-item ${changed ? 'is-changed' : e.ok ? 'is-ok' : ''}`}>
       <div className="qu-head">
@@ -125,7 +138,7 @@ function UpdateRow({ r, color, account, onEdit }: { r: RowState; color: string; 
           <b className="figure">{sar(after)}</b>
           {Math.abs(diff) >= 1 && <Pill value={diff} />}
         </> : <>
-          <span className={`qu-when ${isStale(h) && !e.ok ? 'warn' : ''}`}>{e.ok ? 'تُؤكَّد عند الحفظ' : updatedLabel(h.price_updated_at)}</span>
+          <span className={`qu-when ${isStale(h) && !e.ok ? 'warn' : ''}`}>{e.ok ? 'تُؤكَّد عند الحفظ' : isStale(h) && due ? due : <>{updatedLabel(h.price_updated_at)}{due ? ` · ${due}` : ''}</>}</span>
           <button type="button" className={`btn small qu-ok ${e.ok ? 'soft' : 'ghost'}`} aria-pressed={e.ok} onClick={() => { haptic(); onEdit({ ok: !e.ok }) }}>
             {e.ok && <IconCheck />}القيمة كما هي
           </button>

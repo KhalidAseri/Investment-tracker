@@ -1,0 +1,46 @@
+/* ===================== deposit planner (Deposit.tsx) ===================== */
+.dp { display: flex; flex-direction: column; gap: 14px; max-width: 760px; margin-inline: auto; width: 100%; }
+@media (min-width: 960px) { .dp { gap: 18px; } }
+.dp-invite { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border-radius: var(--radius); background: var(--accent-soft); color: var(--ink); text-decoration: none; }
+.dp-invite .ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.dp-invite .ico svg { width: 20px; height: 20px; }
+.dp-invite p { flex: 1; min-width: 0; }
+.dp-invite b { display: block; font-weight: 600; }
+.dp-invite small { display: block; color: var(--muted); font-size: 12.5px; }
+
+.dp-amount { display: flex; flex-direction: column; gap: 12px; }
+.dp-input { display: flex; align-items: baseline; gap: 8px; border-bottom: 2px solid var(--line); padding-bottom: 4px; }
+.dp-input:focus-within { border-color: var(--accent); }
+.dp-input .amount-input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--font-display); font-weight: 600; font-size: clamp(32px, 10vw, 42px); line-height: 1.2; font-variant-numeric: tabular-nums; padding: 0; text-align: start; direction: ltr; }
+.dp-input > span { color: var(--muted); font-size: 15px; }
+.dp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.dp-chips button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer; font-family: var(--font-display); }
+.dp-chips button[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.dp-chips .money { font-weight: 600; }
+
+.dp-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 12px; font-size: 13px; color: var(--ink-2); }
+.dp-legend span { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dp-legend i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dp-legend b { margin-inline-start: auto; font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
+.dp-legend b .money { font-weight: 600; }
+
+.dp-line { display: flex; flex-direction: column; gap: 12px; }
+.dp-line-head { display: flex; align-items: center; gap: 10px; }
+.dp-n { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 13px; }
+.dp-kind { display: block; font-size: 12px; color: var(--muted); }
+.dp-line-head b { display: block; font-weight: 600; font-size: 15px; line-height: 1.35; }
+.dp-amt { font-family: var(--font-display); font-weight: 600; font-size: 18px; white-space: nowrap; }
+.dp-amt .money { font-weight: 600; }
+.dp-fill { display: flex; flex-direction: column; gap: 5px; }
+.dp-fill small { font-size: 12px; color: var(--muted); }
+.dp-fill small .money { color: var(--ink-2); font-weight: 600; }
+.dp-track { position: relative; height: 8px; border-radius: 999px; background: var(--sunken); }
+.dp-track i { position: absolute; top: 0; bottom: 0; display: block; }
+.dp-track .was { inset-inline-start: 0; background: var(--c); border-radius: 999px; opacity: 0.55; }
+.dp-track .add { background: var(--c); border-radius: 999px; }
+.dp-track .tgt { top: -3px; bottom: -3px; width: 2px; margin-inline-start: -1px; border-radius: 2px; background: var(--ink); }
+.dp-note { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+.dp-notes { display: flex; flex-direction: column; gap: 8px; }
+.dp-notes p { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--warn-soft); font-size: 13px; line-height: 1.55; }
+.dp-notes svg { width: 16px; height: 16px; flex: none; color: var(--warn); margin-top: 3px; }
+.dp-foot { font-size: 12.5px; color: var(--muted); text-align: center; padding: 0 8px; }

@@ -66,9 +66,12 @@ export function todayLabel(d = new Date()) {
 }
 
 // ---------- actions from anywhere (the shell listens) ----------
-export type ActionKind = 'sheet' | 'asset' | 'payout' | 'tx' | 'rebalance' | 'treasury' | 'withdraw' | 'emergency'
+export type ActionKind = 'sheet' | 'asset' | 'payout' | 'tx' | 'rebalance' | 'treasury' | 'withdraw' | 'emergency' | 'buy'
 export type ActionRequest = { kind: ActionKind; param?: string }
-/** Opens a sheet from anywhere; `param` is passed to the sheet (e.g. an amount or a plan action key). */
+/**
+ * Opens a sheet from anywhere; `param` is passed to the sheet (e.g. an amount or a plan action key).
+ * 'buy' (BuySheet): param = a roadmap key ('emergency' | 'treasury' | 'sleeve:<plan key>') or JSON from buyParam().
+ */
 export const openAction = (kind: ActionKind = 'sheet', param?: string) => {
   haptic()
   window.dispatchEvent(new CustomEvent<ActionRequest>('masar:action', { detail: { kind, param } }))
@@ -96,4 +99,14 @@ export function initialsOf(name: string, symbol?: string | null) {
   const latin = words.filter((w) => /^[A-Za-z]/.test(w))
   if (latin.length) return (latin[0][0] + (latin[1]?.[0] ?? '')).toUpperCase()
   return sym.slice(0, 3) || '•'
+}
+
+/** What the BuySheet should open with (all optional): roadmap key, catalog id, SAR amount, holding to add to, units, unit price. */
+export interface BuyRequest { key?: string | null; item?: string | null; amount?: number | null; holding?: string | null; units?: number | null; price?: number | null }
+export const buyParam = (r: BuyRequest) => JSON.stringify(r)
+export function readBuyParam(param?: string | null): BuyRequest {
+  const t = String(param ?? '').trim()
+  if (!t) return {}
+  if (t.startsWith('{')) { try { const o = JSON.parse(t); return o && typeof o === 'object' ? o as BuyRequest : {} } catch { return {} } }
+  return { key: t }
 }

@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { Account, Fx, Goal, Holding, IbkrConnection, IncomeStream, MoneyEvent, Obligation, OtherAsset, PlanRow, PlanSettings, Sleeve, Snapshot, Transaction, WatchItem } from './types'
 import { normalizePlan, planSleeveSync } from './plan'
+import { computeTotals } from './calc'
 import { todayISO } from './format'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -341,9 +342,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // ---------- the active plan's phase drives the sleeves (owner only) ----------
-  // On load, whenever the active plan or its phase changes, and when the date rolls over: target_now/target_fi,
-  // band_min/band_max, accepts_new_money and layer follow the active phase; missing sleeves are created and the
-  // plan's sleeve_map is stored. Every screen keeps reading sleeves.target_now.
+  // On load, whenever the active plan, its phase or the portfolio's value changes, and when the date rolls over:
+  // target_now/target_fi, band_min/band_max, accepts_new_money and layer follow the active phase's EFFECTIVE targets
+  // (sleeves waiting for their start_at hand their share to the active ones); missing sleeves are created and the plan's
+  // sleeve_map is stored. Only differences are written, so a write never triggers another. Every screen keeps reading
+  // sleeves.target_now.
   const [day, setDay] = useState(todayISO)
   useEffect(() => {
     const t = window.setInterval(() => setDay((d) => (d === todayISO() ? d : todayISO())), 15 * 60 * 1000)
@@ -358,7 +361,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!active) return
     const doc = normalizePlan(active.doc, day)
     if (!doc.sleeves.length) return
-    const plan = planSleeveSync(doc, sleeves, day)
+    const totals = computeTotals(holdings, accounts, sleeves, fx)
+    const plan = planSleeveSync(doc, sleeves, day, { total: totals.total, bySleeve: totals.bySleeve })
     if (!plan.updates.length && !plan.inserts.length && !plan.mapChanged) return
     const sig = JSON.stringify([active.id, plan.updates, plan.inserts.map((i) => i.key), plan.map])
     if (failedSync.current === sig) return
@@ -401,7 +405,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSyncTick((t) => t + 1)
       }
     })()
-  }, [session?.user?.id, loading, readOnly, settings?.user_id, plans, sleeves, day, syncTick])
+  }, [session?.user?.id, loading, readOnly, settings?.user_id, plans, sleeves, holdings, accounts, fx, day, syncTick])
 
   const value = useMemo<Store>(() => ({
     session, ready, loading, error, settings, sleeves, accounts, holdings, transactions, events, snapshots, watchlist, streams, obligations, goals, otherAssets, plans,

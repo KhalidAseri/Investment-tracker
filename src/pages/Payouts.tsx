@@ -1,23 +1,30 @@
-// «الدخل»: expected and received payouts, income instruments, zakat and purification.
+// «الدخل»: the income account and how much to take each month, periodic income sources and maturities, expected and received
+// payouts, zakat by each holding's method, and purification.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useStore } from '../lib/store'
 import { useDerived } from '../lib/derived'
-import { ZAKAT_RATE, holdingValue } from '../lib/calc'
+import { ZAKAT_RATE, holdingValue, zakatEstimate, zakatRuleOf, type ZakatOpts } from '../lib/calc'
 import { dateLong, dateShort, monthName, num0, num2, pct, relativeDays, sar, todayISO } from '../lib/format'
 import {
-  FREQ_LABEL, daysBetween, hijriLabel, incomeTxIn, isoOf, nominalValue, payoutAnnual, payoutPerPayment, treasuryHoldingIds, utc, type PayoutItem,
+  FREQ_LABEL, daysBetween, hijriLabel, incomeTxIn, isoOf, nominalValue, payoutAnnual, payoutPerPayment, treasuryHoldingIds, utc, zakatSchedule, type PayoutItem,
 } from '../lib/income'
 import { usePlan, usePlanOps } from '../lib/usePlan'
+import { activePlanDoc } from '../lib/market'
+import { ASSET_CLASS_LABEL, type AssetClass } from '../lib/catalog'
+import { holdingClass, holdingContext } from '../lib/lookthrough'
 import { purification } from '../lib/wealth'
 import type { Holding, Transaction } from '../lib/types'
 import { MonthBars } from '../components/charts'
 import { NumberField, SelectField, Sheet, Switch, TextField } from '../components/ui'
-import { Avatar, Chev, DateBadge, Empty, Money } from '../components/kit'
+import { Avatar, Chev, DateBadge, Empty, Money, Pct } from '../components/kit'
 import { IconAlert, IconCoins, IconPlus } from '../components/icons'
+import { IncomeAccount } from '../components/IncomeAccount'
+import { SafeIncome } from '../components/SafeIncome'
+import { ZakatMethodSheet, zakatMethodText } from '../components/ZakatMethodSheet'
 import { assetColor, haptic, openAction, useCountUp } from '../lib/ui'
 import './Payouts.css'
 
-type Tab = 'next' | 'got' | 'tools'
+type Tab = 'next' | 'got'
 type Freq = Holding['payout_freq']
 
 const DAY = 86400000
@@ -37,6 +44,7 @@ const openAsset = (id: string) => { haptic(); location.hash = `/asset/${encodeUR
 const counted = (n: number, one: string, two: string, few: string, many: string) =>
   (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`)
 const toolsText = (n: number) => counted(n, 'أداة واحدة', 'أداتان', 'أدوات', 'أداة')
+const assetsText = (n: number) => counted(n, 'أصل واحد', 'أصلان', 'أصول', 'أصلاً')
 const forAssets = (n: number) => (n === 1 ? 'لأصل واحد' : n === 2 ? 'لأصلين' : n <= 10 ? `لـ ${n} أصول` : `لـ ${n} أصلاً`)
 const payoutsOf = (h: Holding) => (h.payout_freq ?? 'none') !== 'none'
 
@@ -79,9 +87,20 @@ function Row({ start, title, href, sub, end, className = '' }: {
   )
 }
 
+const FREQ_ORDER: Freq[] = ['monthly', 'quarterly', 'semiannual', 'annual']
+/** the next payment date on or after today, rolling a past payout_next forward by its frequency */
+function nextPayDate(h: Holding, today: string): string | null {
+  const step = STEP[h.payout_freq ?? 'none']
+  if (!step || !h.payout_next) return null
+  let d = h.payout_next
+  for (let k = 1; d < today && k < 1200; k++) d = addMonths(h.payout_next, k * step)
+  return h.maturity_date && d > h.maturity_date ? null : d
+}
+
 export default function Payouts() {
   const { holdings, transactions, sleeves, accounts, goals, fx, readOnly } = useStore()
   const d = useDerived()
+  const plan = usePlan()
   const [tab, setTab] = useState<Tab>('next')
   const [recording, setRecording] = useState<Partial<PayoutItem> | null>(null)
   const [horizon, setHorizon] = useState(90)
@@ -91,7 +110,7 @@ export default function Payouts() {
   const data = useMemo(() => {
     if (!d) return null
     const yearAgo = addDays(today, -365)
-    // received income only: a monthly transfer out of the income treasury is not a distribution
+    // received income only: a monthly transfer out of the income account is not a distribution
     const isIncomeTx = incomeTxIn(treasuryHoldingIds(holdings, goals))
     const incomeTx = transactions.filter(isIncomeTx)
     const received = incomeTx.filter((t) => t.tx_date > yearAgo && t.tx_date <= today)
@@ -99,16 +118,27 @@ export default function Payouts() {
     const expected = d.payouts.filter((p) => p.kind === 'payout').reduce((a, p) => a + (p.amount ?? 0), 0)
 
     const live = holdings.filter((h) => !h.archived && Number(h.quantity) > 0)
-    const instruments = live.filter((h) => payoutsOf(h) || h.maturity_date)
-    let annual = 0, paying = 0
-    for (const h of instruments) {
-      const a = payoutAnnual(h, fx), v = holdingValue(h, fx)
-      if (a != null && a > 0 && v > 0) { annual += a; paying += v }
-    }
-    const yieldPct = paying > 0 ? (annual / paying) * 100 : null
-    const unknown = instruments.filter((h) => payoutsOf(h) && payoutAnnual(h, fx) == null)
-    const rank = (h: Holding) => (payoutsOf(h) ? payoutAnnual(h, fx) ?? -1 : 0)
-    const tools = [...instruments].sort((a, b) => rank(b) - rank(a))
+    // periodic income sources, by frequency
+    const paying = live.filter(payoutsOf)
+    let annual = 0, payingValue = 0
+    const sources = paying.map((h) => {
+      const a = payoutAnnual(h, fx)
+      const v = holdingValue(h, fx)
+      if (a != null && a > 0 && v > 0) { annual += a; payingValue += v }
+      return { h, annual: a, value: v, yield: a != null && v > 0 ? (a / v) * 100 : null, next: nextPayDate(h, today) }
+    })
+    const groups = FREQ_ORDER.map((f) => {
+      const list = sources.filter((s) => s.h.payout_freq === f).sort((x, y) => (y.annual ?? -1) - (x.annual ?? -1))
+      return { freq: f, list, sum: list.reduce((t, s) => t + (s.annual ?? 0), 0) }
+    }).filter((g) => g.list.length)
+    const yieldPct = payingValue > 0 ? (annual / payingValue) * 100 : null
+    const unknown = paying.filter((h) => payoutAnnual(h, fx) == null)
+
+    // maturities in the next 24 months
+    const until = addDays(today, 730)
+    const maturities = live.filter((h) => h.maturity_date && h.maturity_date >= today && h.maturity_date <= until)
+      .map((h) => ({ h, date: h.maturity_date as string, amount: nominalValue(h, fx) }))
+      .sort((a, b) => a.date.localeCompare(b.date))
 
     // payments whose date has passed with nothing recorded for them yet
     const paidSince = (h: Holding, from: string, kind: (t: Transaction) => boolean) =>
@@ -151,7 +181,7 @@ export default function Payouts() {
 
     return {
       expected, received, receivedSum, incomeTx, hasOlder: incomeTx.some((t) => t.tx_date <= yearAgo),
-      annual, yieldPct, unknown, tools, awaiting, bars, missing,
+      annual, yieldPct, unknown, groups, maturities, awaiting, bars, missing, sourceCount: paying.length,
     }
   }, [d, holdings, transactions, sleeves, accounts, goals, fx, today])
 
@@ -165,8 +195,9 @@ export default function Payouts() {
   const quickUntil = addDays(today, 15)
   const record = (p: Partial<PayoutItem>) => { haptic(); setRecording(p) }
   const nameOf = (id: string | null) => holdings.find((h) => h.id === id)
-  const hasAny = data.tools.length > 0 || data.incomeTx.length > 0
+  const hasAny = data.sourceCount > 0 || data.incomeTx.length > 0 || data.maturities.length > 0
   const rateWord = owner ? <span className="inc-warn">حدّد النسبة</span> : <span className="inc-none">بلا نسبة</span>
+  const avatar = (h: Holding) => <Avatar name={h.name} symbol={h.symbol && h.price_source === 'yahoo' ? h.symbol : null} color={assetColor(h, sleeves)} size={38} />
 
   const payRow = (p: PayoutItem, late = false) => (
     <Row key={p.holding.id + p.date + p.kind} className={late ? 'late' : ''}
@@ -189,13 +220,6 @@ export default function Payouts() {
       </div>
     </div>
   )
-  const noTools = (
-    <>
-      <Empty icon={<IconCoins />} title="لا توجد أدوات دخل بعد" text="أضف صندوق توزيعات أو صكوكاً أو مرابحة لترى دخلها هنا."
-        action={owner ? { label: 'أضف أصلاً', onClick: () => openAction('asset') } : undefined} />
-      {missingChips}
-    </>
-  )
 
   const upcoming = (
     <>
@@ -206,10 +230,8 @@ export default function Payouts() {
         </div>
       )}
       {ahead.length === 0 && data.awaiting.length === 0 ? (
-        data.tools.length === 0 ? noTools : (
-          <Empty title={horizon < 365 ? 'لا دفعات خلال 3 أشهر' : 'لا دفعات خلال السنة'}
-            action={horizon < 365 && hiddenCount > 0 ? { label: 'اعرض السنة', onClick: () => setHorizon(365) } : undefined} />
-        )
+        <Empty title={horizon < 365 ? 'لا دفعات خلال 3 أشهر' : 'لا دفعات خلال السنة'}
+          action={horizon < 365 && hiddenCount > 0 ? { label: 'اعرض السنة', onClick: () => setHorizon(365) } : undefined} />
       ) : byMonth(ahead, (p) => p.date).map(([key, list]) => (
         <div key={key}>
           <div className="inc-month"><b>{monthTitle(key)}</b>{list.length > 1 && <Money v={list.reduce((a, p) => a + (p.kind === 'payout' ? p.amount ?? 0 : 0), 0)} />}</div>
@@ -240,7 +262,7 @@ export default function Payouts() {
             const title = h?.name ?? (t.note || 'توزيع')
             return (
               <Row key={t.id} title={title} href={h ? assetHref(h.id) : undefined}
-                start={<Avatar name={title} symbol={h?.symbol && h.price_source === 'yahoo' ? h.symbol : null} color={h ? assetColor(h, sleeves) : 'var(--income)'} size={38} />}
+                start={h ? avatar(h) : <Avatar name={title} color="var(--income)" size={38} />}
                 sub={<>{dateShort(t.tx_date)}{t.source === 'ibkr' ? ' · IBKR' : t.source === 'import' ? ' · مستورد' : ''}</>}
                 end={<Money v={Number(t.amount_sar)} signed className="good" />} />
             )
@@ -255,39 +277,63 @@ export default function Payouts() {
     </>
   )
 
-  const toolsView = (
-    <>
-      {data.tools.length === 0 ? noTools : (
+  // «مصادر الدخل الدوري»: each paying holding with its frequency, yearly amount, yield, next date and share
+  const sources = (
+    <section className="card flush inc-side inc-o4">
+      <div className="card-head"><h3>مصادر الدخل الدوري</h3>{data.annual > 0 && <span className="inc-head-sum"><Money v={data.annual} /> سنوياً</span>}</div>
+      {data.groups.length === 0 ? (
         <>
-          <div className="inc-month"><b>{toolsText(data.tools.length)}</b><span><Money v={data.annual} /> سنوياً</span></div>
-          {data.tools.map((h) => {
-            const freq = h.payout_freq ?? 'none'
-            const annual = payoutAnnual(h, fx)
-            const rateText = h.payout_basis === 'per_unit'
-              ? (h.payout_per_unit != null ? `${num2(Number(h.payout_per_unit))} ${h.currency} للوحدة` : 'بلا مبلغ')
-              : (h.payout_rate != null ? `${+Number(h.payout_rate).toFixed(2)}%` : 'بلا نسبة')
-            const sub = freq !== 'none'
-              ? `${FREQ_LABEL[freq]} · ${rateText}${h.maturity_date ? ` · حتى ${h.maturity_date.slice(0, 4)}` : ''}`
-              : `يستحق ${dateLong(h.maturity_date)}`
-            return (
-              <Row key={h.id} title={h.name} href={assetHref(h.id)} sub={sub}
-                start={<Avatar name={h.name} symbol={h.symbol && h.price_source === 'yahoo' ? h.symbol : null} color={assetColor(h, sleeves)} size={38} />}
-                end={freq === 'none'
-                  ? <><Money v={nominalValue(h, fx)} /><span className="sub">عند الاستحقاق</span></>
-                  : annual == null ? rateWord
-                    : <><Money v={annual} /><span className="sub">سنوياً</span></>} />
-            )
-          })}
+          <Empty icon={<IconCoins />} title="لا مصادر دخل دوري بعد" text="أضف صندوق توزيعات أو صكوكاً لترى دخلها هنا."
+            action={owner ? { label: 'أضف أصلاً', onClick: () => openAction('asset') } : undefined} />
           {missingChips}
         </>
-      )}
-    </>
+      ) : <>
+        {data.yieldPct != null && (
+          <div className="inc-figure">
+            <span>عائد التوزيع على هذه الأدوات <b className="inc-y"><Pct v={data.yieldPct} /></b> سنوياً</span>
+          </div>
+        )}
+        {data.groups.map((g) => (
+          <div key={g.freq}>
+            <div className="inc-month"><span className="chip accent inc-freq">{FREQ_LABEL[g.freq]}</span>{g.sum > 0 && <Money v={g.sum} />}</div>
+            {g.list.map((s) => (
+              <Row key={s.h.id} title={s.h.name} href={assetHref(s.h.id)} start={avatar(s.h)}
+                sub={<>{s.yield != null ? <Pct v={s.yield} /> : 'بلا نسبة'}{s.next ? <> · القادم {dateShort(s.next)}</> : null}</>}
+                end={s.annual == null ? rateWord : <>
+                  <Money v={s.annual} />
+                  <span className="sub">{data.annual > 0 ? <><Pct v={(s.annual / data.annual) * 100} digits={0} /> من الدخل</> : 'سنوياً'}</span>
+                </>} />
+            ))}
+          </div>
+        ))}
+        {missingChips}
+      </>}
+    </section>
+  )
+
+  // «الاستحقاقات القادمة»: capital coming back within 24 months, to be reinvested by the plan
+  const maturities = data.maturities.length > 0 && (
+    <section className="card flush inc-side inc-o5">
+      <div className="card-head"><h3>الاستحقاقات القادمة</h3><span className="inc-head-sum">خلال سنتين</span></div>
+      {data.maturities.map((m) => (
+        <div key={m.h.id} className="inc-mat">
+          <Row title={m.h.name} href={assetHref(m.h.id)} start={<DateBadge iso={m.date} today={today} />}
+            sub={<>{relativeDays(m.date)} · يعود رأس المال</>} end={<Money v={m.amount} />} />
+          {owner && (
+            <div className="inc-mat-act">
+              <span>أعد استثماره حسب خطتك</span>
+              <a className="btn soft small" href={`#/deposit/${Math.round(m.amount)}`} onClick={() => haptic()}>وزّع المبلغ</a>
+            </div>
+          )}
+        </div>
+      ))}
+    </section>
   )
 
   return (
-    <div className="inc layout two">
-      <div className="inc-col">
-        <section className="hero inc-hero">
+    <div className="inc inc-cols">
+      <div className="inc-c">
+        <section className="hero inc-hero inc-o1">
           <div className="hero-top">
             <span>الدخل المتوقع خلال 12 شهراً</span>
             {owner && <button type="button" className="sync" onClick={() => record({ date: today })}><IconPlus /> سجّل توزيعاً</button>}
@@ -301,7 +347,7 @@ export default function Payouts() {
         </section>
 
         {owner && data.unknown.length > 0 && (
-          <button type="button" className="banner" onClick={() => openAsset(data.unknown[0].id)}>
+          <button type="button" className="banner inc-o1" onClick={() => openAsset(data.unknown[0].id)}>
             <span className="ico"><IconAlert /></span>
             <p>{data.unknown.length === 1 ? 'حدّد نسبة التوزيع لأداة واحدة' : `حدّد نسبة التوزيع لـ ${toolsText(data.unknown.length)}`}
               <small>{data.unknown.slice(0, 2).map((h) => h.name).join('، ')}{data.unknown.length > 2 ? '…' : ''}</small></p>
@@ -309,8 +355,11 @@ export default function Payouts() {
           </button>
         )}
 
+        <div className="inc-o2"><IncomeAccount /></div>
+        <div className="inc-o3"><SafeIncome /></div>
+
         {hasAny && (
-          <section className="card inc-chart">
+          <section className="card inc-chart inc-o6">
             <div className="card-head">
               <h3>الدخل حسب الشهر</h3>
               <div className="legend inc-legend">
@@ -322,20 +371,22 @@ export default function Payouts() {
           </section>
         )}
 
-        <section className="card flush inc-feed">
+        <section className="card flush inc-feed inc-o7">
           <div className="inc-seg">
             <div className="segmented full" role="group" aria-label="عرض الدخل">
-              {([['next', 'القادم'], ['got', 'وصلك'], ['tools', 'الأدوات']] as Array<[Tab, string]>).map(([k, label]) => (
+              {([['next', 'القادم'], ['got', 'وصلك']] as Array<[Tab, string]>).map(([k, label]) => (
                 <button key={k} type="button" aria-pressed={tab === k} onClick={() => { haptic(); setTab(k) }}>{label}</button>
               ))}
             </div>
           </div>
-          {tab === 'next' ? upcoming : tab === 'got' ? receivedView : toolsView}
+          {tab === 'next' ? upcoming : receivedView}
         </section>
       </div>
 
-      <div className="inc-col">
-        <ZakatCard />
+      <div className="inc-c">
+        {sources}
+        {maturities}
+        <ZakatCard zakatOpts={plan.ctx?.zakat} />
         <Purification />
       </div>
 
@@ -344,41 +395,78 @@ export default function Payouts() {
   )
 }
 
-/** Zakat due in the next 12 months, each holding on its own Hijri anniversary. */
-function ZakatCard() {
-  const { holdings, fx, readOnly } = useStore()
-  const d = useDerived()
-  if (!d) return null
+/** Zakat at today's value by each holding's method, by class and by holding (tap to change the method), and the 12-month schedule. */
+function ZakatCard({ zakatOpts }: { zakatOpts?: ZakatOpts }) {
+  const { holdings, fx, readOnly, sleeves, goals, plans } = useStore()
+  const [editing, setEditing] = useState<Holding | null>(null)
   const today = todayISO()
-  const due = d.zakatDue
-  const total = due.reduce((a, z) => a + z.amount, 0)
-  const noHaul = holdings
-    .filter((h) => !h.archived && h.zakatable !== false && !h.zakat_start && holdingValue(h, fx) > 0)
-    .sort((a, b) => holdingValue(b, fx) - holdingValue(a, fx))
-  const nothing = d.zakat.base <= 0
+  const z = useMemo(() => {
+    const opts = zakatOpts ?? {}
+    const live = holdings.filter((h) => !h.archived && holdingValue(h, fx) > 0)
+    const est = zakatEstimate(live, fx, opts)
+    const hctx = holdingContext({ doc: activePlanDoc(plans), sleeves, goals })
+    const rows = live.map((h) => {
+      const r = zakatRuleOf(h, opts)
+      const v = holdingValue(h, fx)
+      return { h, rule: r, cls: r.cls ?? holdingClass(h, hctx), value: v, amount: (v * r.factor * ZAKAT_RATE) / 100 }
+    }).sort((a, b) => b.amount - a.amount || b.value - a.value)
+    const byClass = new Map<AssetClass, number>()
+    for (const r of rows) if (r.amount > 0) byClass.set(r.cls, (byClass.get(r.cls) ?? 0) + r.amount)
+    const classes = [...byClass.entries()].sort((a, b) => b[1] - a[1])
+    const due = zakatSchedule(live, fx, today, 365, opts)
+    const noHaul = live.filter((h) => zakatRuleOf(h, opts).factor > 0 && !h.zakat_start).sort((a, b) => holdingValue(b, fx) - holdingValue(a, fx))
+    return { est, rows, classes, due, noHaul }
+  }, [holdings, fx, zakatOpts, sleeves, goals, plans, today])
+  const { est, rows, classes, due, noHaul } = z
+  const max = Math.max(0, ...classes.map(([, v]) => v))
+  const scheduled = due.reduce((a, x) => a + x.amount, 0)
 
   return (
-    <section className="card flush inc-side">
-      <div className="card-head"><h3>الزكاة</h3>{!nothing && <span className="chip">{pct(ZAKAT_RATE)}</span>}</div>
-      {nothing ? (
-        <Empty title="لا أصول عليها زكاة" />
-      ) : <>
+    <section className="card flush inc-side inc-o8">
+      <div className="card-head"><h3>الزكاة</h3>{est.amount > 0 && <span className="chip">{pct(ZAKAT_RATE)}</span>}</div>
+      {rows.length === 0 ? <Empty title="لا أصول بعد" /> : <>
         <div className="inc-figure">
-          <b className="money">{sar(total)}</b>
-          <span>{due.length ? 'خلال 12 شهراً، تقديرية بقيمة اليوم' : 'لم تُحدَّد مواعيد الحول بعد'}</span>
+          <b className="money">{sar(est.amount)}</b>
+          <span>زكاة سنة كاملة بقيمة اليوم، بطريقة كل أصل</span>
         </div>
-        {due.length > 0 && (
-          <div className="inc-list">
-            {due.map((z) => (
-              <Row key={z.holding.id + z.date} start={<DateBadge iso={z.date} today={today} />}
-                title={z.holding.name} href={assetHref(z.holding.id)}
-                sub={hijriLabel(z.date) || dateLong(z.date)} end={<Money v={z.amount} />} />
+        {classes.length > 0 && (
+          <div className="inc-zcls">
+            {classes.map(([c, v]) => (
+              <div key={c} className="expo-row">
+                <div className="inc-zline"><span>{ASSET_CLASS_LABEL[c]}</span><Money v={v} /></div>
+                <div className="expo-track"><i style={{ width: `${Math.max(2, (v / (max || 1)) * 100)}%`, background: 'var(--accent)' }} /></div>
+              </div>
             ))}
           </div>
         )}
+        <details className="inc-zdet">
+          <summary>طريقة كل أصل<span>{assetsText(rows.length)}</span></summary>
+          <div className="inc-list">
+            {rows.map((r) => (
+              <button key={r.h.id} type="button" className="ri inc-zrow" onClick={() => { haptic(); setEditing(r.h) }}>
+                <span className="ri-main"><b>{r.h.name}</b><span>{zakatMethodText(r.rule.method, r.rule.ratio)}{r.rule.source === 'holding' || r.rule.source === 'choice' ? ' · اختيارك' : ''}</span></span>
+                <span className="ri-end">{r.amount > 0 ? <Money v={r.amount} /> : <span className="inc-none">لا شيء</span>}</span>
+                <Chev />
+              </button>
+            ))}
+          </div>
+        </details>
+        {due.length > 0 && <>
+          <div className="inc-month"><b>المواعيد خلال 12 شهراً</b><Money v={scheduled} /></div>
+          <div className="inc-list">
+            {due.map((x) => (
+              <Row key={x.holding.id + x.date} start={<DateBadge iso={x.date} today={today} />}
+                title={x.holding.name} href={assetHref(x.holding.id)}
+                sub={hijriLabel(x.date) || dateLong(x.date)} end={<Money v={x.amount} />} />
+            ))}
+          </div>
+        </>}
       </>}
-      {d.zakat.exempt > 0 && (
-        <div className="inc-kv"><span>مستثنى باختيارك</span><Money v={d.zakat.exempt} /></div>
+      {est.exempt > 0 && (
+        <div className="inc-kv"><span>لا زكاة عليه</span><Money v={est.exempt} /></div>
+      )}
+      {est.notDue > 0 && (
+        <div className="inc-kv"><span>لا زكاة على أصله</span><Money v={est.notDue} /></div>
       )}
       {!readOnly && noHaul.length > 0 && (
         <div className="inc-foot">
@@ -395,6 +483,8 @@ function ZakatCard() {
           )}
         </div>
       )}
+      <p className="inc-zcheck">طرق الحساب آراء فقهية شائعة؛ للتأكد راجع جهة شرعية موثوقة.</p>
+      {editing && <ZakatMethodSheet holding={editing} onClose={() => setEditing(null)} />}
     </section>
   )
 }
@@ -412,7 +502,7 @@ function Purification() {
   const p = purification(transactions, holdings, `${year}-01-01`, `${year}-12-31`)
 
   return (
-    <section className="card flush inc-side">
+    <section className="card flush inc-side inc-o9">
       <div className="card-head">
         <h3>التطهير</h3>
         {years.length > 1 && (
@@ -447,7 +537,7 @@ export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<Payou
   const plan = usePlan()
   const ops = usePlanOps()
   const maturity = initial.kind === 'maturity'
-  // with an income treasury, a distribution can go straight into it (on by default once income has started)
+  // with an income account, a distribution can go straight into it (on by default once income has started)
   const treasuryGoal = goals.find((g) => g.kind === 'income' && !g.archived) ?? null
   const [toTreasury, setToTreasury] = useState(() => !!plan.progress?.treasury.started)
   // instruments that pay come first in the list
@@ -488,7 +578,7 @@ export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<Payou
       else if (next) await upsert('holdings', { id: h.id, payout_next: next })
       const moved = !maturity && !!treasuryGoal && toTreasury && h.goal_id !== treasuryGoal.id
         ? await ops.toTreasury(amount, date, note || `توزيع ${h.name}`, 'transfer') : false
-      notify(maturity ? 'سُجّل الاستحقاق' : moved ? 'سُجّل التوزيع وأُضيف إلى خزانة الدخل' : 'سُجّل التوزيع')
+      notify(maturity ? 'سُجّل الاستحقاق' : moved ? 'سُجّل التوزيع وأُضيف إلى حساب الدخل' : 'سُجّل التوزيع')
       onClose()
     }
     setBusy(false)
@@ -506,7 +596,7 @@ export function RecordPayoutSheet({ initial, onClose }: { initial: Partial<Payou
         </div>
         {maturity && <Switch label="أغلق الأصل بعد الاستحقاق" hint="تُصفَّر وحداته ويُنقل إلى الأرشيف" checked={close} onChange={setClose} />}
         {!maturity && treasuryGoal && h?.goal_id !== treasuryGoal.id && (
-          <Switch label="أضفه إلى خزانة الدخل" hint="يُضاف المبلغ إلى نقد الخزانة دون أن يُحسب إيداعاً جديداً" checked={toTreasury} onChange={setToTreasury} />
+          <Switch label="أضفه إلى حساب الدخل" hint="يُضاف المبلغ إلى رصيد الحساب دون أن يُحسب إيداعاً جديداً" checked={toTreasury} onChange={setToTreasury} />
         )}
         {next && <p className="small muted">يصبح موعد التوزيع القادم {dateLong(next)}.</p>}
         <TextField label="ملاحظة" value={note} onChange={setNote} />

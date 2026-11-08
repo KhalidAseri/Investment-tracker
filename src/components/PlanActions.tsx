@@ -2,7 +2,7 @@
 // The row's button runs the action's CTA: a route, a sheet opened through openAction, or "mark step done".
 import type { ReactNode } from 'react'
 import { relativeDays } from '../lib/format'
-import { openAction, haptic } from '../lib/ui'
+import { buyParam, openAction, haptic } from '../lib/ui'
 import { usePlanOps } from '../lib/usePlan'
 import { useStore } from '../lib/store'
 import type { ActionArea, PlanAction } from '../lib/plan'
@@ -36,6 +36,8 @@ export function useRunPlanAction() {
       if (ok) notify('أحسنت، سُجّلت الخطوة منجزة')
       return ok
     }
+    // «الأولوية التالية»: record the purchase for that roadmap item (the BuySheet shows the instrument and the amount)
+    if (c.action === 'buy') { openAction('buy', buyParam({ key: c.param ?? null, amount: a.amount ?? null })); return true }
     if (c.action === 'review') { location.hash = '/review'; return true }
     if (c.action === 'update') { location.hash = '/update'; return true }
     if (c.action === 'rebalance' || c.action === 'treasury' || c.action === 'withdraw' || c.action === 'emergency') {
@@ -61,6 +63,8 @@ export function ActionRow({ a, compact, onDismiss }: { a: PlanAction; compact?: 
   if (a.due && a.area !== 'zakat' && a.area !== 'step') sub.push(<span key="due">{relativeDays(a.due)}</span>)
   const subLine = sub.length ? <small>{sub.flatMap((x, i) => (i ? [<span key={`s${i}`} aria-hidden> · </span>, x] : [x]))}</small> : null
   const canRun = !!a.cta && !(readOnly && a.owner)
+  // a purchase: the main button records it; the plan's route (the deposit planner) stays one tap away
+  const label = a.cta?.action === 'buy' ? 'اشتريته' : a.cta?.label
   const body = <>
     <span className="ico">{icon}</span>
     <p>{a.title}{subLine}</p>
@@ -69,14 +73,15 @@ export function ActionRow({ a, compact, onDismiss }: { a: PlanAction; compact?: 
     return (
       <button type="button" className={`attn ${a.tone}`} onClick={() => { if (canRun) run(a) }} disabled={!canRun} style={!canRun ? { cursor: 'default' } : undefined}>
         {body}
-        {canRun && <span className="attn-cta">{a.cta!.label}</span>}
+        {canRun && <span className="attn-cta">{label}</span>}
       </button>
     )
   }
   return (
     <div className={`attn plan-action ${a.tone}`} style={{ cursor: 'default' }}>
       {body}
-      {canRun && <button type="button" className={`btn small ${a.priority === 1 ? 'primary' : 'soft'}`} onClick={() => run(a)}>{a.cta!.label}</button>}
+      {canRun && a.cta?.action === 'buy' && a.cta.route && <a className="btn quiet small" href={`#/${a.cta.route}`} onClick={() => haptic()}>{a.cta.label}</a>}
+      {canRun && <button type="button" className={`btn small ${a.priority === 1 ? 'primary' : 'soft'}`} onClick={() => run(a)}>{label}</button>}
       {onDismiss && a.dismissible && !readOnly && (
         <button type="button" className="icon-btn dismiss" aria-label="إخفاء هذا الإجراء" title="إخفاء" onClick={() => { haptic(); onDismiss(a) }}><IconClose /></button>
       )}

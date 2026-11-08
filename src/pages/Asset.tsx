@@ -7,6 +7,16 @@ import { ZAKAT_RATE, holdingValue, rateOf } from '../lib/calc'
 import { ago, dateLong, dateShort, num0, num1, num2, pct, relativeDays, sar, signedPct, todayISO } from '../lib/format'
 import { FREQ_LABEL, hijriLabel, isIncomeTx, isTreasuryWithdrawal, nextHaul, payoutAnnual, payoutPerPayment } from '../lib/income'
 import { REGION_LABEL, holdingPnL, regionOf } from '../lib/wealth'
+import { isStaleHolding, nextUpdateDue, overdueDays, updateEveryLabel } from '../lib/staleness'
+import { zakatRuleOf } from '../lib/calc'
+import { ASSET_CLASS_LABEL, PLATFORM_LABEL, SECTOR_LABEL, instrumentOfHolding, type SectorKey } from '../lib/catalog'
+import { breakdownOf, holdingContext, industryLabel } from '../lib/lookthrough'
+import { countryLabel } from '../lib/countries'
+import { useProfiles } from '../lib/market'
+import { usePlan } from '../lib/usePlan'
+import { FREQ_LABEL as PAY_FREQ } from '../lib/income'
+import { UpdateModeField } from '../components/UpdateModeField'
+import { ZakatMethodSheet, zakatMethodText } from '../components/ZakatMethodSheet'
 import { benchmarkHistory } from '../lib/tools'
 import { assetColor, haptic, layerColor } from '../lib/ui'
 import type { Holding, Transaction } from '../lib/types'
@@ -24,8 +34,27 @@ const SOURCE_LABEL: Record<Holding['price_source'], string> = { yahoo: 'آلي �
 export const curLabel = (c?: string | null) => (!c || c === 'SAR' ? 'ريال' : c)
 /** a manual holding kept as one total value rather than units × price */
 export const isLump = (h: Holding) => h.price_source === 'manual' && Number(h.quantity) === 1
-export const isStale = (h: Holding) =>
-  (h.price_source === 'manual' || h.price_source === 'nav') && (!h.price_updated_at || Date.now() - new Date(h.price_updated_at).getTime() > 35 * 86400000)
+/** older than its own update frequency (lib/staleness.ts) */
+export const isStale = (h: Holding) => isStaleHolding(h)
+const daysWord = (n: number) => (n === 1 ? 'يوم' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يوماً`)
+/** «مستحق منذ 3 أيام» · «مستحق بعد 18 يوماً» · «مستحق اليوم»; null for automatic holdings */
+export function dueText(h: Holding): string | null {
+  const od = overdueDays(h)
+  if (od == null) return null
+  if (!Number.isFinite(od)) return 'لم يُحدَّث بعد'
+  const n = Math.ceil(od)
+  if (n > 0) return `مستحق منذ ${daysWord(n)}`
+  if (n === 0) return 'مستحق اليوم'
+  const due = nextUpdateDue(h)
+  return due ? `مستحق ${relativeDays(due)}` : null
+}
+/** «يدوي كل شهر · آخر تحديث قبل 12 يوماً · مستحق بعد 18 يوماً» or «تلقائي يومياً · آخر سعر …» */
+export function updateModeText(h: Holding): { title: string; sub: string } {
+  if (h.price_source === 'ibkr') return { title: 'تلقائي يومياً', sub: `من IBKR · ${updatedLabel(h.price_updated_at).replace('آخر تحديث', 'آخر سعر')}` }
+  const title = updateEveryLabel(h)
+  if (title === 'تلقائي يومياً') return { title, sub: `${h.price_source === 'nav' ? 'من مباشر' : 'من السوق'} · ${updatedLabel(h.price_updated_at).replace('آخر تحديث', 'آخر سعر')}` }
+  return { title, sub: [updatedLabel(h.price_updated_at), dueText(h)].filter(Boolean).join(' · ') }
+}
 const localDay = (iso: string) => {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -50,7 +79,7 @@ function untilLabel(iso: string) {
   return y === 1 ? 'بعد سنة' : y === 2 ? 'بعد سنتين' : Number.isInteger(y) && y <= 10 ? `بعد ${y} سنوات` : `بعد ${num1(y)} سنة`
 }
 
-type SheetKind = 'update' | 'buy' | 'payout' | 'edit'
+type SheetKind = 'update' | 'buy' | 'payout' | 'edit' | 'mode' | 'zakat'
 
 export default function Asset({ id, go }: { id: string; go: Go }) {
   const { holdings, sleeves, accounts, goals, transactions, fx, readOnly } = useStore()
@@ -110,14 +139,16 @@ export default function Asset({ id, go }: { id: string; go: Go }) {
                 {weight != null && <span>{pct(weight)} من المحفظة</span>}
               </div>
             )}
-            <p className={`asset-updated ${isStale(h) ? 'warn' : ''}`}>{updatedLabel(h.price_updated_at)}</p>
+            <p className={`asset-updated ${isStale(h) ? 'warn' : ''}`}>{updatedLabel(h.price_updated_at)}{isStale(h) && dueText(h) ? ` · ${dueText(h)}` : ''}</p>
           </div>
           {!readOnly && <Actions h={h} lump={lump} onPick={setSheet} />}
         </section>
 
         {chart && <PriceChart h={h} />}
 
-        <Facts h={h} value={value} weight={weight} />
+        <Facts h={h} value={value} weight={weight} onPick={readOnly ? null : setSheet} />
+
+        <Instrument h={h} />
 
         <Card title="العمليات" flush className="asset-tx"
           action={txs.length > 6 ? { label: allTx ? 'عرض أقل' : `عرض الكل (${txs.length})`, onClick: () => setAllTx((v) => !v) } : null}>
@@ -131,6 +162,8 @@ export default function Asset({ id, go }: { id: string; go: Go }) {
       {sheet === 'buy' && <BuySheet h={h} onClose={close} />}
       {sheet === 'payout' && <RecordPayoutSheet initial={{ holding: h, date: due ?? todayISO(), ...(perPayment ? { amount: perPayment } : {}) }} onClose={close} />}
       {sheet === 'edit' && <HoldingSheet initial={h} onClose={close} onDeleted={onDeleted} />}
+      {sheet === 'mode' && <UpdateModeSheet h={h} onClose={close} />}
+      {sheet === 'zakat' && <ZakatMethodSheet holding={h} onClose={close} />}
     </>
   )
 }
@@ -217,8 +250,13 @@ function PriceChart({ h }: { h: Holding }) {
 }
 
 // ---------- facts ----------
-function Facts({ h, value, weight }: { h: Holding; value: number; weight: number | null }) {
+function Facts({ h, value, weight, onPick }: { h: Holding; value: number; weight: number | null; onPick: ((k: SheetKind) => void) | null }) {
   const { fx } = useStore()
+  const { ctx } = usePlan()
+  const rule = zakatRuleOf(h, ctx?.zakat ?? {})
+  const mode = updateModeText(h)
+  const change = (k: SheetKind, label: string) => onPick
+    ? <button type="button" className="link asset-chg" onClick={() => { haptic(); onPick(k) }} aria-label={label}>تغيير</button> : null
   const pnl = holdingPnL(h, fx)
   const lump = isLump(h)
   const cur = curLabel(h.currency)
@@ -230,7 +268,7 @@ function Facts({ h, value, weight }: { h: Holding; value: number; weight: number
   const how = h.payout_basis === 'per_unit'
     ? h.payout_per_unit != null ? `${num2(Number(h.payout_per_unit))} ${cur} للوحدة` : null
     : h.payout_rate != null ? `${num2(Number(h.payout_rate))}% سنوياً` : null
-  const zakatable = h.zakatable !== false
+  const zakatable = rule.factor > 0
   const haul = zakatable && h.zakat_start ? nextHaul(h.zakat_start, todayISO()) : null
   const fee = Number(h.fee_pct) || 0
   const purify = Number(h.purification_pct) || 0
@@ -249,10 +287,10 @@ function Facts({ h, value, weight }: { h: Holding; value: number; weight: number
       )}
       {annual != null && annual > 0 && <KV label="التوزيعات السنوية" value={<Money v={annual} />} />}
       {h.maturity_date && <KV label="تاريخ الاستحقاق" value={dateLong(h.maturity_date)} sub={untilLabel(h.maturity_date)} />}
-      {!zakatable ? <KV label="الزكاة" value="لا زكاة عليه" /> : value > 0 && (
-        <KV label="الزكاة" value={<Money v={(value * ZAKAT_RATE) / 100} />}
-          sub={haul ? `${hijriLabel(haul)}، ${dateShort(haul)}` : <span className="warn">لم تُحدَّد بداية الحول</span>} />
-      )}
+      <KV label={<>طريقة التحديث {change('mode', 'غيّر طريقة التحديث')}</>} value={mode.title} sub={mode.sub} />
+      <KV label={<>الزكاة {change('zakat', 'غيّر طريقة حساب الزكاة')}</>}
+        value={zakatable && value > 0 ? <Money v={(value * rule.factor * ZAKAT_RATE) / 100} /> : zakatMethodText(rule.method, rule.ratio)}
+        sub={<>{zakatable ? zakatMethodText(rule.method, rule.ratio) : null}{zakatable && <><br />{haul ? `${hijriLabel(haul)}، ${dateShort(haul)}` : <span className="warn">لم تُحدَّد بداية الحول</span>}</>}</>} />
       {fee > 0 && <KV label="رسوم الإدارة السنوية" value={`${num2(fee)}%`} sub={<>نحو <Money v={(value * fee) / 100} /> في السنة</>} />}
       {purify > 0 && <KV label="نسبة التطهير" value={`${num2(purify)}%`} sub="من التوزيعات المستلمة" />}
       <KV label="السوق" value={REGION_LABEL[regionOf(h)]} />
@@ -392,6 +430,89 @@ function BuySheet({ h, onClose }: { h: Holding; onClose: () => void }) {
         {lump
           ? <Preview label="الرصيد بعد الإضافة" v={holdingValue(h, fx) + amount} />
           : <Preview label={`بعد الإضافة: ${num2(Number(h.quantity) + add)} وحدة`} v={(Number(h.quantity) + add) * unitSar} />}
+      </div>
+    </Sheet>
+  )
+}
+
+// ---------- the instrument behind the holding (catalog) and where its money is ----------
+const LIQ_LABEL: Record<string, string> = { daily: 'يومية', 'T+2': 'خلال يومي عمل', term: 'عند الاستحقاق', locked: 'مقيّدة' }
+function Instrument({ h }: { h: Holding }) {
+  const { sleeves, goals } = useStore()
+  const { doc } = usePlan()
+  const profiles = useProfiles(h.symbol && h.price_source !== 'nav' ? [h.symbol] : [])
+  const hctx = holdingContext({ doc, sleeves, goals, profiles })
+  const it = instrumentOfHolding(h, hctx.custom)
+  const b = breakdownOf(h, hctx)
+  const top = <K extends string>(m: Partial<Record<K, number>> | null, label: (k: K) => string, n = 4) =>
+    m ? (Object.entries(m) as Array<[K, number]>).filter(([, v]) => v > 0.004).sort((a, c) => c[1] - a[1]).slice(0, n).map(([k, v]) => ({ k, label: label(k), v: v * 100 })) : []
+  const countries = top<string>(b.countries, (k) => countryLabel(k))
+  const sectors = top<SectorKey>(b.sectors, (k) => SECTOR_LABEL[k] ?? k)
+  if (!it && !countries.length && !sectors.length) return null
+  const src = b.source === 'holding' ? 'حسب ما أدخلته' : b.source === 'catalog' ? `من نشرة الصندوق${it?.as_of ? ` (${dateShort(it.as_of)} ${it.as_of.slice(0, 4)})` : ''}` : b.source === 'profile' ? 'من بيانات السوق' : 'تقدير من نوع الأصل'
+  return (
+    <Card title={it ? 'عن الأداة' : 'أين تستثمر أمواله'} className="asset-inst">
+      {it && <>
+        <KV label="الفئة" value={ASSET_CLASS_LABEL[it.class]} />
+        {it.ter != null && <KV label="الرسوم السنوية" value={<bdi dir="ltr">{num2(it.ter)}%</bdi>} />}
+        {it.duration_years != null && <KV label="المدة" value={it.duration_years < 1 ? `${Math.round(it.duration_years * 12)} أشهر تقريباً` : `${num1(it.duration_years)} سنة تقريباً`} />}
+        <KV label="التوزيع" value={it.distribution === 'dist' ? (it.pay_freq && it.pay_freq !== 'none' ? `يوزّع ${PAY_FREQ[it.pay_freq]}` : 'يوزّع') : it.distribution === 'acc' ? 'يعيد استثمار الأرباح' : '—'}
+          sub={`السيولة ${LIQ_LABEL[it.liquidity] ?? it.liquidity}`} />
+        {it.shariah && <KV label="الضابط الشرعي" value={<span className="asset-wrap">{it.shariah}</span>} />}
+        {it.platforms.length > 0 && <KV label="متاح في" value={<span className="asset-wrap">{it.platforms.map((p) => PLATFORM_LABEL[p]).join('، ')}</span>} />}
+        {it.note && <p className="asset-note">{it.note}</p>}
+      </>}
+      {(countries.length > 0 || sectors.length > 0) && (
+        <div className="asset-lt">
+          {countries.length > 0 && <MiniBars title="الدول" rows={countries} color="var(--accent)" />}
+          {sectors.length > 0 && <MiniBars title="القطاعات" rows={sectors} color="var(--income)" />}
+          {b.industry && <p className="asset-lt-foot">الصناعة: {industryLabel(b.industry)}</p>}
+          <p className="asset-lt-foot">{src}</p>
+        </div>
+      )}
+      {it?.source_url && <a className="link asset-src" href={it.source_url} target="_blank" rel="noreferrer noopener">مصدر البيانات</a>}
+    </Card>
+  )
+}
+function MiniBars({ title, rows, color }: { title: string; rows: Array<{ k: string; label: string; v: number }>; color: string }) {
+  return (
+    <div className="asset-mini">
+      <h4>{title}</h4>
+      {rows.map((r) => (
+        <div key={r.k} className="asset-mini-row">
+          <span>{r.label}</span>
+          <i><b style={{ width: `${Math.max(3, Math.min(100, r.v))}%`, background: color }} /></i>
+          <em><bdi dir="ltr">{r.v >= 10 ? Math.round(r.v) : num1(r.v)}%</bdi></em>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** «طريقة التحديث»: automatic every day, or by hand at a chosen frequency. */
+function UpdateModeSheet({ h, onClose }: { h: Holding; onClose: () => void }) {
+  const { upsert, notify } = useStore()
+  const [v, setV] = useState<Partial<Holding>>({ price_source: h.price_source, symbol: h.symbol, update_every_days: h.update_every_days ?? null })
+  const [busy, setBusy] = useState(false)
+  const save = async () => {
+    setBusy(true)
+    const src = v.price_source ?? h.price_source
+    const ok = await upsert<Partial<Holding>>('holdings', {
+      id: h.id, price_source: src, update_every_days: src === 'manual' ? v.update_every_days ?? null : null,
+    })
+    setBusy(false)
+    if (ok) { notify(src === 'manual' ? 'صار التحديث يدوياً' : 'صار التحديث تلقائياً'); onClose() }
+  }
+  const cur = { price_source: v.price_source ?? h.price_source, symbol: h.symbol, update_every_days: v.update_every_days ?? null }
+  return (
+    <Sheet title="طريقة التحديث" onClose={onClose}
+      footer={h.price_source === 'ibkr' ? undefined : <button className="btn primary" disabled={busy} onClick={save}>{busy ? 'جارٍ الحفظ…' : 'احفظ'}</button>}>
+      <div className="stack">
+        <UpdateModeField label={h.name} value={cur} onChange={(p) => setV((x) => ({ ...x, ...p }))} />
+        {!h.symbol && h.price_source === 'manual' && (
+          <p className="small muted">للتحديث التلقائي أضف رمز التداول أو رقم الصندوق من «تعديل».</p>
+        )}
+        {cur.price_source === 'manual' && h.price_source !== 'manual' && <p className="small muted">يتوقف جلب السعر، وتُدخل القيمة بنفسك من «تحديث القيم».</p>}
       </div>
     </Sheet>
   )

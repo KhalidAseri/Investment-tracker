@@ -10,7 +10,7 @@ import type { PlanRow } from '../lib/types'
 import { Card, Chev } from './kit'
 import { SelectField, Sheet, Switch, TextField } from './ui'
 import { IconDoc, IconImport, IconLayers, IconTarget } from './icons'
-import { milestonesText, phasesText, sleevesText } from './PlanEditor'
+import { phasesText, sleevesText } from './PlanEditor'
 
 /** set by the builder; the document view highlights what is missing once */
 let freshPlan = false
@@ -120,7 +120,6 @@ function ImportSheet({ parsed, onClose, onDone }: { parsed: Parsed; onClose: () 
         <TextField label="اسم الخطة" value={name} onChange={setName} />
         <div className="pm-facts">
           <span>{sleevesText(doc0.sleeves.length)}</span><span>{phasesText(doc0.phases.length)}</span>
-          {doc0.milestones.length > 0 && <span>{milestonesText(doc0.milestones.length)}</span>}
         </div>
         {parsed.warnings.length > 0 && (
           <details className="more">

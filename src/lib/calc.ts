@@ -1,4 +1,5 @@
 import type { Account, Fx, Holding, Layer, MoneyEvent, PlanSettings, Sleeve, Snapshot } from './types'
+import { classOfHolding, instrumentOfHolding, isZakatMethod, zakatDefault, type AssetClass, type ClassOpts, type ZakatMethod } from './catalog'
 
 export const LAYER_NAMES: Record<Layer, string> = {
   growth: 'النمو',
@@ -264,19 +265,75 @@ export function planDeposit(amount: number, sleeves: Sleeve[], totals: Totals, s
 
 // ---------- zakat ----------
 export const ZAKAT_RATE = 2.5
-/** 2.5% of every holding marked zakatable (the owner decides per holding; Saudi stocks are his call). */
-export function zakatEstimate(holdings: Holding[], fx: Fx) {
+
+export type ZakatOpts = ClassOpts
+export interface ZakatRule {
+  method: ZakatMethod
+  /** % of the value that is zakatable ('zakatable_assets' only) */
+  ratio: number | null
+  /** share of the market value zakat is due on, 0..1 */
+  factor: number
+  /** where the method came from: the holding, the owner's «no zakat» switch, its instrument or class guide, or the default */
+  source: 'holding' | 'choice' | 'instrument' | 'guide' | 'default'
+  cls: AssetClass | null
+}
+
+/**
+ * How zakat applies to a holding. Order: the holding's own method (zakat_method/zakat_ratio), then the owner's switch
+ * (zakatable = false → no zakat), then its instrument's method, then the class default from the zakat guide (class from the
+ * owner's override, the instrument, or the plan sleeve), and finally 2.5% of the market value.
+ * A 'zakatable_assets' method without a known ratio counts the whole value (the cautious reading).
+ */
+export function zakatRuleOf(h: Holding, opts: ZakatOpts = {}): ZakatRule {
+  const cls = classOfHolding(h, opts)
+  const item = instrumentOfHolding(h, opts.custom)
+  const guide = zakatDefault(cls)
+  let method: ZakatMethod = 'market'
+  let ratio: number | null = null
+  let source: ZakatRule['source'] = 'default'
+  if (h.zakat_method && isZakatMethod(h.zakat_method)) {
+    method = h.zakat_method
+    ratio = h.zakat_ratio ?? (item?.zakat.method === method ? item.zakat.ratio : null) ?? (guide?.method === method ? guide.ratio : null)
+    source = 'holding'
+  } else if (h.zakatable === false) {
+    method = 'exempt'
+    source = 'choice'
+  } else if (item && isZakatMethod(item.zakat?.method)) {
+    method = item.zakat.method
+    ratio = item.zakat.ratio ?? (guide?.method === method ? guide.ratio : null)
+    source = 'instrument'
+  } else if (guide) {
+    method = guide.method
+    ratio = guide.ratio
+    source = 'guide'
+  }
+  const factor = method === 'market' ? 1 : method === 'zakatable_assets' ? Math.min(100, Math.max(0, ratio ?? 100)) / 100 : 0
+  return { method, ratio: method === 'zakatable_assets' ? ratio : null, factor, source, cls }
+}
+
+/**
+ * Zakat due on the holdings today, by each holding's method (see zakatRuleOf).
+ * items[].value is the zakatable value (so value × 2.5% is the holding's zakat); items[].market is its full value.
+ * exempt = value the owner excluded (or that has no zakat); notDue = value on which zakat is not due on the principal
+ * (paid by the company or fund, income-only, or the non-zakatable share).
+ */
+export function zakatEstimate(holdings: Holding[], fx: Fx, opts: ZakatOpts = {}) {
   let base = 0
   let exempt = 0
-  const items: Array<{ holding: Holding; value: number }> = []
+  let notDue = 0
+  const items: Array<{ holding: Holding; value: number; market: number; amount: number; method: ZakatMethod; ratio: number | null }> = []
   for (const h of holdings) {
     const v = holdingValue(h, fx)
     if (v <= 0) continue
-    if (h.zakatable === false) { exempt += v; continue }
-    base += v
-    items.push({ holding: h, value: v })
+    const r = zakatRuleOf(h, opts)
+    if (r.method === 'exempt') { exempt += v; continue }
+    const b = v * r.factor
+    notDue += v - b
+    if (b <= 0) continue
+    base += b
+    items.push({ holding: h, value: b, market: v, amount: (b * ZAKAT_RATE) / 100, method: r.method, ratio: r.ratio })
   }
-  return { amount: (base * ZAKAT_RATE) / 100, base, exempt, items: items.sort((a, b) => b.value - a.value) }
+  return { amount: (base * ZAKAT_RATE) / 100, base, exempt, notDue, items: items.sort((a, b) => b.value - a.value) }
 }
 
 // ---------- calendar ----------

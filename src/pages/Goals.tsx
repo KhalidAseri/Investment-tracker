@@ -17,8 +17,8 @@ import { HoldingSheet } from './Holdings'
 const monthsLeftText = (m: number | null) => (m == null ? 'بلا موعد' : m === 0 ? 'هذا الشهر' : m < 12 ? `بعد ${m} ${m <= 10 ? 'أشهر' : 'شهراً'}` : `بعد ${(m / 12).toFixed(m % 12 ? 1 : 0)} سنة`)
 
 type Special = Exclude<GoalKind, 'goal'>
-/** the two goals the plan knows by kind: the emergency fund and the income treasury (kept outside the main portfolio) */
-export const KIND_NAME: Record<Special, string> = { emergency: 'صندوق الطوارئ', income: 'خزانة الدخل' }
+/** the two goals the plan knows by kind: the emergency fund and the income account (kept outside the main portfolio) */
+export const KIND_NAME: Record<Special, string> = { emergency: 'صندوق الطوارئ', income: 'حساب الدخل' }
 const CASH: GoalBucket[] = [{ key: 'cash', name: 'سيولة', weight: 100 }]
 const isSpecial = (g: Pick<Goal, 'kind'>): g is Goal & { kind: Special } => g.kind === 'emergency' || g.kind === 'income'
 
@@ -73,10 +73,11 @@ export default function Goals() {
       kind: 'income', value: st.value, target,
       sub: <>
         {t && t.monthlyIncome > 0 ? <>دخلك الشهري <Money v={t.monthlyIncome} /></> : 'حدّد قاعدة الدخل في خطتك'}
-        {t?.coverMonths != null && t.monthlyIncome > 0 && <> · تغطي {monthsText(t.coverMonths)}{doc?.income?.treasury_months ? ` من ${doc.income.treasury_months}` : ''}</>}
+        {t?.coverMonths != null && t.monthlyIncome > 0 && <> · يغطي {monthsText(t.coverMonths)}{doc?.income?.treasury_months ? ` من ${doc.income.treasury_months}` : ''}</>}
+        <span style={{ display: 'block', marginTop: 4 }}>يُنقل إليه مبلغ السنة في المراجعة السنوية، ويُحوَّل منه مبلغ ثابت كل شهر. <a href="#/income">التفاصيل</a></span>
       </>,
       ctas: readOnly ? null : <>
-        <button className="btn primary small" onClick={() => openAction('treasury')}>انقل إليها</button>
+        <button className="btn primary small" onClick={() => openAction('treasury')}>انقل إليه</button>
         {t?.started && <button className="btn soft small" onClick={() => openAction('withdraw')}>حوّل الدخل الشهري</button>}
       </>,
     }

@@ -1,0 +1,146 @@
+/* ===================== «صمّم خطتي» wizard (Design.tsx) ===================== */
+.dz { display: flex; flex-direction: column; gap: 14px; padding-bottom: 84px; max-width: 760px; margin-inline: auto; width: 100%; }
+@media (min-width: 960px) { .dz { gap: 18px; } }
+
+/* progress dots */
+.dz-dots { display: flex; justify-content: center; gap: 8px; padding: 4px 0 2px; }
+.dz-dots i { width: 8px; height: 8px; border-radius: 999px; background: var(--line-strong); transition: width 0.25s ease, background 0.25s; }
+.dz-dots i.done { background: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); }
+.dz-dots i.on { width: 26px; background: var(--accent); }
+
+/* one question */
+.dz-q { display: flex; flex-direction: column; gap: 14px; animation: dzIn 0.28s ease; }
+@keyframes dzIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dz-q { animation: none; } }
+.dz-q h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(21px, 6vw, 26px); line-height: 1.35; }
+.dz-sub { color: var(--muted); font-size: 14px; margin-top: -8px; }
+.dz-label { font-weight: 600; font-size: 14.5px; margin-top: 4px; }
+.dz-note { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.dz-fields { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); }
+@media (min-width: 600px) { .dz-fields { display: grid; grid-template-columns: 1fr 1fr; } }
+
+/* big choice tiles */
+.dz-tiles { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.dz-tiles.two { grid-template-columns: 1fr 1fr; }
+.dz-tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dz-tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dz-tiles.dd { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 600px) { .dz-tiles.four, .dz-tiles.dd { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.dz-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 14px; min-height: 96px; border-radius: var(--radius);
+  border: 1.5px solid var(--line); background: var(--surface); color: inherit; text-align: start; cursor: pointer; box-shadow: var(--shadow-1);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+.dz-tile:active { transform: scale(0.98); }
+.dz-tile[aria-pressed='true'] { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-1); }
+.dz-tile > b { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; line-height: 1.35; padding-inline-end: 24px; }
+.dz-tile > span { font-size: 12.5px; color: var(--muted); line-height: 1.5; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.dz-tile > span .money { color: var(--ink-2); font-weight: 600; }
+.dz-tick { position: absolute; top: 12px; inset-inline-end: 12px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; }
+.dz-tile[aria-pressed='true'] .dz-tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.dz-tick svg { width: 13px; height: 13px; stroke-width: 3; }
+.dz-dd { font-size: 13px; color: var(--bad); font-weight: 600; }
+.dz-ddbar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--sunken); direction: ltr; }
+.dz-ddbar i { display: block; height: 100%; background: var(--accent); }
+.dz-ddbar i.lost { background: color-mix(in srgb, var(--bad) 55%, transparent); }
+
+/* platform chips */
+.dz-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.dz-chips button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.dz-chips button[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.dz-glob { font-size: 11px; font-weight: 600; color: var(--growth); background: color-mix(in srgb, var(--growth) 13%, transparent); border-radius: 999px; padding: 0 7px; }
+
+/* sticky back / next */
+.dz-foot { position: fixed; inset-inline: 0; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); z-index: 20; display: flex; gap: 10px; padding: 12px 16px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+.dz-foot .btn { min-height: 48px; }
+.dz-foot .btn.grow { flex: 1; }
+.dz-foot .btn svg { width: 16px; height: 16px; }
+@media (min-width: 960px) {
+  .dz-foot { position: sticky; bottom: 16px; inset-inline: auto; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); }
+}
+
+/* ---------- result ---------- */
+.dz-hero { padding-bottom: 18px; }
+.dz-hero .ph-chip { font-size: 12px; background: rgba(255, 255, 255, 0.13); color: #fff; border-radius: 999px; padding: 3px 10px; }
+.dz-hero-row { display: flex; align-items: center; gap: 18px; margin-top: 12px; }
+.dz-hero .donut svg circle:first-child { stroke: rgba(255, 255, 255, 0.12); }
+.dz-hero .donut-center b { color: #fff; font-size: 20px; }
+.dz-hero .donut-center span { color: rgba(255, 255, 255, 0.75); }
+.dz-hero-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: rgba(255, 255, 255, 0.85); }
+.dz-hero-legend span { display: flex; align-items: center; gap: 8px; }
+.dz-hero-legend i { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); }
+.dz-hero-legend b { margin-inline-start: auto; font-family: var(--font-display); font-weight: 600; color: #fff; }
+.dz-split { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.14); }
+.dz-split-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.dz-split-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #b9f5dc, #6fdcb3); }
+.dz-split-txt { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12.5px; color: rgba(255, 255, 255, 0.8); }
+
+.dz-layers .card-head h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dz-layers .card-head .link { min-height: 32px; padding: 4px 10px; border-radius: 10px; background: var(--accent-soft); }
+.dz-sum { font-family: var(--font-display); font-size: 12px; }
+.dz-layer { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.dz-layer:last-of-type { border-bottom: 0; }
+.dz-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 13px; margin-top: 1px; }
+.dz-lmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dz-ltop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dz-ltop > b { font-weight: 600; font-size: 14.5px; min-width: 0; }
+.dz-w { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.dz-w b { font-weight: 600; font-size: 15px; }
+.dz-w small { font-size: 11px; color: var(--muted); font-family: var(--font-display); }
+.dz-inst { font-size: 12.5px; color: var(--ink-2); }
+.dz-why { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.dz-why .money { font-weight: 600; color: var(--ink-2); }
+.dz-step { display: inline-flex; align-items: center; gap: 6px; }
+.dz-step button { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; }
+.dz-step b { min-width: 46px; text-align: center; font-weight: 600; }
+.dz-editfoot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+
+.dz-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 760px) { .dz-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.dz-geo-list { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 13px; color: var(--ink-2); }
+.dz-geo-list span { display: inline-flex; align-items: center; gap: 6px; }
+.dz-geo-list i { width: 9px; height: 9px; border-radius: 50%; }
+.dz-geo-list b { font-family: var(--font-display); font-weight: 600; }
+.dz-tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dz-tl li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; padding: 8px 0 10px; padding-inline-start: 22px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.dz-tl li:last-child { border-bottom: 0; }
+.dz-tl li::before { content: ''; position: absolute; inset-inline-start: 2px; top: 14px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line-strong); background: var(--surface); }
+.dz-tl li.on::before { background: var(--accent); border-color: var(--accent); }
+.dz-tl b { font-weight: 600; }
+.dz-tl li > span:nth-of-type(1) { grid-column: 1; color: var(--muted); font-size: 12.5px; }
+.dz-tl li > span:nth-of-type(2) { grid-column: 2; grid-row: 1 / 3; align-self: center; font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--ink-2); }
+.dz-res { display: flex; gap: 12px; padding: 8px 0; }
+.dz-res + .dz-res { border-top: 1px solid var(--line); padding-top: 12px; }
+.dz-res .ico { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.dz-res .ico.inc { background: color-mix(in srgb, var(--income) 14%, transparent); color: var(--income); }
+.dz-res .ico svg { width: 19px; height: 19px; }
+.dz-res > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 13.5px; }
+.dz-res b { font-weight: 600; font-size: 14.5px; }
+.dz-res span { color: var(--ink-2); }
+.dz-res span .money { font-weight: 600; }
+.dz-res small { color: var(--muted); font-size: 12px; }
+.dz-incline { font-size: 14px; line-height: 1.8; }
+.dz-incline .money, .dz-incline b { font-weight: 600; }
+.dz-src { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 6px; }
+.dz-zakat .kv > span small { display: block; font-size: 12px; color: var(--muted); }
+.dz-pad { margin-top: 8px; }
+.dz-why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dz-why-list li { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dz-why-list li:last-child { border-bottom: 0; }
+.dz-why-list b { font-weight: 600; font-size: 14px; }
+.dz-why-list span { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.dz-disc { text-align: center; font-size: 12px; color: var(--muted); padding: 0 12px; }
+
+/* compare */
+.dz-cmp { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.dz-crow { display: grid; grid-template-columns: minmax(0, 1fr) 62px 62px 58px; gap: 6px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.dz-crow:last-child { border-bottom: 0; }
+.dz-crow > span:first-child { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-crow > span:first-child .dot { width: 8px; height: 8px; flex: none; }
+.dz-crow > b, .dz-crow > span:not(:first-child) { text-align: center; font-family: var(--font-display); font-weight: 500; font-size: 13px; white-space: nowrap; }
+.dz-chead { font-size: 11.5px; color: var(--muted); padding-block: 6px; }
+.dz-chead > span { font-family: var(--font-ui) !important; }
+.dz-ctot { background: var(--surface-2); font-weight: 600; }
+.dz-ctot > b { font-weight: 600 !important; }
+.dz-diff.up { color: var(--good); }
+.dz-diff.down { color: var(--bad); }
+.dz-ask .type-tile .grow > span { line-height: 1.5; }

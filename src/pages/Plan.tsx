@@ -1,26 +1,28 @@
-// «الخطة» tab: what to do now (الإجراءات), how the plan is going (التقدم), and the plan itself (الخطة).
-// Everything compares the owner's written plan with actual balances and transactions; nothing is projected.
+// «الخطة» tab: what to do now (الإجراءات), how complete the portfolio's structure is and what to build next (الهيكل),
+// and the plan itself (الخطة). Everything compares the owner's written plan with actual balances; nothing is projected.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../lib/store'
 import { usePlan, usePlanOps, type PlanView } from '../lib/usePlan'
-import { addDaysISO, milestonePath, monthEndISO, planActions, type PlanAction } from '../lib/plan'
-import { dateLong, dateShort, monthName, num0, relativeDays } from '../lib/format'
-import { haptic, layerColor, openAction, useCountUp } from '../lib/ui'
-import { Card, Chev, Empty, KV, Money, Pct, Pill, SegLinks } from '../components/kit'
-import { Segmented } from '../components/ui'
+import { useMarketInputs } from '../lib/market'
+import { monthEndISO, planActions, type PlanAction } from '../lib/plan'
+import type { PlanCheck, RoadmapItem } from '../lib/advisor'
+import { dateLong, dateShort, monthName, relativeDays } from '../lib/format'
+import { haptic, layerColor, openAction } from '../lib/ui'
+import { Card, Chev, Empty, KV, Money, Pct, SegLinks } from '../components/kit'
 import { ActionRow } from '../components/PlanActions'
-import { BandTrack, PlanChart } from '../components/PlanChart'
+import { BandTrack } from '../components/PlanChart'
 import { contributionWhen, counted, monthsText, planGaps, PlanSections, PlanSectionSheet, SECTION_TITLE, type PlanSection } from '../components/PlanEditor'
 import { PlanBuilderCard, PlansCard, TransferCard, takeFreshPlan } from '../components/PlanManage'
-import { IconAlert, IconChart, IconCheck, IconTarget } from '../components/icons'
+import { InstrumentCard } from '../components/InstrumentCard'
+import { RoadmapList, roadColor } from '../components/RoadmapList'
+import { IconAlert, IconChart, IconCheck, IconSparkle } from '../components/icons'
 import type { Go } from '../App'
 import './Plan.css'
 
-type Seg = 'actions' | 'progress' | 'doc'
+type Seg = 'actions' | 'structure' | 'doc'
 type Edit = ((s: PlanSection) => void) | undefined
 
 const actionsWord = (n: number) => (n === 1 ? 'إجراء' : n === 2 ? 'إجراءان' : n >= 3 && n <= 10 ? 'إجراءات' : 'إجراءً')
-const statusText = (s: 'ahead' | 'behind' | 'on') => (s === 'ahead' ? 'فوق المسار المخطط' : s === 'behind' ? 'دون المسار المخطط' : 'على المسار المخطط')
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 /** «يناير 2031» */
 const monthYear = (iso: string) => `${monthName(Number(iso.slice(5, 7)) - 1)} ${iso.slice(0, 4)}`
@@ -28,9 +30,10 @@ const monthYear = (iso: string) => `${monthName(Number(iso.slice(5, 7)) - 1)} ${
 const Range = ({ a, b }: { a: number; b: number }) => <bdi dir="ltr">{+a.toFixed(1)}–{+b.toFixed(1)}%</bdi>
 
 export default function Plan({ param }: { go?: Go; param?: string }) {
-  const view = usePlan()
+  const market = useMarketInputs()
+  const view = usePlan(market)
   const { readOnly } = useStore()
-  const seg: Seg = param === 'progress' ? 'progress' : param === 'doc' ? 'doc' : 'actions'
+  const seg: Seg = param === 'structure' || param === 'progress' ? 'structure' : param === 'doc' ? 'doc' : 'actions'
   const [section, setSection] = useState<PlanSection | null>(null)
   const close = useCallback(() => setSection(null), [])
   const edit: Edit = readOnly ? undefined : (s) => { haptic(); setSection(s) }
@@ -40,24 +43,32 @@ export default function Plan({ param }: { go?: Go; param?: string }) {
       <div className="plan-seg">
         <SegLinks items={[
           { href: '#/plan', label: 'الإجراءات', active: seg === 'actions' },
-          { href: '#/plan/progress', label: 'التقدم', active: seg === 'progress' },
+          { href: '#/plan/structure', label: 'الهيكل', active: seg === 'structure' },
           { href: '#/plan/doc', label: 'الخطة', active: seg === 'doc' },
         ]} />
       </div>
       {seg === 'actions' && <ActionsView view={view} />}
-      {seg === 'progress' && <ProgressView view={view} edit={edit} />}
+      {seg === 'structure' && <StructureView view={view} edit={edit} />}
       {seg === 'doc' && <DocView view={view} edit={edit} />}
       {section && view.doc && <PlanSectionSheet section={section} onClose={close} />}
     </div>
   )
 }
 
-/** Ahead / behind pill with its words, for the emerald hero. */
-function StatusLine({ view }: { view: PlanView }) {
-  const p = view.progress
-  if (!view.doc || !p) return <span>لا توجد خطة نشطة</span>
-  if (p.status == null || p.gap == null) return <span>أضف محطات لتقارن تقدمك بخطتك</span>
-  return <><Pill value={p.gap} pct={p.gapPct} /><span>{statusText(p.status)}</span></>
+/** «صمّم خطتي»: the designer's entry, as a banner. */
+function DesignBanner({ compare }: { compare?: boolean }) {
+  const { readOnly } = useStore()
+  if (readOnly) return null
+  return (
+    <div className="ph-design">
+      <a className="ph-design-main" href="#/design" onClick={() => haptic()}>
+        <span className="ico"><IconSparkle /></span>
+        <span className="grow"><b>صمّم خطتي</b><span>خمسة أسئلة، ويقترح التطبيق خطة كاملة تعدّلها كما تشاء</span></span>
+        <Chev />
+      </a>
+      {compare && <a className="btn soft small ph-design-cmp" href="#/design/compare" onClick={() => haptic()}>قارن خطتي بالتوصية</a>}
+    </div>
+  )
 }
 
 // =====================================================================================
@@ -68,7 +79,7 @@ function ActionsView({ view }: { view: PlanView }) {
   const { readOnly, notify } = useStore()
   const ops = usePlanOps()
   const [showHidden, setShowHidden] = useState(false)
-  const hidden = useMemo(() => (ctx && doc ? planActions(ctx, { includeDismissed: true }).filter((a) => a.dismissible && doc.state.dismissed[a.key]) : []), [ctx, doc])
+  const hidden = useMemo(() => (ctx && doc ? planActions(ctx, { includeDismissed: true, roadmap: view.roadmap }).filter((a) => a.dismissible && doc.state.dismissed[a.key]) : []), [ctx, doc, view.roadmap])
   const monthEnd = monthEndISO(today)
   const now: PlanAction[] = [], month: PlanAction[] = [], later: PlanAction[] = []
   for (const a of actions) {
@@ -79,6 +90,7 @@ function ActionsView({ view }: { view: PlanView }) {
   const dismiss = async (a: PlanAction) => { if (await ops.dismiss(a.key)) notify('أُخفي الإجراء') }
   const restoreAll = async () => { if (doc) { haptic(); await ops.save({ ...doc, state: { ...doc.state, dismissed: {} } }); setShowHidden(false) } }
   const n = actions.length
+  const next = view.roadmap.find((r) => r.status === 'next') ?? null
   const group = (title: string, list: PlanAction[], cls: string) => list.length > 0 && (
     <Card flush className={`ph-group ${cls}`} title={<>{title}<span className="pd-sub">{list.length}</span></>}>
       {list.map((a) => <ActionRow key={a.key} a={a} onDismiss={doc ? dismiss : undefined} />)}
@@ -90,7 +102,7 @@ function ActionsView({ view }: { view: PlanView }) {
         <section className="hero ph-hero" aria-label="ما عليك فعله الآن">
           <div className="hero-top"><span>ما عليك فعله الآن</span>{p?.phase && <span className="ph-chip">مرحلة {p.phase.name}</span>}</div>
           <div className="hero-value">{n}<small>{n === 0 ? 'إجراءات' : actionsWord(n)}</small></div>
-          <div className="hero-sub"><StatusLine view={view} /></div>
+          <div className="hero-sub">{view.structure ? <span>اكتمل هيكل محفظتك <Pct v={view.structure.pct} digits={0} /></span> : <span>{doc ? '' : 'لا توجد خطة نشطة'}</span>}</div>
           <div className="ph-stats">
             <div><span>الآن</span><b>{now.length}</b></div>
             <div><span>هذا الشهر</span><b>{month.length}</b></div>
@@ -98,13 +110,7 @@ function ActionsView({ view }: { view: PlanView }) {
           </div>
         </section>
 
-        {!doc && !readOnly && (
-          <a className="banner accent" href="#/plan/doc" onClick={() => haptic()}>
-            <span className="ico"><IconTarget /></span>
-            <p>ابنِ خطتك<small>أوزان ومحطات وإيداعات، ويخبرك التطبيق بما تفعل</small></p>
-            <Chev />
-          </a>
-        )}
+        {!doc && <DesignBanner />}
 
         {n === 0 ? (
           <div className="card"><Empty icon={<IconCheck />} title="لا شيء مطلوب منك الآن" text={doc ? 'خطتك تسير كما كتبتها.' : 'الأسعار تتحدث كل صباح تلقائياً.'} /></div>
@@ -129,10 +135,12 @@ function ActionsView({ view }: { view: PlanView }) {
           )
         )}
         {doc && p && (
-          <Card className="ph-mini" title="خطتك" action={{ label: 'التقدم', href: '#/plan/progress' }}>
-            <KV label="قيمة الخطة" value={<Money v={p.planValue} />} />
-            {p.expected != null && <KV label="المتوقع اليوم" value={<Money v={p.expected} />} />}
-            {p.nextMilestone && <KV label={<>المحطة القادمة<small>{dateLong(p.nextMilestone.date)}</small></>} value={<Money v={p.nextMilestone.value} />} />}
+          <Card className="ph-mini" title="هيكل محفظتك" action={{ label: 'التفاصيل', href: '#/plan/structure' }}>
+            {view.structure && <>
+              <KV label="اكتمال الهيكل" value={<Pct v={view.structure.pct} digits={0} />} />
+              <div className="progress ph-mini-bar"><i style={{ width: `${view.structure.pct}%` }} /></div>
+            </>}
+            {next && <KV label="الأولوية الآن" value={next.title} sub={next.remaining > 0.5 ? <>ينقصه <Money v={next.remaining} /></> : undefined} />}
             {p.nextPhase && <KV label="المرحلة التالية" value={p.nextPhase.name} sub={dateLong(p.nextPhase.start)} />}
           </Card>
         )}
@@ -142,34 +150,16 @@ function ActionsView({ view }: { view: PlanView }) {
 }
 
 // =====================================================================================
-// التقدم
+// الهيكل
 // =====================================================================================
-function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
-  const { doc, progress: p, today } = view
-  const { snapshots, readOnly } = useStore()
+function StructureView({ view, edit }: { view: PlanView; edit: Edit }) {
+  const { doc, progress: p, today, roadmap, structure, market } = view
+  const { readOnly } = useStore()
   const ops = usePlanOps()
-  const [win, setWin] = useState<'next' | 'all'>('next')
-  const shown = useCountUp(p?.planValue ?? 0)
-  const path = useMemo(() => (doc ? milestonePath(doc) : []), [doc])
-  const actual = useMemo(() => {
-    const pts = snapshots.filter((s) => Number(s.total_sar) > 0).map((s) => ({ date: s.snap_date, value: Number(s.total_sar) })).sort((a, b) => a.date.localeCompare(b.date))
-    if (p && p.mainValue > 0 && (!pts.length || pts[pts.length - 1].date < today)) pts.push({ date: today, value: p.mainValue })
-    return pts
-  }, [snapshots, p, today])
-  if (!doc || !p) return <PlanBuilderCard />
+  if (!doc || !p) return <div className="pd"><DesignBanner /><PlanBuilderCard /></div>
   const owner = !readOnly
-
-  // ---- chart window ----
-  const lastPath = path.length ? path[path.length - 1].date : null
-  const from = doc.baseline?.date ?? path[0]?.date ?? actual[0]?.date ?? today
-  let to = win === 'all' ? (lastPath && lastPath > today ? lastPath : today) : (p.nextMilestone?.date ?? (lastPath && lastPath > today ? lastPath : today))
-  if (to <= today) to = addDaysISO(today, 30)
-  if (to <= from) to = addDaysISO(from, 30)
-
-  // ---- next milestone ----
-  const prevVal = p.prevMilestone?.value ?? doc.baseline?.value ?? null
-  const nm = p.nextMilestone
-  const nmPct = nm && prevVal != null && nm.value !== prevVal ? clamp01((p.planValue - prevVal) / (nm.value - prevVal)) : null
+  const next = roadmap.find((r) => r.status === 'next') ?? null
+  const counts = { waiting: roadmap.filter((r) => r.status === 'waiting' || r.status === 'later').length }
 
   const e = p.emergency
   const t = p.treasury
@@ -184,6 +174,7 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
   const reviews = [...doc.reviews].sort((a, b) => b.year - a.year)
   const curMonth = Number(today.slice(5, 7))
   const nextReviewYear = p.review.done || (!p.review.due && curMonth > p.review.month) ? p.review.year + 1 : p.review.year
+  const fix = (r: RoadmapItem) => edit?.(r.kind === 'treasury' ? 'income' : 'emergency')
 
   const stepRow = (s: (typeof st.list)[number]) => (
     <div key={s.step.key} className={`ph-step ${s.done ? 'done' : ''} ${s.overdue ? 'late' : ''}`}>
@@ -200,41 +191,51 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
   )
 
   return (
-    <div className="ph-cols prog">
+    <div className="ph-cols struct">
       <div className="ph-col">
-        <section className="hero ph-hero" aria-label="خطتك">
-          <div className="hero-top"><span>خطتك</span>{p.phase && <span className="ph-chip">مرحلة {p.phase.name}</span>}</div>
-          <div className="hero-value">{num0(shown)}<small>ريال</small></div>
-          <div className="hero-sub"><StatusLine view={view} /></div>
+        <section className="hero ph-hero" aria-label="هيكل محفظتك">
+          <div className="hero-top"><span>هيكل محفظتك</span>{p.phase && <span className="ph-chip">مرحلة {p.phase.name}</span>}</div>
+          <div className="hero-value"><bdi dir="ltr">{structure ? structure.pct : 0}%</bdi><small>مكتمل</small></div>
+          <div className="ph-bar ph-hero-bar"><i style={{ width: `${structure?.pct ?? 0}%` }} /></div>
           <div className="ph-stats">
-            <div><span>المتوقع اليوم</span><b>{p.expected != null ? <Money v={p.expected} short /> : '—'}</b></div>
+            <div><span>مكتمل</span><b>{structure ? <bdi dir="ltr">{structure.done}/{structure.total}</bdi> : '—'}</b></div>
+            <div><span>ينتظر</span><b>{counts.waiting}</b></div>
             <div><span>المحفظة</span><b><Money v={p.mainValue} short /></b></div>
-            <div><span>خزانة الدخل</span><b>{t.enabled || p.treasuryValue > 0 ? <Money v={p.treasuryValue} short /> : '—'}</b></div>
           </div>
-          {nm ? (
-            <div className="ph-next">
-              <div className="ph-next-row"><span>المحطة القادمة{nm.label ? ` · ${nm.label}` : ''}</span><b><Money v={nm.value} short /></b></div>
-              {nmPct != null && <div className="ph-bar" role="img" aria-label={`اكتمل ${Math.round(nmPct * 100)}% من الطريق إلى المحطة`}><i style={{ width: `${nmPct * 100}%` }} /></div>}
-              <div className="ph-next-row tiny"><span>{dateLong(nm.date)} · {relativeDays(nm.date)}</span>{nmPct != null && <span>اكتمل <Pct v={nmPct * 100} digits={0} /></span>}</div>
-            </div>
-          ) : path.length ? (
-            <div className="ph-next"><div className="ph-next-row"><span>تجاوزت آخر محطة في خطتك</span></div></div>
-          ) : null}
         </section>
 
-        <Card className="ph-chart" title="المسار المخطط والفعلي">
-          {path.length || actual.length > 1 ? <>
-            {path.length > 0 && (
-              <Segmented label="مدى الرسم" value={win} onChange={(v) => { haptic(); setWin(v) }}
-                options={[{ value: 'next', label: 'حتى المحطة القادمة' }, { value: 'all', label: 'كل المحطات' }]} />
+        {/* the next priority */}
+        {next ? (
+          <section className="card ph-now" aria-label="الأولوية الآن">
+            <div className="ph-now-top">
+              <span className="ph-now-n" style={{ ['--c' as string]: roadColor(next) }}>{next.order}</span>
+              <div className="grow">
+                <span className="ph-kicker">الأولوية الآن</span>
+                <h3>{next.title}</h3>
+              </div>
+            </div>
+            <div className="ph-fig"><b><Money v={next.remaining} /></b><span>متبقٍ من <Money v={next.target} /></span></div>
+            <div className="progress ph-progress"><i style={{ width: `${Math.min(100, next.pct)}%`, background: roadColor(next) }} /></div>
+            <p className="ph-why">{next.why}</p>
+            {next.pick && <InstrumentCard pick={next.pick} market={market} amount={next.remaining} />}
+            {owner && (
+              <div className="ph-ctas">
+                <a className="btn soft" href="#/deposit" onClick={() => haptic()}>أين أضع إيداعي؟</a>
+                <button type="button" className="btn primary" onClick={() => openAction('buy', next.key)}>اشتريته</button>
+              </div>
             )}
-            <PlanChart path={path} actual={actual} today={today} from={from} to={to} />
-            {!path.length && owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('milestones')}>أضف محطات لترى مسارك المخطط</button>}
-          </> : (
-            <Empty title="لا مسار بعد" text="يظهر حين تضيف محطات ويسجّل التطبيق قيمة محفظتك يومياً."
-              action={owner ? { label: 'أضف محطات', onClick: () => edit?.('milestones') } : undefined} />
-          )}
-        </Card>
+          </section>
+        ) : roadmap.length > 0 && (
+          <div className="card"><Empty icon={<IconCheck />} title="الهيكل مكتمل الآن" text="وزّع إيداعاتك القادمة حسب الأوزان، وتبدأ الطبقات المنتظرة حين تكبر المحفظة." /></div>
+        )}
+
+        {/* the build order */}
+        {roadmap.length > 0 && (
+          <Card flush className="ph-road" title={<>ترتيب البناء<span className="pd-sub">{roadmap.length}</span></>}
+            action={owner ? { label: 'عدّل الترتيب', onClick: () => edit?.('sleeves') } : null}>
+            <RoadmapList items={roadmap} market={market} onFix={fix} />
+          </Card>
+        )}
 
         {/* weights */}
         <Card className="ph-bands" title="الالتزام بالأوزان">
@@ -247,9 +248,9 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
               {bands.map((b) => {
                 const out = b.status !== 'ok'
                 return (
-                  <div key={b.key} className={`ph-band ${out ? 'out' : ''}`}>
+                  <div key={b.key} className={`ph-band ${out ? 'out' : ''} ${b.active ? '' : 'wait'}`}>
                     <div className="ph-band-top">
-                      <span className="alloc-name"><i className="dot" style={{ background: layerColor(b.layer) }} /><span>{b.name}</span>{!b.planSleeve && <span className="chip">خارج الخطة</span>}</span>
+                      <span className="alloc-name"><i className="dot" style={{ background: layerColor(b.layer) }} /><span>{b.name}</span>{!b.planSleeve && <span className="chip">خارج الخطة</span>}{!b.active && <span className="chip">تنتظر</span>}</span>
                       <span className="ph-band-nums"><b><Pct v={b.actual} /></b><span>من <Pct v={b.target} /></span></span>
                     </div>
                     <BandTrack actual={b.actual} target={b.target} min={b.min} max={b.max} scale={scale} color={layerColor(b.layer)} out={out} />
@@ -271,37 +272,11 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
           </> : <p className="small muted">يظهر حين تضيف أصولاً إلى طبقات خطتك.</p>}
         </Card>
 
-        {/* contributions */}
-        <Card className="ph-contrib" title={`الإيداعات في ${c.year}`}>
-          {doc.contributions.length ? <>
-            <div className="ph-figs">
-              <div><span>أودعت</span><b><Money v={c.actual} /></b></div>
-              <div><span>المخطط حتى اليوم</span><b><Money v={c.planned} /></b></div>
-            </div>
-            {c.planned > 0 && <div className="progress ph-progress"><i style={{ width: `${clamp01(c.actual / c.planned) * 100}%`, background: c.actual >= c.planned ? 'var(--good)' : 'var(--accent)' }} /></div>}
-            {(c.planned > 0 || c.actual > 0) && (
-              <p className={`small ph-diff ${c.diff >= 0 ? 'good' : 'warn'}`}>
-                {Math.abs(c.diff) < 1 ? 'مطابق للمخطط' : <>{c.diff > 0 ? 'أكثر من المخطط بـ' : 'أقل من المخطط بـ'} <Money v={Math.abs(c.diff)} /></>}
-              </p>
-            )}
-            <KV label="هذا الشهر" value={<><Money v={c.actualThisMonth} /> <span className="muted ph-of">من <Money v={c.plannedThisMonth} /></span></>} />
-            {c.items.map((it) => (
-              <KV key={it.contribution.key}
-                label={<>{it.contribution.name}<small>{contributionWhen(it.contribution)}</small></>}
-                value={it.placeable ? <Money v={it.plannedYtd} /> : <span className="warn small">حدّد شهره</span>}
-                sub={it.next ? `التالي ${dateShort(it.next.date)}` : undefined} />
-            ))}
-            {owner && <a className="btn soft block ph-cta" href="#/deposit" onClick={() => haptic()}>خطّط إيداعك</a>}
-          </> : (
-            <>
-              <p className="small muted">لا مصادر إيداع في خطتك.</p>
-              {owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('contributions')}>أضف مصادر الإيداع</button>}
-            </>
-          )}
-        </Card>
       </div>
 
       <div className="ph-col">
+        <ChecksCard checks={view.checks} />
+
         {/* emergency */}
         <Card className="ph-reserve" title="صندوق الطوارئ">
           {e.enabled ? <>
@@ -315,16 +290,16 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
                 : <p className="small muted">لم يُحدَّد المصروف الشهري.</p>
             )}
             {e.source === 'accounts' && <p className="tiny muted ph-src">من الحسابات المستبعدة من المحفظة</p>}
-            {owner && e.shortfall > 0.5 && <button type="button" className="btn primary block ph-cta" onClick={() => openAction('emergency', String(Math.round(e.shortfall)))}>أضف إليه</button>}
+            {owner && e.shortfall > 0.5 && <button type="button" className="btn primary block ph-cta" onClick={() => openAction('buy', 'emergency')}>سجّل شراءً له</button>}
           </> : <>
             <p className="small muted">لا صندوق طوارئ في خطتك.</p>
             {owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('emergency')}>أضفه</button>}
           </>}
         </Card>
 
-        {/* income treasury */}
-        <Card className="ph-treasury" title={<>خزانة الدخل{inc && <span className={`chip ${t.started ? 'accent' : t.building ? 'warn' : ''} ph-state`}>
-          {t.started ? 'بدأ الدخل' : t.building ? 'قيد التعبئة' : inc.build_from || inc.start ? `تبدأ في ${monthYear(inc.build_from ?? inc.start!)}` : 'بلا موعد'}</span>}</>}>
+        {/* income account */}
+        <Card className="ph-treasury" title={<>حساب الدخل{inc && <span className={`chip ${t.started ? 'accent' : t.building ? 'warn' : ''} ph-state`}>
+          {t.started ? 'بدأ الدخل' : t.building ? 'قيد البناء' : inc.build_from || inc.start ? `يبدأ في ${monthYear(inc.build_from ?? inc.start!)}` : 'بلا موعد'}</span>}</>}>
           {inc ? <>
             <div className="ph-fig"><b><Money v={t.value} /></b>{t.target > 0 && <span>من <Money v={t.target} /></span>}</div>
             {t.target > 0 && <div className="progress ph-progress"><i style={{ width: `${clamp01(t.value / t.target) * 100}%`, background: 'var(--income)' }} /></div>}
@@ -333,7 +308,7 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
             {t.started
               ? <KV label="يوم التحويل" value={<>{inc.transfer_day} من كل شهر</>} sub={t.transferredThisMonth ? 'حُوّل هذا الشهر' : undefined} />
               : <KV label="يبدأ الدخل" value={inc.start ? dateLong(inc.start) : '—'} />}
-            {t.holdSales && <p className="ph-hold"><IconAlert /><span>لا تبع الأسهم الآن؛ المحفظة دون قمتها بـ <Pct v={p.drawdown} />. اصرف من الخزانة والتوزيعات.</span></p>}
+            {t.holdSales && <p className="ph-hold"><IconAlert /><span>لا تبع الأسهم الآن؛ المحفظة دون قمتها بـ <Pct v={p.drawdown} />. اصرف من حساب الدخل والتوزيعات.</span></p>}
             {owner && (t.building && t.shortfall > 0.5 || t.started) && (
               <div className="ph-ctas">
                 {t.building && t.shortfall > 0.5 && <button type="button" className="btn soft" onClick={() => openAction('treasury', String(t.monthlyMove > 0 ? t.monthlyMove : Math.round(t.shortfall)))}>انقل</button>}
@@ -341,9 +316,32 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
               </div>
             )}
           </> : <>
-            <p className="small muted">غير مفعّلة في خطتك.</p>
-            {owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('income')}>فعّلها</button>}
+            <p className="small muted">غير مفعّل في خطتك.</p>
+            {owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('income')}>فعّله</button>}
           </>}
+        </Card>
+
+        {/* contributions */}
+        <Card className="ph-contrib" title={`الإيداعات في ${c.year}`}>
+          {doc.contributions.length ? <>
+            <div className="ph-figs">
+              <div><span>أودعت</span><b><Money v={c.actual} /></b></div>
+              <div><span>المخطط حتى اليوم</span><b><Money v={c.planned} /></b></div>
+            </div>
+            {c.planned > 0 && <div className="progress ph-progress"><i style={{ width: `${clamp01(c.actual / c.planned) * 100}%`, background: c.actual >= c.planned ? 'var(--good)' : 'var(--accent)' }} /></div>}
+            <KV label="هذا الشهر" value={<><Money v={c.actualThisMonth} /> <span className="muted ph-of">من <Money v={c.plannedThisMonth} /></span></>} />
+            {c.items.map((it) => (
+              <KV key={it.contribution.key}
+                label={<>{it.contribution.name}<small>{contributionWhen(it.contribution)}</small></>}
+                value={it.placeable ? <Money v={it.plannedYtd} /> : <span className="warn small">حدّد شهره</span>}
+                sub={it.next ? `التالي ${dateShort(it.next.date)}` : undefined} />
+            ))}
+          </> : (
+            <>
+              <p className="small muted">لا مصادر إيداع في خطتك.</p>
+              {owner && <button type="button" className="btn soft small ph-cta" onClick={() => edit?.('contributions')}>أضف مصادر الإيداع</button>}
+            </>
+          )}
         </Card>
 
         {/* steps */}
@@ -382,11 +380,48 @@ function ProgressView({ view, edit }: { view: PlanView; edit: Edit }) {
 
         <a className="card ph-link" href="#/analysis" onClick={() => haptic()}>
           <span className="ico"><IconChart /></span>
-          <span className="grow"><b>التحليل</b><span>الأداء والتنويع والتكاليف</span></span>
+          <span className="grow"><b>التحليل</b><span>الأداء والتوزيع والمخاطر والتكاليف</span></span>
           <Chev />
         </a>
       </div>
     </div>
+  )
+}
+
+/** «فحص الخطة»: the plan against the designer's rules of thumb (problems first). */
+function ChecksCard({ checks }: { checks: PlanCheck[] }) {
+  const { readOnly } = useStore()
+  if (!checks.length) return null
+  const bad = checks.filter((c) => c.level === 'bad')
+  const warn = checks.filter((c) => c.level === 'warn')
+  const ok = checks.filter((c) => c.level === 'ok')
+  const issues = [...bad, ...warn]
+  return (
+    <Card flush className="ph-checks" title="فحص الخطة">
+      <div className="ph-check-counts">
+        <span className="good"><IconCheck />{ok.length} سليم</span>
+        {warn.length > 0 && <span className="warn"><IconAlert />{warn.length} {warn.length === 1 ? 'ملاحظة' : warn.length === 2 ? 'ملاحظتان' : 'ملاحظات'}</span>}
+        {bad.length > 0 && <span className="bad"><IconAlert />{bad.length} {bad.length === 1 ? 'خطأ' : 'أخطاء'}</span>}
+      </div>
+      {issues.map((c) => (
+        <div key={c.key} className={`attn ${c.level === 'bad' ? 'bad' : 'warn'} ph-check`} style={{ cursor: 'default' }}>
+          <span className="ico"><IconAlert /></span>
+          <p>{c.title}<small>{c.detail}</small></p>
+          {c.fix?.route && !readOnly && <a className="attn-cta" href={`#/${c.fix.route}`} onClick={() => haptic()}>{c.fix.label}</a>}
+        </div>
+      ))}
+      {ok.length > 0 && (
+        <details className="ph-done">
+          <summary>السليم<span className="pd-sub">{ok.length}</span></summary>
+          {ok.map((c) => (
+            <div key={c.key} className="attn accent ph-check" style={{ cursor: 'default' }}>
+              <span className="ico"><IconCheck /></span>
+              <p>{c.title}<small>{c.detail}</small></p>
+            </div>
+          ))}
+        </details>
+      )}
+    </Card>
   )
 }
 
@@ -403,6 +438,7 @@ function DocView({ view, edit }: { view: PlanView; edit: Edit }) {
   if (!doc || !active) {
     return (
       <div className="pd">
+        <DesignBanner />
         <PlanBuilderCard />
         {plans.length > 0 && <PlansCard />}
       </div>
@@ -413,8 +449,9 @@ function DocView({ view, edit }: { view: PlanView; edit: Edit }) {
       <div className="pd-title">
         <h2>{doc.name}</h2>
         <span className="chip accent">نشطة</span>
-        <span className="tiny muted">أُنشئت {dateLong(doc.created)}</span>
+        <span className="tiny muted">أُنشئت {dateLong(doc.created)}{doc.profile?.source === 'designer' ? ' · من «صمّم خطتي»' : ''}</span>
       </div>
+      <DesignBanner compare />
       {!readOnly && gaps.length > 0 && (
         <Card flush className={`pd-gaps ${fresh ? 'fresh' : ''}`} title={<>أكمل خطتك<span className="pd-sub">{gaps.length}</span></>}>
           {gaps.map((g) => (

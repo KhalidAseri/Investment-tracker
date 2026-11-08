@@ -1,13 +1,20 @@
-// React side of «الخطة»: the active plan with its progress and actions, and the operations that change plans and money.
-// The active phase is applied to the sleeves by the store (StoreProvider) on load, on plan changes and when the date rolls over.
+// React side of «الخطة»: the active plan with its progress, actions and advice (roadmap, structure, checks, deposit split),
+// and the operations that change plans and money.
+// The active phase's effective targets are applied to the sleeves by the store (StoreProvider) on load, on plan or value
+// changes and when the date rolls over.
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { useStore } from './store'
+import { useStore, type Table } from './store'
 import { rateOf } from './calc'
 import { todayISO } from './format'
 import {
-  exportPlan, isLumpSum, normalizePlan, planActions, planContext, planFileName, pruneDismissed, withBaseline,
+  exportPlan, isLumpSum, normalizePlan, planActions, planContext, planFileName, pruneDismissed,
   type ISODate, type PlanAction, type PlanContext, type PlanDoc, type PlanProgress, type PlanReview, type TreasurySaleLine,
 } from './plan'
+import {
+  allocateDeposit, buildRoadmap, planChecks, structureScore,
+  type DepositPlan, type PlanCheck, type RoadmapItem,
+} from './advisor'
+import { EMPTY_MARKET, type MarketInputs } from './marketTypes'
 import type { Goal, GoalKind, Holding, PlanRow, Transaction } from './types'
 
 export interface PlanView {
@@ -18,12 +25,26 @@ export interface PlanView {
   /** null until settings are loaded */
   ctx: PlanContext | null
   progress: PlanProgress | null
-  /** what to do now, most urgent first (dismissed and, for viewers, owner-only items removed) */
+  /** what to do now, most urgent first (dismissed and, for viewers, owner-only items removed); includes «الأولوية التالية» */
   actions: PlanAction[]
   today: ISODate
+  /** the build order with what each item needs and the instrument to buy (empty without a plan) */
+  roadmap: RoadmapItem[]
+  /** how complete the structure is (null without a plan) */
+  structure: { pct: number; done: number; total: number } | null
+  /** the plan compared with the designer's heuristics, problems first (empty without a plan) */
+  checks: PlanCheck[]
+  /** how to split a deposit (null until settings are loaded); market defaults to the one usePlan was given */
+  allocate: (amount: number, market?: MarketInputs, opts?: { reserveFirst?: boolean }) => DepositPlan | null
+  /** the market data the advice above used */
+  market: MarketInputs
 }
 
-export function usePlan(): PlanView {
+/**
+ * The active plan with its context, actions and advice. Pass real market data (market.ts hooks) for prices, units and
+ * yield-based choices; without it the advice still works (instruments chosen by the plan and the catalog).
+ */
+export function usePlan(market: MarketInputs = EMPTY_MARKET): PlanView {
   const { plans, settings, sleeves, accounts, holdings, transactions, snapshots, goals, watchlist, ibkr, fx, readOnly } = useStore()
   const today = todayISO()
   return useMemo(() => {
@@ -32,8 +53,15 @@ export function usePlan(): PlanView {
     const ctx = settings
       ? planContext({ doc, today, settings, sleeves, accounts, holdings, transactions, snapshots, goals, watchlist, ibkr, fx, readOnly })
       : null
-    return { plans, active, doc, ctx, progress: ctx?.progress ?? null, actions: ctx ? planActions(ctx) : [], today }
-  }, [plans, settings, sleeves, accounts, holdings, transactions, snapshots, goals, watchlist, ibkr, fx, readOnly, today])
+    const roadmap = ctx && doc ? buildRoadmap(ctx, market) : []
+    const structure = ctx && doc ? structureScore(ctx) : null
+    const checks = doc ? planChecks(doc, ctx) : []
+    const allocate: PlanView['allocate'] = (amount, m = market, opts) => (ctx ? allocateDeposit(ctx, amount, m, opts) : null)
+    return {
+      plans, active, doc, ctx, progress: ctx?.progress ?? null, actions: ctx ? planActions(ctx, { roadmap }) : [], today,
+      roadmap, structure, checks, allocate, market,
+    }
+  }, [plans, settings, sleeves, accounts, holdings, transactions, snapshots, goals, watchlist, ibkr, fx, readOnly, today, market])
 }
 
 export interface PlanOps {
@@ -47,12 +75,12 @@ export interface PlanOps {
   importDoc: (doc: PlanDoc, mode: 'replace' | 'add', map?: Record<string, string | null>) => Promise<PlanRow | null>
   markStep: (key: string, done?: boolean, date?: ISODate) => Promise<boolean>
   dismiss: (key: string) => Promise<boolean>
-  /** sells holdings into the income treasury (from treasurySalePlan) */
+  /** sells holdings into the income account (from treasurySalePlan) */
   sell: (lines: TreasurySaleLine[], date?: ISODate) => Promise<boolean>
-  /** monthly income from the treasury to the owner's account (tx 'income') */
+  /** monthly income from the income account to the owner's account (tx 'income') */
   withdraw: (amount: number, date?: ISODate) => Promise<boolean>
   topUpEmergency: (amount: number, date?: ISODate) => Promise<boolean>
-  /** adds money to the treasury: a distribution or a transfer ('transfer'), or new money ('deposit') */
+  /** adds money to the income account: a distribution or a transfer ('transfer'), or new money ('deposit') */
   toTreasury: (amount: number, date?: ISODate, note?: string | null, kind?: 'transfer' | 'deposit') => Promise<boolean>
   recordReview: (review: PlanReview) => Promise<boolean>
   /** JSON text and file name of a plan (the active one by default) */
@@ -60,8 +88,25 @@ export interface PlanOps {
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100
-const GOAL_NAME: Record<Exclude<GoalKind, 'goal'>, string> = { emergency: 'صندوق الطوارئ', income: 'خزانة الدخل' }
-const CASH_NAME: Record<Exclude<GoalKind, 'goal'>, string> = { emergency: 'نقد صندوق الطوارئ', income: 'نقد خزانة الدخل' }
+export type SpecialGoal = Exclude<GoalKind, 'goal'>
+export const GOAL_NAME: Record<SpecialGoal, string> = { emergency: 'صندوق الطوارئ', income: 'حساب الدخل' }
+export const CASH_NAME: Record<SpecialGoal, string> = { emergency: 'نقد صندوق الطوارئ', income: 'نقد حساب الدخل' }
+
+/**
+ * The emergency-fund or income-account goal, created when missing (used by usePlanOps and usePurchase).
+ * `target` is written on creation only (the emergency target or the income account's target from the plan).
+ */
+export async function ensureSpecialGoal(
+  deps: { goals: Goal[]; upsert: <T extends Record<string, any>>(table: Table, row: T) => Promise<T | null> },
+  kind: SpecialGoal, target: number,
+): Promise<Goal | null> {
+  const found = deps.goals.find((g) => g.kind === kind && !g.archived)
+  if (found) return found
+  return deps.upsert<Goal>('goals', {
+    name: GOAL_NAME[kind], kind, target_amount: Math.round(Math.max(0, target) || 0), target_date: null, expected_return: 0,
+    allocation: [{ key: 'cash', name: 'سيولة', weight: 100 }], priority: 1, note: null, archived: false, sort: kind === 'emergency' ? -2 : -1,
+  } as unknown as Goal)
+}
 
 export function usePlanOps(): PlanOps {
   const store = useStore()
@@ -84,7 +129,6 @@ export function usePlanOps(): PlanOps {
   return useMemo<PlanOps>(() => {
     const guard = () => { if (readOnly) { notify('للعرض فقط'); return false } return true }
     const docOf = (row: PlanRow) => written.current[row.id] ?? normalizePlan(row.doc)
-    const planValue = () => live.current.view.progress?.planValue ?? 0
 
     const writeDoc = async (id: string, doc: PlanDoc, extra: Partial<PlanRow> = {}) => {
       const saved = await upsert<PlanRow>('plans', { id, name: doc.name, doc, ...extra } as PlanRow)
@@ -108,7 +152,7 @@ export function usePlanOps(): PlanOps {
 
     const create: PlanOps['create'] = (doc, opts = {}) => serial(async () => {
       if (!guard()) return null
-      const d = opts.activate ? withBaseline(doc, planValue()) : doc
+      const d = doc
       if (opts.activate) await deactivateOthers(null)
       const row = await upsert<PlanRow>('plans', { name: d.name, is_active: !!opts.activate, doc: d } as unknown as PlanRow)
       if (row) { written.current[row.id] = d; notify(opts.activate ? 'حُفظت الخطة وأصبحت نشطة' : 'حُفظت الخطة') }
@@ -129,8 +173,7 @@ export function usePlanOps(): PlanOps {
       const row = live.current.store.plans.find((p) => p.id === id)
       if (!row) return false
       await deactivateOthers(id)
-      const doc = withBaseline(docOf(row), planValue())
-      const saved = await writeDoc(id, doc, { is_active: true })
+      const saved = await writeDoc(id, docOf(row), { is_active: true })
       if (saved) notify('أصبحت الخطة نشطة')
       return !!saved
     })
@@ -159,7 +202,7 @@ export function usePlanOps(): PlanOps {
       }
       const next: PlanDoc = { ...doc, sleeve_map, state: { ...doc.state, dismissed: {} } }
       if (mode === 'replace' && active) {
-        const row = await update(() => withBaseline(next, planValue()), active.id)
+        const row = await update(() => next, active.id)
         if (row) notify('استُبدلت الخطة النشطة')
         return row
       }
@@ -181,15 +224,9 @@ export function usePlanOps(): PlanOps {
     }
 
     // ---------- money ----------
-    const ensureGoal = async (kind: Exclude<GoalKind, 'goal'>): Promise<Goal | null> => {
-      const found = live.current.store.goals.find((g) => g.kind === kind && !g.archived)
-      if (found) return found
+    const ensureGoal = (kind: SpecialGoal): Promise<Goal | null> => {
       const p = live.current.view.progress
-      const target = kind === 'emergency' ? p?.emergency.target ?? 0 : p?.treasury.target ?? 0
-      return upsert<Goal>('goals', {
-        name: GOAL_NAME[kind], kind, target_amount: Math.round(target), target_date: null, expected_return: 0,
-        allocation: [{ key: 'cash', name: 'سيولة', weight: 100 }], priority: 1, note: null, archived: false, sort: kind === 'emergency' ? -2 : -1,
-      } as unknown as Goal)
+      return ensureSpecialGoal({ goals: live.current.store.goals, upsert }, kind, kind === 'emergency' ? p?.emergency.target ?? 0 : p?.treasury.target ?? 0)
     }
     const holdingNow = (h: Holding) => writtenHoldings.current[h.id] ?? live.current.store.holdings.find((x) => x.id === h.id) ?? h
     const saveHolding = async (patch: Partial<Holding> & { id?: string }) => {
@@ -201,7 +238,7 @@ export function usePlanOps(): PlanOps {
      * The holding that carries the goal's money: its cash (lump-sum) holding, else its largest holding,
      * else a new «نقد …» lump-sum holding.
      */
-    const goalHolding = async (kind: Exclude<GoalKind, 'goal'>, accountId: string | null): Promise<Holding | null> => {
+    const goalHolding = async (kind: SpecialGoal, accountId: string | null): Promise<Holding | null> => {
       const goal = await ensureGoal(kind)
       if (!goal) return null
       const { fx } = live.current.store
@@ -242,11 +279,11 @@ export function usePlanOps(): PlanOps {
       const rows: Record<string, unknown>[] = []
       for (const l of valid) {
         const h = l.holding
-        rows.push(tx({ tx_date: day, kind: 'sell', amount_sar: round2(l.amount), holding_id: h.id, account_id: h.account_id, sleeve_id: h.sleeve_id, quantity: l.units, price: Number(h.price), note: 'بيع لخزانة الدخل' }))
+        rows.push(tx({ tx_date: day, kind: 'sell', amount_sar: round2(l.amount), holding_id: h.id, account_id: h.account_id, sleeve_id: h.sleeve_id, quantity: l.units, price: Number(h.price), note: 'بيع لحساب الدخل' }))
         // leaves the main portfolio: performance counts it as money out, not as a loss
-        rows.push(tx({ tx_date: day, kind: 'transfer', amount_sar: -round2(l.amount), holding_id: h.id, account_id: h.account_id, sleeve_id: h.sleeve_id, note: 'إلى خزانة الدخل' }))
+        rows.push(tx({ tx_date: day, kind: 'transfer', amount_sar: -round2(l.amount), holding_id: h.id, account_id: h.account_id, sleeve_id: h.sleeve_id, note: 'إلى حساب الدخل' }))
       }
-      rows.push(tx({ tx_date: day, kind: 'transfer', amount_sar: total, holding_id: cash.id, account_id: cash.account_id, note: 'من المحفظة إلى خزانة الدخل' }))
+      rows.push(tx({ tx_date: day, kind: 'transfer', amount_sar: total, holding_id: cash.id, account_id: cash.account_id, note: 'من المحفظة إلى حساب الدخل' }))
       if (!(await insertMany('transactions', rows))) return false
       const { fx } = live.current.store
       for (const l of valid) {
@@ -263,7 +300,7 @@ export function usePlanOps(): PlanOps {
         }
       }
       await adjust(cash, total)
-      notify('سُجّل البيع ونُقل المبلغ إلى خزانة الدخل')
+      notify('سُجّل البيع ونُقل المبلغ إلى حساب الدخل')
       return true
     })
 
@@ -271,7 +308,7 @@ export function usePlanOps(): PlanOps {
       if (!guard() || !(amount > 0)) return false
       const cash = await goalHolding('income', null)
       if (!cash) return false
-      const ok = await insertMany('transactions', [tx({ tx_date: date ?? todayISO(), kind: 'income', amount_sar: round2(amount), holding_id: cash.id, account_id: cash.account_id, note: 'الدخل الشهري من خزانة الدخل' })])
+      const ok = await insertMany('transactions', [tx({ tx_date: date ?? todayISO(), kind: 'income', amount_sar: round2(amount), holding_id: cash.id, account_id: cash.account_id, note: 'الدخل الشهري من حساب الدخل' })])
       if (!ok) return false
       await adjust(cash, -amount)
       notify('سُجّل تحويل الدخل الشهري')
@@ -299,10 +336,10 @@ export function usePlanOps(): PlanOps {
       if (!guard() || !(amount > 0)) return false
       const cash = await goalHolding('income', null)
       if (!cash) return false
-      const ok = await insertMany('transactions', [tx({ tx_date: date ?? todayISO(), kind, amount_sar: round2(amount), holding_id: cash.id, account_id: cash.account_id, note: note || (kind === 'deposit' ? 'إيداع لهدف: خزانة الدخل' : 'إلى خزانة الدخل') })])
+      const ok = await insertMany('transactions', [tx({ tx_date: date ?? todayISO(), kind, amount_sar: round2(amount), holding_id: cash.id, account_id: cash.account_id, note: note || (kind === 'deposit' ? 'إيداع لهدف: حساب الدخل' : 'إلى حساب الدخل') })])
       if (!ok) return false
       await adjust(cash, amount)
-      notify('أُضيف المبلغ إلى خزانة الدخل')
+      notify('أُضيف المبلغ إلى حساب الدخل')
       return true
     })
 
