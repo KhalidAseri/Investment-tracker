@@ -1,0 +1,19 @@
+{
+  "name": "مسار: خطة الاستقلال المالي",
+  "short_name": "مسار",
+  "description": "متابعة المحفظة والخطة والدخل حتى الاستقلال المالي",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#F2F4F1",
+  "theme_color": "#0D6B57",
+  "categories": ["finance"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
