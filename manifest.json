@@ -1,0 +1,17 @@
+{
+  "name": "استثماراتي — مرشد المحفظة",
+  "short_name": "استثماراتي",
+  "description": "مرشد محفظتك: التوزيع، المخاطر، الخطة، الدخل والزكاة",
+  "start_url": "/Investment-tracker/dashboard/",
+  "scope": "/Investment-tracker/",
+  "display": "standalone",
+  "background_color": "#f5f5f2",
+  "theme_color": "#0f6b5d",
+  "dir": "rtl",
+  "lang": "ar",
+  "categories": ["finance"],
+  "icons": [
+    { "src": "/Investment-tracker/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/Investment-tracker/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
