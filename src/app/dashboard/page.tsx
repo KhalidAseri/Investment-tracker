@@ -1,205 +1,123 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useLocale } from '@/components/shared/LocaleContext'
-import TotalValueCard from '@/components/dashboard/TotalValueCard'
-import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard'
-import AllocationChart from '@/components/dashboard/AllocationChart'
-import DividendIncomeCard from '@/components/dashboard/DividendIncomeCard'
-import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { getAccounts, getHoldings, getAllDividends } from '@/lib/storage'
-import { fetchQuotes, type MarketQuote } from '@/lib/market-client'
-import type { Account, AccountSummary } from '@/types'
-import { Plus, TrendingUp, Building2, Wallet, RefreshCw } from 'lucide-react'
-import { ACCOUNT_CONFIGS } from '@/lib/constants'
 import Link from 'next/link'
+import { useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, Plus, Sparkles } from 'lucide-react'
+import { useStore } from '@/lib/store'
+import { ASSET_CLASSES, CLASS_COLOR, CLASS_LABEL } from '@/lib/labels'
+import { classTotals } from '@/lib/engine/exposure'
+import { goalStatus } from '@/lib/engine/plan'
+import { nextActions } from '@/lib/actions'
+import { pct } from '@/lib/format'
+import AssetWizard from '@/components/AssetWizard'
+import Onboarding from '@/components/Onboarding'
+import { LineChart, Meter, SegBar } from '@/components/charts'
+import { Delta, Empty, Money, Notice } from '@/components/ui'
 
 export default function DashboardPage() {
-  const { t, locale } = useLocale()
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
-  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
-  const [refreshing, setRefreshing] = useState(false)
+  const { L, data, settings, view, quotes } = useStore()
+  const [adding, setAdding] = useState(false)
+  const Arrow = settings.locale === 'ar' ? ChevronLeft : ChevronRight
 
-  useEffect(() => {
-    try {
-      const accs = getAccounts().map((a) => ({
-        ...a,
-        holdings: getHoldings(a.id),
-      }))
-      setAccounts(accs)
+  const actions = useMemo(() => nextActions(data, view, quotes, L), [data, view, quotes, L])
+  const goal = useMemo(() => goalStatus(view, settings), [view, settings])
+  const classes = useMemo(() => {
+    const totals = classTotals(view.rows)
+    return ASSET_CLASSES.map((c) => ({ key: c, label: L(CLASS_LABEL[c].ar, CLASS_LABEL[c].en), value: totals[c], pct: view.netWorth > 0 ? (totals[c] / view.netWorth) * 100 : 0, color: CLASS_COLOR[c] })).filter((c) => c.value > 0)
+  }, [view, L])
+  const history = data.snapshots.map((s) => ({ x: s.month, y: s.netWorth }))
 
-      // Fetch market data for all symbols
-      const symbols = accs.flatMap((a) => (a.holdings ?? []).map((h) => h.symbol).filter(Boolean)) as string[]
-      if (symbols.length > 0) {
-        fetchQuotes(symbols).then(setQuotes).catch(() => {})
-      }
-    } catch (e) {
-      console.error('Dashboard load error:', e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  if (!settings.onboarded && data.assets.length === 0) return <Onboarding />
 
-  async function refreshPrices() {
-    setRefreshing(true)
-    try {
-      const symbols = accounts.flatMap((a) => (a.holdings ?? []).map((h) => h.symbol).filter(Boolean)) as string[]
-      if (symbols.length > 0) {
-        const q = await fetchQuotes(symbols)
-        setQuotes(q)
-      }
-    } catch {}
-    setRefreshing(false)
+  if (data.assets.length === 0) {
+    return (
+      <>
+        <Empty icon={<Sparkles className="h-7 w-7" />} title={L('ابدأ بإضافة ما تملكه', 'Start by adding what you own')}
+          body={L('أضف أصولك مرة واحدة، والتطبيق يريك توزيعك الحقيقي، أين التركّز، وأين تضع مساهمتك القادمة.', 'Add your assets once and the app shows your real allocation, where you are concentrated and where your next contribution should go.')}
+          action={<button className="btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" />{L('إضافة أول أصل', 'Add first asset')}</button>} />
+        <AssetWizard open={adding} onClose={() => setAdding(false)} />
+      </>
+    )
   }
 
-  if (loading) return <LoadingSpinner />
-
-  const accountSummaries: AccountSummary[] = accounts.map((account) => {
-    const holdings = account.holdings ?? []
-    let totalValue = 0
-    let totalCost = 0
-    let dailyChange = 0
-
-    holdings.forEach((h) => {
-      const quote = h.symbol ? quotes[h.symbol] : null
-      const price = quote?.price ?? null
-      const value = price ? h.shares * price : (h.currentValue ?? h.shares * h.averageCost)
-      const cost = h.shares * h.averageCost
-      totalValue += value
-      totalCost += cost
-      if (quote) {
-        dailyChange += h.shares * quote.change
-      }
-    })
-
-    return {
-      id: account.id,
-      name: account.name,
-      nameAr: account.nameAr,
-      type: account.type,
-      totalValue,
-      totalCost,
-      gainLoss: totalValue - totalCost,
-      gainLossPercent: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
-      holdingsCount: holdings.length,
-    }
-  })
-
-  const totalValue = accountSummaries.reduce((sum, a) => sum + a.totalValue, 0)
-  const totalCost = accountSummaries.reduce((sum, a) => sum + a.totalCost, 0)
-
-  // Calculate real daily change from market data
-  let totalDailyChange = 0
-  accounts.forEach((account) => {
-    ;(account.holdings ?? []).forEach((h) => {
-      const quote = h.symbol ? quotes[h.symbol] : null
-      if (quote) totalDailyChange += h.shares * quote.change
-    })
-  })
-  const totalDailyChangePercent = totalValue > 0 ? (totalDailyChange / totalValue) * 100 : 0
-
-  const allDividends = getAllDividends()
-  const currentYear = new Date().getFullYear()
-  const annualIncome = allDividends
-    .filter((d) => new Date(d.payDate).getFullYear() >= currentYear - 1)
-    .reduce((sum, d) => sum + d.amount, 0)
-
-  const allocationData = accountSummaries.map((a) => ({
-    name: a.name,
-    nameAr: a.nameAr,
-    value: a.totalValue,
-    type: a.type,
-  }))
-
-  // Quick start account types for onboarding
-  const quickTypes = [
-    { type: 'SAUDI_STOCKS', icon: TrendingUp, color: 'text-green-600 bg-green-50' },
-    { type: 'EMPLOYER_SAVINGS', icon: Building2, color: 'text-blue-600 bg-blue-50' },
-    { type: 'MANAGED_PORTFOLIO', icon: Wallet, color: 'text-purple-600 bg-purple-50' },
-  ]
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t.nav.dashboard}</h1>
-        <div className="flex items-center gap-2">
-          {accounts.length > 0 && Object.keys(quotes).length > 0 && (
-            <button onClick={refreshPrices} disabled={refreshing}
-              className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors touch-manipulation disabled:opacity-50">
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
+    <>
+      {/* Net worth */}
+      <section className="rounded-3xl bg-brand-700 p-5 text-white shadow-card">
+        <p className="text-sm text-white/75">{L('صافي قيمة المحفظة', 'Portfolio net worth')}</p>
+        <p className="mt-1 text-[2.1rem] font-bold leading-none"><Money value={view.netWorth} /></p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+          {view.hasLive && (
+            <span className="text-white/75">{L('اليوم', 'Today')} <span className="num font-semibold text-white">{settings.hideAmounts ? pct(view.dayChangePct, 2, true) : `${view.dayChange >= 0 ? '+' : ''}${Math.round(view.dayChange).toLocaleString('en-US')} (${pct(view.dayChangePct, 2, true)})`}</span></span>
           )}
-          <Link
-            href="/accounts/new"
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium touch-manipulation"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">{t.accounts.addAccount}</span>
-            <span className="sm:hidden">{t.common.add}</span>
-          </Link>
+          <span className="text-white/75">{L('إجمالي الربح', 'Total gain')} <span className="num font-semibold text-white">{pct(view.gainPct, 1, true)}</span></span>
         </div>
-      </div>
-
-      {accounts.length === 0 ? (
-        <div className="space-y-6">
-          <div className="card text-center py-8 sm:py-12">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-100 flex items-center justify-center">
-              <TrendingUp className="w-8 h-8 text-primary-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">{t.dashboard.welcomeTitle}</h2>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">{t.dashboard.welcomeDesc}</p>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-3">{t.dashboard.quickStart}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {quickTypes.map(({ type, icon: Icon, color }) => {
-                const config = ACCOUNT_CONFIGS[type]
-                return (
-                  <Link key={type} href={`/accounts/new?type=${type}`}
-                    className="card-hover flex items-center gap-3 p-4">
-                    <div className={`p-2.5 rounded-lg ${color}`}><Icon className="w-5 h-5" /></div>
-                    <div>
-                      <p className="font-medium text-sm text-gray-900">{locale === 'ar' ? config.label.ar : config.label.en}</p>
-                      <p className="text-xs text-gray-500">{locale === 'ar' ? config.description.ar : config.description.en}</p>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/15 pt-3 text-sm">
+          <div><p className="text-xs text-white/70">{L('استثماري', 'Investable')}</p><Money value={view.investable} className="font-semibold" /></div>
+          <div><p className="text-xs text-white/70">{L('صندوق الطوارئ', 'Emergency fund')}</p><Money value={view.emergency} className="font-semibold" /></div>
         </div>
-      ) : (
-        <>
-          <TotalValueCard
-            totalValue={totalValue}
-            totalCost={totalCost}
-            dailyChange={totalDailyChange}
-            dailyChangePercent={totalDailyChangePercent}
-          />
+      </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="font-semibold text-gray-900">{t.dashboard.accounts}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {accountSummaries.map((account) => (
-                  <AccountSummaryCard key={account.id} account={account} />
-                ))}
-              </div>
-            </div>
+      {/* What to do now */}
+      <section className="space-y-2.5">
+        <h2 className="section-title">{L('المطلوب منك الآن', 'What needs you now')}</h2>
+        {actions.map((a) => (
+          <Notice key={a.id} tone={a.tone} title={a.title} action={<Link href={a.href} className="inline-flex min-h-[36px] items-center gap-1 text-sm font-semibold text-brand-700">{a.cta}<Arrow className="h-4 w-4" /></Link>}>
+            {a.body}
+          </Notice>
+        ))}
+      </section>
 
-            <div className="space-y-4">
-              <AllocationChart data={allocationData} />
-              <DividendIncomeCard
-                annualIncome={annualIncome}
-                monthlyIncome={annualIncome / 12}
-                yieldOnCost={totalCost > 0 ? (annualIncome / totalCost) * 100 : 0}
-              />
-            </div>
+      {/* Goal */}
+      {goal.target > 0 && (
+        <Link href="/plan/#goal" className="card block">
+          <div className="flex items-baseline justify-between">
+            <h2 className="section-title">{L('هدفك', 'Your goal')}</h2>
+            <span className="num text-sm font-bold">{pct(goal.pct, 0)}</span>
           </div>
-        </>
+          <div className="mt-3"><Meter value={goal.pct} label={L('نسبة بلوغ الهدف', 'Goal progress')} tone={goal.pct >= 100 ? 'good' : 'brand'} /></div>
+          <div className="mt-2 flex justify-between text-xs text-ink-soft">
+            <Money value={goal.current} />
+            <span>{L('من', 'of')} <Money value={goal.target} /></span>
+          </div>
+          <p className="mt-2 text-sm text-ink-soft">
+            {goal.pct >= 100 ? L('بلغت هدفك. راجع «الدخل» لتحويله إلى صرف منتظم.', 'You reached your goal. See Income to turn it into regular spending.')
+              : goal.reachYear ? L(`بوتيرتك الحالية تبلغه في ${goal.reachYear}.`, `At your current pace you reach it in ${goal.reachYear}.`)
+              : L('بالوتيرة الحالية لا يُبلغ الهدف — ارفع المساهمة الشهرية.', 'At the current pace the goal is not reached — raise your monthly contribution.')}
+          </p>
+        </Link>
       )}
-    </div>
+
+      {/* Allocation glance */}
+      <section className="card">
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">{L('توزيع المحفظة', 'Allocation')}</h2>
+          <Link href="/analysis/" className="flex min-h-[36px] items-center gap-1 text-sm font-semibold text-brand-700">{L('كل المحاور', 'All axes')}<Arrow className="h-4 w-4" /></Link>
+        </div>
+        <div className="mt-3"><SegBar parts={classes} /></div>
+        <ul className="mt-3 space-y-2">
+          {classes.map((c) => (
+            <li key={c.key} className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex min-w-0 items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: c.color }} aria-hidden /><span className="truncate">{c.label}</span></span>
+              <span className="flex shrink-0 items-baseline gap-2"><Money value={c.value} className="text-xs text-ink-soft" /><span className="num w-12 text-end font-semibold">{pct(c.pct)}</span></span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Net worth over time */}
+      <section className="card">
+        <h2 className="section-title">{L('مسار صافي القيمة', 'Net worth over time')}</h2>
+        {history.length >= 2 ? (
+          <div className="mt-2"><LineChart points={history} label={L('صافي القيمة شهريًا', 'Monthly net worth')} /></div>
+        ) : (
+          <p className="hint mt-2">{L('تُحفظ لقطة لصافي القيمة كل شهر تلقائيًا. يظهر المنحنى هنا من الشهر القادم.', 'A net-worth snapshot is saved automatically each month. The curve appears here from next month.')}</p>
+        )}
+        <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-sm">
+          <span className="text-ink-soft">{L('إجمالي الربح / الخسارة', 'Total gain / loss')}</span>
+          <Delta value={view.gain} percent={view.gainPct} />
+        </div>
+      </section>
+    </>
   )
 }

@@ -1,48 +1,17 @@
 {
-  "name": "متتبع الاستثمارات | Investment Tracker",
+  "name": "استثماراتي — مرشد المحفظة",
   "short_name": "استثماراتي",
-  "description": "تتبع جميع استثماراتك في مكان واحد",
-  "start_url": "/dashboard",
+  "description": "مرشد محفظتك: التوزيع، المخاطر، الخطة، الدخل والزكاة",
+  "start_url": "/Investment-tracker/dashboard/",
+  "scope": "/Investment-tracker/",
   "display": "standalone",
-  "background_color": "#f9fafb",
-  "theme_color": "#2563eb",
-  "orientation": "any",
-  "dir": "auto",
+  "background_color": "#f5f5f2",
+  "theme_color": "#0f6b5d",
+  "dir": "rtl",
   "lang": "ar",
-  "categories": ["finance", "business"],
+  "categories": ["finance"],
   "icons": [
-    {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
-    }
-  ],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "لوحة التحكم",
-      "short_name": "Dashboard",
-      "url": "/dashboard",
-      "description": "عرض ملخص المحفظة"
-    },
-    {
-      "name": "الحسابات",
-      "short_name": "Accounts",
-      "url": "/accounts",
-      "description": "إدارة الحسابات"
-    },
-    {
-      "name": "التوزيعات",
-      "short_name": "Dividends",
-      "url": "/dividends",
-      "description": "تتبع التوزيعات"
-    }
+    { "src": "/Investment-tracker/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/Investment-tracker/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

@@ -1,42 +1,20 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
-  content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./src/components/**/*.{ts,tsx}', './src/app/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['var(--font-inter)', 'var(--font-ibm-plex-arabic)', 'sans-serif'],
-        arabic: ['var(--font-ibm-plex-arabic)', 'sans-serif'],
-      },
+      fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'Inter', 'system-ui', 'sans-serif'] },
       colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-          950: '#172554',
-        },
-        success: {
-          50: '#f0fdf4',
-          500: '#22c55e',
-          600: '#16a34a',
-        },
-        danger: {
-          50: '#fef2f2',
-          500: '#ef4444',
-          600: '#dc2626',
-        },
+        surface: '#f5f5f2',
+        ink: { DEFAULT: '#0b0b0b', soft: '#52514e', faint: '#8a897f' },
+        line: '#e6e5e0',
+        brand: { 50: '#eef7f5', 100: '#d5ebe6', 500: '#14806f', 600: '#0f6b5d', 700: '#0c574c', 900: '#083a33' },
+        gain: '#12733a',
+        loss: '#b3261e',
+        warn: { 50: '#fff7e6', 600: '#9a5b00' },
       },
+      boxShadow: { card: '0 1px 2px rgba(11,11,11,0.04), 0 1px 1px rgba(11,11,11,0.03)' },
     },
   },
   plugins: [require('@tailwindcss/forms')],
