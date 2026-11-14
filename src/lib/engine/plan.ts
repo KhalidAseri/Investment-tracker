@@ -31,13 +31,20 @@ export function realMonthlyRate(settings: Settings): number {
   return Math.pow(1 + real, 1 / 12) - 1
 }
 
+/** Income is what is left of the expected return after zakat, inflation and the growth the user wants to keep. Never negative. */
+export function incomeRate(expectedReturn: number, zakatRate: number, inflation: number, growthTarget: number): number {
+  return Math.max(0, expectedReturn - zakatRate - inflation - growthTarget)
+}
+
+export function planIncomeRate(settings: Settings): number {
+  return incomeRate(settings.goal.expectedReturn, settings.income.planZakatRate, settings.goal.inflation, settings.income.growthTarget)
+}
+
 export function goalTarget(settings: Settings): number {
   const g = settings.goal
-  if (g.mode === 'INCOME') {
-    const rate = settings.income.rate > 0 ? settings.income.rate : 4
-    return (g.monthlyIncome * 12) / (rate / 100)
-  }
-  return g.amount
+  if (g.mode !== 'INCOME') return g.amount
+  const rate = planIncomeRate(settings)
+  return rate > 0 ? (g.monthlyIncome * 12) / (rate / 100) : 0
 }
 
 export function futureValue(current: number, monthly: number, months: number, r: number): number {

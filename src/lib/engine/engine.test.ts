@@ -5,9 +5,9 @@ import { defaultSettings, defaultZakatMode } from '../labels.ts'
 import { applyTransaction, computeView, dividendStats, revertTransaction, valueAsset } from './valuation.ts'
 import { breakdown, insights } from './exposure.ts'
 import { allocateContribution, allocateWithdrawal, driftRows } from './guidance.ts'
-import { emergencyStatus, futureValue, goalStatus, goalTarget, monthsToTarget, requiredMonthly } from './plan.ts'
-import { annualTransfer, balanceEquation, effectiveZakatRate, guardrail, layers, requiredPortfolio, smoothedValue } from './income.ts'
-import { nextHawlDate, zakatStatus } from './zakat.ts'
+import { emergencyStatus, futureValue, goalStatus, goalTarget, incomeRate, monthsToTarget, planIncomeRate, requiredMonthly } from './plan.ts'
+import { actualZakatRate, annualTransfer, balanceEquation, guardrail, layers, requiredPortfolio, smoothedValue, yearEndSummary } from './income.ts'
+import { nextHawlDate, zakatDue, zakatStatus } from './zakat.ts'
 import { reviewStatus } from './review.ts'
 import { decodeShare, encodeShare } from './share.ts'
 
@@ -201,29 +201,33 @@ test('goal maths: future value, months to target and required monthly agree', ()
   assert.equal(futureValue(100, 10, 12, 0), 220)
 })
 
-test('income goal converts to a capital target through the withdrawal rate', () => {
+test('income goal converts to a capital target through the plan income rate', () => {
   const s = settings()
   s.goal = { ...s.goal, mode: 'INCOME', monthlyIncome: 10000 }
-  s.income = { ...s.income, rate: 4 }
-  assert.equal(goalTarget(s), 3000000)
-  const g = goalStatus(view([asset({ manualValue: 750000 })], {}, s), s, NOW)
+  assert.equal(goalTarget(s), 4800000)                  // 120,000 a year at 2.5%
+  const g = goalStatus(view([asset({ manualValue: 1200000 })], {}, s), s, NOW)
   assert.equal(g.pct, 25)
+  s.income = { ...s.income, growthTarget: 5 }
+  assert.equal(goalTarget(s), 0)                        // nothing left for income: no finite target
 })
 
-test('income equation: growth is what is left after inflation, zakat and income', () => {
-  const b = balanceEquation(7, 2, 1.5, 3.5)
-  assert.deepEqual([b.growth, b.maxIncomeRate, b.sustainable], [0, 3.5, true])
-  assert.equal(balanceEquation(7, 2, 1.5, 5).sustainable, false)
-  assert.equal(balanceEquation(7, 2, 1.5, 5).growth, -1.5)
-  assert.equal(requiredPortfolio(2920, 3.5), 2920 * 12 / 0.035)
+test('income is the remainder after zakat, inflation and the growth target', () => {
+  assert.equal(incomeRate(7, 2.5, 2, 0), 2.5)
+  assert.equal(incomeRate(7, 2.5, 2, 1), 1.5)
+  assert.equal(incomeRate(7, 2.5, 3, 4), 0)             // never negative
+  const b = balanceEquation(7, 2.5, 2, 0)
+  assert.deepEqual([b.incomeRate, b.remainder, b.feasible], [2.5, 2.5, true])
+  const none = balanceEquation(7, 2.5, 3, 4)
+  assert.deepEqual([none.incomeRate, none.remainder, none.feasible], [0, -2.5, false])
+  assert.equal(requiredPortfolio(2500, 2.5), 1200000)
   assert.equal(requiredPortfolio(1000, 0), 0)
 })
 
-test('effective zakat rate comes from the holdings unless the user overrides it', () => {
+test('the plan assumes 2.5% zakat whatever the assets say; the actual rate is measured separately', () => {
   const s = settings()
-  assert.equal(effectiveZakatRate(15000, 1000000, s), 1.5)
-  s.income = { ...s.income, zakatRateOverride: 2 }
-  assert.equal(effectiveZakatRate(15000, 1000000, s), 2)
+  assert.equal(planIncomeRate(s), 2.5)                  // 7 - 2.5 - 2 - 0
+  assert.equal(actualZakatRate(15000, 1000000), 1.5)
+  assert.equal(actualZakatRate(1, 0), 0)
 })
 
 const snap = (month: string, v: number) => ({ month, date: month + '-01', netWorth: v + 50000, invested: 0, investable: v })
@@ -234,13 +238,16 @@ test('income is smoothed over up to three years of snapshots', () => {
   assert.deepEqual(sm, { value: 900000, months: 3 })   // too-old and current-month snapshots are ignored
 })
 
-test('guardrails: cut above the upper bound, raise below the lower one', () => {
-  assert.deepEqual(guardrail(60000, 1000000, 5, 3), { state: 'cut', ratePct: 6, suggested: 54000 })
-  assert.equal(guardrail(40000, 1000000, 5, 3).state, 'ok')
-  const up = guardrail(25000, 1000000, 5, 3)
+test('guardrails scale with the plan rate: cut above the upper bound, raise below the lower one', () => {
+  const cut = guardrail(60000, 1000000, 3.5)
+  assert.deepEqual([cut.state, cut.ratePct, cut.suggested], ['cut', 6, 54000])
+  assert.ok(Math.abs(cut.upper - 5) < 1e-9 && Math.abs(cut.lower - 3) < 1e-9)
+  assert.equal(guardrail(40000, 1000000, 3.5).state, 'ok')
+  const up = guardrail(25000, 1000000, 3.5)
   assert.equal(up.state, 'raise')
   assert.ok(Math.abs(up.suggested - 27500) < 1e-6)
-  assert.equal(guardrail(0, 1000000, 5, 3).state, 'none')
+  assert.equal(guardrail(25000, 1000000, 2.5).state, 'ok')   // same income is fine under a 2.5% plan
+  assert.equal(guardrail(0, 1000000, 3.5).state, 'none')
 })
 
 test('layers: income account, reserve and growth with their targets', () => {
@@ -263,7 +270,9 @@ test('yearly transfer: income + zakat, topped up by selling what is above target
     asset({ manualValue: 800000 }),
   ], {}, s).rows
   const t = annualTransfer(rows, 15000, [], s, L, NOW)
-  assert.equal(t.income, 35000)                      // 3.5% of 1,000,000
+  assert.equal(t.zakatRatePct, 1.5)
+  assert.equal(t.ratePct, 3.5)                       // 7 - 1.5 actual zakat - 2 - 0
+  assert.equal(t.income, 35000)
   assert.ok(Math.abs(t.monthly - 35000 / 12) < 1e-9)
   assert.equal(t.transfer, 50000)
   assert.equal(t.need, 40000)                        // 10,000 already in the income account
@@ -281,7 +290,7 @@ test('yearly transfer in a deep drop takes from the reserve and holds income fla
   const t = annualTransfer(rows, 0, history, s, L, NOW)
   assert.ok(Math.abs(t.drawdownPct - 20) < 1e-9)
   assert.equal(t.marketDown, true)
-  assert.equal(t.rule, 'held')                       // base would be 3.5% of 933,333 = 32,667 > last year's 30,000
+  assert.equal(t.rule, 'held')                       // base would be 5% of 933,333 > last year's 30,000, and no raise in a losing year
   assert.equal(t.income, 30000)
   assert.equal(t.fromReserve, 30000)
   assert.equal(t.sells.length, 0)
@@ -291,9 +300,59 @@ test('yearly transfer cuts income 10% when it exceeds the upper guardrail', () =
   const s = settings()
   const rows = view([asset({ manualValue: 500000 })], {}, s).rows
   const t = annualTransfer(rows, 0, [snap('2025-01', 1100000), snap('2025-06', 1100000)], s, L, NOW)
-  assert.ok(Math.abs(t.baseIncome - 31500) < 1e-6)   // 3.5% of the 900,000 average = 6.3% of today's value
+  assert.ok(Math.abs(t.baseIncome - 45000) < 1e-6)   // 5% of the 900,000 average = 9% of today's value
   assert.equal(t.rule, 'cut')
-  assert.ok(Math.abs(t.income - 28350) < 1e-6)
+  assert.ok(Math.abs(t.income - 40500) < 1e-6)
+})
+
+test('lower actual zakat raises the income by exactly the difference and keeps the growth target', () => {
+  const s = settings()
+  s.income = { ...s.income, growthTarget: 1 }
+  const rows = view([asset({ manualValue: 1000000 })], {}, s).rows
+  const planned = annualTransfer(rows, 25000, [], s, L, NOW)   // zakat as planned: 2.5%
+  const lighter = annualTransfer(rows, 10000, [], s, L, NOW)   // actual zakat: 1%
+  assert.equal(planned.ratePct, 1.5)
+  assert.equal(lighter.ratePct, 3)
+  assert.ok(Math.abs((lighter.income - planned.income) - 15000) < 1e-6)
+  assert.ok(Math.abs(lighter.transfer - planned.transfer) < 1e-6)   // same total leaves the portfolio
+})
+
+test('year-end summary: zakat gap, realised return after inflation, real change in income', () => {
+  const s = settings()
+  s.income = { ...s.income, annualIncome: 30000 }
+  const rows = view([asset({ manualValue: 1100000, costBasis: 900000 })], {}, s).rows
+  const history = [{ month: '2025-06', date: '2025-06-01', netWorth: 1000000, invested: 850000, investable: 1000000 }]
+  const t = annualTransfer(rows, 11000, history, s, L, NOW)
+  const y = yearEndSummary(t, 1100000, 900000, history, s, NOW)
+  assert.equal(y.zakatPlanned, 27500)
+  assert.deepEqual([y.zakatActual, y.zakatPlannedPct, y.zakatActualPct], [11000, 2.5, 1])
+  assert.deepEqual([y.incomeRatePlanned, y.incomeRateActual], [2.5, 4])
+  assert.ok(Math.abs(y.realizedPct! - 5) < 1e-9)        // +100,000 of which 50,000 was new money
+  assert.ok(Math.abs(y.realizedRealPct! - 3) < 1e-9)
+  assert.ok(Math.abs(y.incomeChangePct! - ((t.income - 30000) / 30000) * 100) < 1e-9)
+  assert.ok(Math.abs(y.incomeRealChangePct! - (y.incomeChangePct! - 2)) < 1e-9)
+  const first = yearEndSummary(annualTransfer(rows, 0, [], settings(), L, NOW), 1100000, 900000, [], settings(), NOW)
+  assert.deepEqual([first.realizedPct, first.incomeChangePct], [null, null])
+})
+
+test('zakat per share and a fixed amount', () => {
+  const s = settings()
+  s.zakat.goldPricePerGram = 400
+  const rows = view([
+    asset({ id: 'ps', symbol: 'VOO', pricing: 'live', currency: 'USD', quantity: 100, costBasis: 40000, zakatMode: 'PER_UNIT', zakatPerUnit: 2 }),
+    asset({ id: 'am', manualValue: 200000, zakatMode: 'AMOUNT', zakatAmount: 1500 }),
+    asset({ id: 'cash', assetClass: 'CASH', manualValue: 100000, zakatMode: 'FULL' }),
+  ], { VOO: quote('VOO', 500, 0, 'USD') }, s).rows
+  const z = zakatStatus(rows, {}, s, NOW)
+  const by = Object.fromEntries(z.rows.map((r) => [r.assetId, r]))
+  assert.equal(by.ps.due, 100 * 2 * 3.75)                // converted from USD
+  assert.ok(Math.abs(by.ps.effectivePct - (750 / 187500) * 100) < 1e-9)
+  assert.equal(by.am.due, 1500)
+  assert.equal(by.am.effectivePct, 0.75)
+  assert.equal(z.due, 750 + 1500 + 2500)
+  assert.ok(Math.abs(z.base - (30000 + 60000 + 100000)) < 1e-6)   // equivalent bases feed the nisab check
+  assert.equal(z.rows[0].assetId, 'cash')                // highest zakat first
+  assert.deepEqual(zakatDue({ zakatMode: 'AMOUNT', zakatPercent: 0, zakatAmount: -5 }, 1, 1, 1, 2.5), { base: 0, due: 0 })
 })
 
 test('zakat: modes, rate by calendar and nisab', () => {

@@ -4,17 +4,19 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { Check, Circle, CircleCheck, CircleDot } from 'lucide-react'
 import { useStore } from '@/lib/store'
-import type { ReviewFrequency, ZakatMode } from '@/lib/types'
+import type { ReviewFrequency } from '@/lib/types'
 import { CLASS_COLOR, FREQ_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
 import { insights, staleManualRows } from '@/lib/engine/exposure'
 import { DRIFT_THRESHOLD, driftRows, maxDrift } from '@/lib/engine/guidance'
-import { emergencyStatus, goalStatus, monthsToTarget, roadmap } from '@/lib/engine/plan'
-import { annualTransfer, balanceEquation, effectiveZakatRate, growthSeries, guardrail, layers, requiredPortfolio } from '@/lib/engine/income'
-import { NISAB_GOLD_GRAMS, goldPricePerGram, nextHawlDate, zakatStatus } from '@/lib/engine/zakat'
+import { emergencyStatus, goalStatus, incomeRate, monthsToTarget, roadmap } from '@/lib/engine/plan'
+import { actualZakatRate, annualTransfer, balanceEquation, growthSeries, guardrail, layers, requiredPortfolio } from '@/lib/engine/income'
+import { NISAB_GOLD_GRAMS, goldPricePerGram, zakatStatus } from '@/lib/engine/zakat'
 import { reviewStatus } from '@/lib/engine/review'
 import { dateLabel, num, pct } from '@/lib/format'
 import { useHash } from '@/lib/useHash'
 import { LineChart, Meter, SegBar } from '@/components/charts'
+import YearEndSheet from '@/components/YearEndSheet'
+import { ZakatSheet } from '@/components/ZakatControl'
 import { Chips, Disclaimer, Field, Money, Notice, NumberInput, Slider, Stat, cx } from '@/components/ui'
 
 function Num({ n }: { n: number }) {
@@ -29,6 +31,8 @@ export default function PlanPage() {
   const [hash, setHash] = useHash('roadmap')
   const tab: Tab = (TABS as string[]).includes(hash) ? (hash as Tab) : 'roadmap'
   const [note, setNote] = useState('')
+  const [yearEnd, setYearEnd] = useState(false)
+  const [zakatAsset, setZakatAsset] = useState<string | null>(null)
   const sar = L('ر.س', 'SAR')
 
   const investRows = useMemo(() => view.rows.filter((r) => !r.asset.isEmergencyFund), [view.rows])
@@ -42,25 +46,25 @@ export default function PlanPage() {
     [data, view, risks, worst, L],
   )
   const zakat = useMemo(() => zakatStatus(view.rows, quotes, settings), [view.rows, quotes, settings])
-  const zakatRate = effectiveZakatRate(zakat.due, view.investable, settings)
-  const eq = balanceEquation(settings.goal.expectedReturn, settings.goal.inflation, zakatRate, settings.income.rate)
+  const inc = settings.income
+  const eq = balanceEquation(settings.goal.expectedReturn, inc.planZakatRate, settings.goal.inflation, inc.growthTarget)
+  const planRate = eq.incomeRate
   const transfer = useMemo(() => annualTransfer(investRows, zakat.due, data.snapshots, settings, L), [investRows, zakat.due, data.snapshots, settings, L])
-  const lay = useMemo(() => layers(investRows, settings.income.annualIncome || transfer.income, zakat.due, settings.income.reserveYears), [investRows, settings.income, transfer.income, zakat.due])
-  const guard = guardrail(settings.income.annualIncome, view.investable, settings.income.upper, settings.income.lower)
-  const required = requiredPortfolio(settings.goal.monthlyIncome, settings.income.rate)
-  // While still building, the portfolio compounds at the real return net of zakat.
-  const buildRate = Math.pow(1 + Math.max(-0.5, (settings.goal.expectedReturn - settings.goal.inflation - zakatRate) / 100), 1 / 12) - 1
+  const lay = useMemo(() => layers(investRows, inc.annualIncome || transfer.income, zakat.due, inc.reserveYears), [investRows, inc.annualIncome, inc.reserveYears, transfer.income, zakat.due])
+  const guard = guardrail(inc.annualIncome, view.investable, inc.lastRate || planRate)
+  const required = requiredPortfolio(settings.goal.monthlyIncome, planRate)
+  // While still building, the portfolio compounds at the real return net of the planned zakat.
+  const buildRate = Math.pow(1 + Math.max(-0.5, (settings.goal.expectedReturn - settings.goal.inflation - inc.planZakatRate) / 100), 1 / 12) - 1
   const monthsToRequired = required > 0 ? monthsToTarget(view.investable, settings.monthlyContribution, required, buildRate) : null
   const yearsToRequired = monthsToRequired === null ? null : Math.ceil(monthsToRequired / 12)
-  // Fixed slot order (validated categorical palette); a negative remainder is shown by the notice, not as a segment.
+  // What the return is spent on, in the order it is taken out. Fixed slot order of the validated palette.
   const eqParts = [
-    { key: 'income', label: L('دخلك', 'Your income'), raw: settings.income.rate, color: '#2a78d6' },
+    { key: 'zakat', label: L('الزكاة', 'Zakat'), raw: inc.planZakatRate, color: '#2a78d6' },
     { key: 'inflation', label: L('التضخم', 'Inflation'), raw: settings.goal.inflation, color: '#eb6834' },
-    { key: 'zakat', label: L('الزكاة', 'Zakat'), raw: zakatRate, color: '#1baf7a' },
-    { key: 'growth', label: L('النمو الحقيقي المتبقي', 'Real growth left'), raw: eq.growth, color: '#eda100' },
-  ]
-    .map((p) => ({ ...p, part: Math.max(0, p.raw) }))
-    .map((p, _, all) => ({ ...p, pct: (p.part / (all.reduce((t, x) => t + x.part, 0) || 1)) * 100 }))
+    { key: 'growth', label: L('النمو الحقيقي للمحفظة', 'Real portfolio growth'), raw: inc.growthTarget, color: '#1baf7a' },
+    { key: 'income', label: L('المتبقي: دخلك', 'What is left: your income'), raw: planRate, color: '#eda100' },
+  ].map((p, _, all) => ({ ...p, pct: (Math.max(0, p.raw) / (all.reduce((t, x) => t + Math.max(0, x.raw), 0) || 1)) * 100 }))
+  const actualRate = actualZakatRate(zakat.due, view.investable)
   const review = useMemo(() => reviewStatus(data), [data])
   const stale = useMemo(() => staleManualRows(view.rows), [view.rows])
   const gram = goldPricePerGram(quotes, settings)
@@ -163,7 +167,7 @@ export default function PlanPage() {
             <Chips wrap value={settings.goal.mode} onChange={(mode) => setGoal({ mode })} options={[{ value: 'AMOUNT', label: L('مبلغ محدد', 'A set amount') }, { value: 'INCOME', label: L('دخل شهري من المحفظة', 'Monthly income from the portfolio') }]} />
             {settings.goal.mode === 'AMOUNT'
               ? <Field label={L('المبلغ المستهدف (بقيمة اليوم)', 'Target amount (today’s money)')}><NumberInput value={settings.goal.amount} onChange={(amount) => setGoal({ amount })} suffix={sar} /></Field>
-              : <Field label={L('الدخل الشهري الذي تريده (بقيمة اليوم)', 'Monthly income you want (today’s money)')} hint={goal.target > 0 ? L(`يتطلب محفظة بقيمة ${num(goal.target, 0)} ر.س عند معدل سحب ${settings.income.rate}%.`, `Needs a portfolio of SAR ${num(goal.target, 0)} at a ${settings.income.rate}% withdrawal rate.`) : undefined}><NumberInput value={settings.goal.monthlyIncome} onChange={(monthlyIncome) => setGoal({ monthlyIncome })} suffix={sar} /></Field>}
+              : <Field label={L('الدخل الشهري الذي تريده (بقيمة اليوم)', 'Monthly income you want (today’s money)')} hint={goal.target > 0 ? L(`يتطلب محفظة بقيمة ${num(goal.target, 0)} ر.س عند نسبة دخل ${planRate.toFixed(2)}% (من خطة الدخل).`, `Needs a portfolio of SAR ${num(goal.target, 0)} at a ${planRate.toFixed(2)}% income rate (from the income plan).`) : undefined}><NumberInput value={settings.goal.monthlyIncome} onChange={(monthlyIncome) => setGoal({ monthlyIncome })} suffix={sar} /></Field>}
             <div className="grid grid-cols-2 gap-3">
               <Field label={L('سنة الوصول', 'Target year')}><NumberInput value={settings.goal.targetYear} onChange={(targetYear) => setGoal({ targetYear: Math.round(targetYear) })} /></Field>
               <Field label={L('مساهمتك الشهرية', 'Monthly contribution')}><NumberInput value={settings.monthlyContribution} onChange={(monthlyContribution) => updateSettings({ monthlyContribution })} suffix={sar} /></Field>
@@ -198,20 +202,24 @@ export default function PlanPage() {
       {/* ---------- Income plan ---------- */}
       {tab === 'income' && (
         <>
-          {/* 1. The balance: return = income + zakat + inflation + growth */}
+          {/* 1. Income is what is left of the return after zakat, inflation and the growth to keep */}
           <section className="card space-y-4">
             <div>
-              <h2 className="section-title">{L('وازن بين الدخل والزكاة والنمو', 'Balance income, zakat and growth')}</h2>
-              <p className="hint mt-1">{L('القاعدة: العائد المتوقع ≥ الدخل الذي تسحبه + الزكاة + التضخم. ما يبقى هو النمو الحقيقي لمحفظتك.', 'The rule: expected return ≥ income withdrawn + zakat + inflation. What is left is your portfolio’s real growth.')}</p>
+              <h2 className="section-title">{L('وازن بين الزكاة والنمو ودخلك', 'Balance zakat, growth and your income')}</h2>
+              <p className="hint mt-1">{L('من العائد المتوقع تطلع الزكاة ثم التضخم ثم النمو الذي تريده لمحفظتك، والمتبقي هو دخلك.', 'From the expected return come zakat, then inflation, then the growth you want the portfolio to keep. What is left is your income.')}</p>
             </div>
             <Slider label={L('العائد السنوي المتوقع', 'Expected annual return')} value={settings.goal.expectedReturn} min={2} max={12} step={0.5} display={`${settings.goal.expectedReturn}%`} onChange={(expectedReturn) => setGoal({ expectedReturn })} />
+            <Slider label={L('الزكاة', 'Zakat')} value={inc.planZakatRate} min={0} max={2.6} step={0.1} display={`${inc.planZakatRate}%`} onChange={(planZakatRate) => setIncome({ planZakatRate })}
+              hint={L('2.5% من كامل المحفظة هو الحد الأعلى. الفعلية تُحسب من أصولك يوم الحول وغالبًا تكون أقل.', '2.5% of the whole portfolio is the ceiling. The actual figure is computed from your assets on zakat day and is usually lower.')} />
             <Slider label={L('التضخم', 'Inflation')} value={settings.goal.inflation} min={0} max={6} step={0.5} display={`${settings.goal.inflation}%`} onChange={(inflation) => setGoal({ inflation })} />
-            <Slider label={L('الزكاة الفعلية من قيمة المحفظة', 'Effective zakat on portfolio value')} value={Math.round(zakatRate * 10) / 10} min={0} max={2.6} step={0.1} display={`${zakatRate.toFixed(1)}%`} onChange={(zakatRateOverride) => setIncome({ zakatRateOverride })}
-              hint={settings.income.zakatRateOverride >= 0
-                ? <button className="font-semibold text-brand-700" onClick={() => setIncome({ zakatRateOverride: -1 })}>{L('ارجع للنسبة المحسوبة من أصولك', 'Back to the rate computed from your assets')}</button>
-                : L('محسوبة تلقائيًا من معالجة الزكاة لكل أصل في تبويب «الزكاة». حرّك المؤشر لتجربة نسبة أخرى.', 'Computed from each asset’s treatment under the Zakat tab. Move the slider to try another rate.')} />
-            <Slider label={L('دخلك السنوي من المحفظة', 'Your annual income from the portfolio')} value={settings.income.rate} min={0} max={8} step={0.25} display={`${settings.income.rate}%`} onChange={(rate) => setIncome({ rate })} />
+            <Slider label={L('النمو الحقيقي الذي أريده للمحفظة', 'Real growth I want the portfolio to keep')} value={inc.growthTarget} min={0} max={6} step={0.25} display={`${inc.growthTarget}%`} onChange={(growthTarget) => setIncome({ growthTarget })}
+              hint={L('صفر = المحفظة تحافظ على قوتها الشرائية فقط. كل نقطة هنا تنقص من دخلك اليوم وتكبّره لاحقًا.', 'Zero = the portfolio only keeps its purchasing power. Each point here lowers today’s income and grows it later.')} />
 
+            <div className="rounded-2xl bg-brand-50 p-4">
+              <p className="text-xs text-brand-700">{L('المتبقي: دخلك السنوي من المحفظة', 'What is left: your annual income from the portfolio')}</p>
+              <p className="num text-3xl font-bold text-brand-900">{planRate.toFixed(2).replace(/\.?0+$/, '')}%</p>
+              <p className="num mt-1 text-xs text-brand-700">{`${settings.goal.expectedReturn} − ${inc.planZakatRate} − ${settings.goal.inflation} − ${inc.growthTarget} = ${eq.remainder.toFixed(2).replace(/\.?0+$/, '')}`}</p>
+            </div>
             <div>
               <p className="mb-2 text-sm font-semibold">{L(`كيف يتوزع العائد ${settings.goal.expectedReturn}%؟`, `How the ${settings.goal.expectedReturn}% return is used`)}</p>
               <SegBar parts={eqParts} />
@@ -224,9 +232,13 @@ export default function PlanPage() {
                 ))}
               </ul>
             </div>
-            {eq.sustainable
-              ? <Notice tone="good" title={L(`تركيبة متوازنة: يبقى ${eq.growth.toFixed(1)}% نموًا حقيقيًا كل سنة`, `Balanced: ${eq.growth.toFixed(1)}% real growth is left each year`)}>{L(`أقصى دخل لا يمس النمو: ${Math.max(0, eq.maxIncomeRate).toFixed(1)}%.`, `Highest income that leaves growth untouched: ${Math.max(0, eq.maxIncomeRate).toFixed(1)}%.`)}</Notice>
-              : <Notice tone="warn" title={L(`تأكل من رأس المال ${Math.abs(eq.growth).toFixed(1)}% كل سنة`, `You are eating ${Math.abs(eq.growth).toFixed(1)}% of capital each year`)}>{L(`الدخل + الزكاة + التضخم أكبر من العائد المتوقع. خفّض الدخل إلى ${Math.max(0, eq.maxIncomeRate).toFixed(1)}% أو أقل — حتى لو كانت التوزيعات تغطي المبلغ.`, `Income + zakat + inflation exceed the expected return. Lower income to ${Math.max(0, eq.maxIncomeRate).toFixed(1)}% or less — even if dividends happen to cover it.`)}</Notice>}
+            {!eq.feasible && <Notice tone="warn" title={L('لا يبقى دخل بهذه التركيبة', 'Nothing is left for income with this mix')}>{L(`العائد لا يغطي الزكاة والتضخم والنمو المطلوب (ينقص ${Math.abs(eq.remainder).toFixed(1)}%). خفّض النمو المطلوب.`, `The return does not cover zakat, inflation and the growth target (short by ${Math.abs(eq.remainder).toFixed(1)}%). Lower the growth target.`)}</Notice>}
+            {view.investable > 0 && (
+              <p className="hint">
+                {L(`الزكاة الفعلية من أصولك الآن ${actualRate.toFixed(2)}% — لو بقيت كذلك يوم الحول يصير دخلك ${incomeRate(settings.goal.expectedReturn, actualRate, settings.goal.inflation, inc.growthTarget).toFixed(2)}%.`, `Actual zakat from your assets is now ${actualRate.toFixed(2)}% — if it stays so on zakat day your income becomes ${incomeRate(settings.goal.expectedReturn, actualRate, settings.goal.inflation, inc.growthTarget).toFixed(2)}%.`)}{' '}
+                <Link href="/plan/#zakat" className="font-semibold text-brand-700">{L('اضبط زكاة كل أصل', 'Set zakat per asset')}</Link>
+              </p>
+            )}
           </section>
 
           {/* 2. What this mix pays, and the portfolio size the target needs */}
@@ -234,12 +246,13 @@ export default function PlanPage() {
             <h2 className="section-title">{L('الدخل وحجم المحفظة المطلوب', 'Income and the portfolio size you need')}</h2>
             <div className="rounded-2xl bg-brand-50 p-4">
               <p className="text-xs text-brand-700">{L('محفظتك اليوم تعطيك شهريًا', 'Your portfolio today pays per month')}</p>
-              <p className="text-3xl font-bold text-brand-900"><Money value={(view.investable * settings.income.rate) / 100 / 12} /></p>
-              <p className="mt-1 text-xs text-brand-700">{L('سنويًا', 'Per year')} <Money value={(view.investable * settings.income.rate) / 100} /> · {L('زكاة تقديرية', 'est. zakat')} <Money value={(view.investable * zakatRate) / 100} /></p>
+              <p className="text-3xl font-bold text-brand-900"><Money value={(view.investable * planRate) / 100 / 12} /></p>
+              <p className="mt-1 text-xs text-brand-700">{L('سنويًا', 'Per year')} <Money value={(view.investable * planRate) / 100} /> · {L('زكاة حسب الخطة', 'planned zakat')} <Money value={(view.investable * inc.planZakatRate) / 100} /></p>
             </div>
             <Field label={L('الدخل الشهري الذي تريد الوصول إليه (بقيمة اليوم)', 'The monthly income you want to reach (today’s money)')}>
               <NumberInput value={settings.goal.monthlyIncome} onChange={(monthlyIncome) => setGoal({ monthlyIncome })} suffix={sar} />
             </Field>
+            {settings.goal.monthlyIncome > 0 && required <= 0 && <p className="hint">{L('لا يبقى دخل بالتركيبة الحالية، فلا يمكن حساب حجم محفظة. عدّل المنزلقات أعلاه.', 'Nothing is left for income with the current mix, so no size can be computed. Adjust the sliders above.')}</p>}
             {required > 0 && (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -297,41 +310,20 @@ export default function PlanPage() {
           {/* 4. The yearly transfer on the zakat date */}
           <section className="card space-y-4">
             <div>
-              <h2 className="section-title">{L('التحويلة السنوية في يوم الزكاة', 'The yearly transfer on zakat day')}</h2>
+              <h2 className="section-title">{L('يوم الزكاة والتحويلة السنوية', 'Zakat day and the yearly transfer')}</h2>
               <p className="hint mt-1">
                 {settings.zakat.hawlDate
                   ? <>{L('الموعد', 'Date')}: {dateLabel(settings.zakat.hawlDate, settings.locale)} · {zakat.daysToHawl !== null && zakat.daysToHawl > 0 ? L(`بعد ${zakat.daysToHawl} يوم`, `in ${zakat.daysToHawl} days`) : L('حان موعدها', 'due now')}</>
-                  : <>{L('حدّد تاريخ الحول من تبويب «الزكاة» ليذكّرك التطبيق بها.', 'Set the due date under the Zakat tab so the app reminds you.')} <Link href="/plan/#zakat" className="font-semibold text-brand-700">{L('تحديد', 'Set')}</Link></>}
+                  : <>{L('حدّد تاريخ الحول من تبويب «الزكاة» ليذكّرك التطبيق.', 'Set the due date under the Zakat tab so the app reminds you.')} <Link href="/plan/#zakat" className="font-semibold text-brand-700">{L('تحديد', 'Set')}</Link></>}
               </p>
             </div>
-            <ol className="space-y-3 text-sm leading-relaxed">
-              <li className="flex gap-3"><Num n={1} /><span>{L('قيمة المحفظة الاستثمارية', 'Investable portfolio value')} <Money value={view.investable} className="font-semibold" /> · {L('الزكاة المستحقة', 'zakat due')} <Money value={transfer.zakat} className="font-semibold" /></span></li>
-              <li className="flex gap-3"><Num n={2} /><span>
-                {L(`دخل السنة = ${settings.income.rate}% من متوسط القيمة`, `Year’s income = ${settings.income.rate}% of the average value`)} (<Money value={transfer.smoothed} />{transfer.smoothedMonths < 36 && <span className="text-ink-soft"> {L(`— متوسط ${transfer.smoothedMonths} شهر متاح، يكتمل إلى 36`, `— ${transfer.smoothedMonths} month(s) available, building to 36`)}</span>}) = <Money value={transfer.income} className="font-bold" />
-                {transfer.rule === 'cut' && <span className="block text-warn-600">{L('خُفّض 10%: كان سيتجاوز الحد الأعلى من قيمة المحفظة الحالية.', 'Cut 10%: it would exceed the upper bound of today’s value.')}</span>}
-                {transfer.rule === 'raise' && <span className="block text-gain">{L('رُفع 10%: كان أقل من الحد الأدنى من قيمة المحفظة الحالية.', 'Raised 10%: it was below the lower bound of today’s value.')}</span>}
-                {transfer.rule === 'held' && <span className="block text-warn-600">{L('ثُبّت على دخل السنة الماضية: لا زيادة في سنة خسرت فيها المحفظة.', 'Held at last year’s income: no raise in a year the portfolio lost value.')}</span>}
-              </span></li>
-              <li className="flex gap-3"><Num n={3} /><span>{L('التحويلة = الدخل + الزكاة', 'Transfer = income + zakat')} = <Money value={transfer.transfer} className="font-bold" /> · {L('الموجود في حساب الدخل (توزيعات ورصيد)', 'already in the income account (dividends and balance)')} <Money value={transfer.inAccount} /> · {L('المطلوب تحويله', 'still to move')} <Money value={transfer.need} className="font-bold" /></span></li>
-              <li className="flex gap-3"><Num n={4} /><span>
-                {transfer.need <= 0 ? L('حساب الدخل يكفي — لا حاجة لبيع شيء.', 'The income account already covers it — nothing to sell.')
-                  : transfer.marketDown ? <>{L(`السوق نازل ${transfer.drawdownPct.toFixed(0)}% عن قمته: لا تبع من النمو. خذ من الاحتياط`, `The market is ${transfer.drawdownPct.toFixed(0)}% off its peak: do not sell growth. Take from the reserve`)} <Money value={transfer.fromReserve} className="font-semibold" />{transfer.sells.length > 0 && L(' والباقي من:', ' and the rest from:')}</>
-                  : L('بِع من الفئات الزائدة عن وزنها المستهدف — فتعيد التوازن بنفس الخطوة:', 'Sell from the classes above their target weight — rebalancing in the same step:')}
-                {transfer.sells.length > 0 && (
-                  <ul className="mt-1.5 divide-y divide-line rounded-xl border border-line">
-                    {transfer.sells.map((l) => (
-                      <li key={l.assetClass} className="flex items-center justify-between gap-3 px-3 py-2"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CLASS_COLOR[l.assetClass] }} aria-hidden />{l.label}</span><Money value={l.amount} className="font-semibold" /></li>
-                    ))}
-                  </ul>
-                )}
-              </span></li>
-              <li className="flex gap-3"><Num n={5} /><span>{L('ادفع الزكاة من المبلغ المحوَّل، ثم حوّل لنفسك كل شهر', 'Pay zakat out of the transferred amount, then pay yourself each month')} <Money value={transfer.monthly} className="font-bold" /></span></li>
-            </ol>
-            <button className="btn-primary w-full" disabled={view.investable <= 0} onClick={() => updateSettings({
-              income: { ...settings.income, annualIncome: transfer.income, lastTransferDate: todayISO() },
-              zakat: { ...settings.zakat, lastPaidDate: todayISO(), lastPaidAmount: transfer.zakat, hawlDate: nextHawlDate(settings.zakat.hawlDate || todayISO(), settings.zakat.calendar) },
-            })}>{L('نفّذتُ التحويلة — ثبّت دخل السنة', 'I did the transfer — lock in this year’s income')}</button>
-            <p className="hint">{L('بعد التنفيذ سجّل البيع والإيداع الفعليين من صفحة كل أصل لتبقى الأرصدة مطابقة. الموعد ينتقل تلقائيًا للحول القادم.', 'After doing it, record the actual sale and deposit on each asset’s page so balances stay in step. The date moves to next year automatically.')}</p>
+            <p className="text-sm leading-relaxed text-ink-soft">{L('مرة في السنة، في يوم واحد: تراجع الزكاة الفعلية لكل أصل وتدفعها، ثم يُحسب دخل سنتك من المتبقي ويُثبَّت راتبك الشهري.', 'Once a year, on one day: you review and pay the actual zakat per asset, then the year’s income is computed from what is left and your monthly salary is fixed.')}</p>
+            <dl className="divide-y divide-line rounded-2xl border border-line text-sm">
+              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L('لو كان اليوم: الزكاة الفعلية', 'If it were today: actual zakat')}</dt><dd className="font-semibold"><Money value={transfer.zakat} /> <span className="num text-xs text-ink-soft">({pct(transfer.zakatRatePct, 2)})</span></dd></div>
+              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L('دخل السنة', 'Year’s income')}</dt><dd className="font-semibold"><Money value={transfer.income} /> <span className="num text-xs text-ink-soft">({pct(transfer.ratePct, 2)})</span></dd></div>
+              <div className="flex justify-between bg-surface px-3.5 py-2.5"><dt className="font-semibold">{L('راتبك الشهري', 'Your monthly salary')}</dt><dd className="font-bold"><Money value={transfer.monthly} /></dd></div>
+            </dl>
+            <button className="btn-primary w-full" disabled={view.investable <= 0} onClick={() => setYearEnd(true)}>{L('ابدأ يوم الزكاة والتحويلة', 'Start zakat day and the transfer')}</button>
           </section>
 
           {/* 5. Current salary and guardrails */}
@@ -343,14 +335,15 @@ export default function PlanPage() {
                   <Stat label={L('راتبك الشهري الثابت', 'Your fixed monthly salary')}><Money value={settings.income.annualIncome / 12} /></Stat>
                   <Stat label={L('نسبته من القيمة الحالية', 'As a share of today’s value')} sub={settings.income.lastTransferDate ? L(`ثُبّت في ${dateLabel(settings.income.lastTransferDate, settings.locale)}`, `Set on ${dateLabel(settings.income.lastTransferDate, settings.locale)}`) : undefined}><span className="num">{guard.ratePct.toFixed(1)}%</span></Stat>
                 </div>
-                {guard.state === 'cut' && <Notice tone="warn" title={L(`الدخل تجاوز ${settings.income.upper}% من قيمة المحفظة`, `Income is above ${settings.income.upper}% of the portfolio`)} action={<button className="btn-soft" onClick={() => setIncome({ annualIncome: guard.suggested })}>{L(`خفّضه 10% إلى ${num(guard.suggested / 12, 0)} ر.س شهريًا`, `Cut 10% to SAR ${num(guard.suggested / 12, 0)} a month`)}</button>}>{L('المحفظة هبطت؛ التخفيض المؤقت يحمي رأس المال حتى تتعافى.', 'The portfolio fell; a temporary cut protects capital until it recovers.')}</Notice>}
-                {guard.state === 'raise' && <Notice tone="good" title={L(`الدخل أقل من ${settings.income.lower}% من قيمة المحفظة`, `Income is below ${settings.income.lower}% of the portfolio`)} action={<button className="btn-soft" onClick={() => setIncome({ annualIncome: guard.suggested })}>{L(`ارفعه 10% إلى ${num(guard.suggested / 12, 0)} ر.س شهريًا`, `Raise 10% to SAR ${num(guard.suggested / 12, 0)} a month`)}</button>}>{L('المحفظة ارتفعت؛ تقدر تزيد دخلك دون مساس بالنمو.', 'The portfolio rose; you can lift your income without touching growth.')}</Notice>}
+                {guard.state === 'cut' && <Notice tone="warn" title={L(`الدخل تجاوز ${guard.upper.toFixed(1)}% من قيمة المحفظة`, `Income is above ${guard.upper.toFixed(1)}% of the portfolio`)} action={<button className="btn-soft" onClick={() => setIncome({ annualIncome: guard.suggested })}>{L(`خفّضه 10% إلى ${num(guard.suggested / 12, 0)} ر.س شهريًا`, `Cut 10% to SAR ${num(guard.suggested / 12, 0)} a month`)}</button>}>{L('المحفظة هبطت؛ التخفيض المؤقت يحمي رأس المال حتى تتعافى.', 'The portfolio fell; a temporary cut protects capital until it recovers.')}</Notice>}
+                {guard.state === 'raise' && <Notice tone="good" title={L(`الدخل أقل من ${guard.lower.toFixed(1)}% من قيمة المحفظة`, `Income is below ${guard.lower.toFixed(1)}% of the portfolio`)} action={<button className="btn-soft" onClick={() => setIncome({ annualIncome: guard.suggested })}>{L(`ارفعه 10% إلى ${num(guard.suggested / 12, 0)} ر.س شهريًا`, `Raise 10% to SAR ${num(guard.suggested / 12, 0)} a month`)}</button>}>{L('المحفظة ارتفعت؛ تقدر تزيد دخلك دون مساس بالنمو.', 'The portfolio rose; you can lift your income without touching growth.')}</Notice>}
                 {guard.state === 'ok' && <Notice tone="good" title={L('الدخل ضمن الحدود الآمنة', 'Income is within the safe bounds')} />}
               </>
             ) : <p className="hint">{L('يظهر راتبك هنا بعد تنفيذ أول تحويلة سنوية.', 'Your salary appears here after the first yearly transfer.')}</p>}
             <ul className="space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
-              <li>• {L(`إذا صار الدخل أكثر من ${settings.income.upper}% من قيمة المحفظة الحالية: خفّضه 10%.`, `If income exceeds ${settings.income.upper}% of the current value: cut it 10%.`)}</li>
-              <li>• {L(`إذا صار أقل من ${settings.income.lower}%: ارفعه 10%.`, `If it falls below ${settings.income.lower}%: raise it 10%.`)}</li>
+              <li>• {L(`إذا صار الدخل أكثر من ${guard.upper.toFixed(1)}% من قيمة المحفظة الحالية: خفّضه 10%.`, `If income exceeds ${guard.upper.toFixed(1)}% of the current value: cut it 10%.`)}</li>
+              <li>• {L(`إذا صار أقل من ${guard.lower.toFixed(1)}%: ارفعه 10%.`, `If it falls below ${guard.lower.toFixed(1)}%: raise it 10%.`)}</li>
+              <li>• {L('الحدّان يتبعان نسبة دخل خطتك (5% و3% عند خطة 3.5%).', 'Both bounds follow your plan’s income rate (5% and 3% for a 3.5% plan).')}</li>
               <li>• {L('لا زيادة في سنة كانت المحفظة فيها خاسرة.', 'No raise in a year the portfolio lost value.')}</li>
               <li>• {L(`إذا نزل السوق ${settings.income.drawdownTrigger}% أو أكثر عن قمته: عبّئ من الاحتياط ولا تبع من النمو.`, `If the market is ${settings.income.drawdownTrigger}% or more off its peak: refill from the reserve, do not sell growth.`)}</li>
             </ul>
@@ -359,8 +352,8 @@ export default function PlanPage() {
           {view.investable > 0 && (
             <section className="card space-y-3">
               <h2 className="section-title">{L('المحفظة مع الدخل عبر السنوات', 'The portfolio under this plan over the years')}</h2>
-              <p className="text-sm text-ink-soft">{eq.sustainable ? L(`بنمو حقيقي ${eq.growth.toFixed(1)}% يكبر دخلك معها بنفس النسبة، بقيمة اليوم.`, `At ${eq.growth.toFixed(1)}% real growth your income grows with it at the same pace, in today’s money.`) : L('بهذه التركيبة تتآكل المحفظة ودخلك معها سنة بعد سنة.', 'With this mix the portfolio — and your income with it — shrinks year after year.')}</p>
-              <LineChart points={growthSeries(view.investable, eq.growth)} label={L('قيمة المحفظة المتوقعة مع الدخل', 'Projected portfolio value under the income plan')} />
+              <p className="text-sm text-ink-soft">{eq.feasible ? L(`تنمو المحفظة ${inc.growthTarget}% حقيقيًا كل سنة، ودخلك يكبر معها بنفس النسبة بقيمة اليوم.`, `The portfolio grows ${inc.growthTarget}% a year in real terms, and your income grows with it at the same pace in today’s money.`) : L('بهذه التركيبة العائد لا يغطي ما يخرج، فالمحفظة تتآكل.', 'With this mix the return does not cover what leaves, so the portfolio shrinks.')}</p>
+              <LineChart points={growthSeries(view.investable, eq.feasible ? inc.growthTarget : eq.remainder)} label={L('قيمة المحفظة المتوقعة مع الدخل', 'Projected portfolio value under the income plan')} />
               <Disclaimer>{L('إطار منهجي وإسقاط حسابي بعائد ثابت، وليس استشارة مالية أو فتوى. العوائد غير مضمونة، والواقع يتقلب — ولذلك وُجدت الطبقات وقواعد الحماية.', 'A methodical framework and a constant-return projection, not financial advice or a religious ruling. Returns are not guaranteed and reality swings — hence the layers and guardrails.')}</Disclaimer>
             </section>
           )}
@@ -373,9 +366,9 @@ export default function PlanPage() {
           <section className="card space-y-4">
             <h2 className="section-title">{L('زكاة المحفظة', 'Portfolio zakat')}</h2>
             <div className="rounded-2xl bg-brand-50 p-4">
-              <p className="text-xs text-brand-700">{L('الزكاة التقديرية المستحقة', 'Estimated zakat due')}</p>
+              <p className="text-xs text-brand-700">{L('الزكاة الفعلية لو حال الحول اليوم', 'Actual zakat if it were due today')}</p>
               <p className="text-3xl font-bold text-brand-900"><Money value={zakat.due} /></p>
-              <p className="mt-1 text-xs text-brand-700">{L('الوعاء الزكوي', 'Zakatable base')} <Money value={zakat.base} /> × <span className="num">{zakat.ratePct}%</span></p>
+              <p className="mt-1 text-xs text-brand-700"><span className="num">{pct(actualRate, 2)}</span> {L('من المحفظة الاستثمارية', 'of the investable portfolio')} · {L('في الخطة', 'planned')} <span className="num">{inc.planZakatRate}%</span></p>
             </div>
             {zakat.aboveNisab === false && <Notice tone="info" title={L('الوعاء دون النصاب', 'The base is below the nisab')}>{L('حسب ما هو مسجل هنا فقط. إن كان لك مال زكوي آخر خارج التطبيق فاجمعه معه.', 'Based only on what is recorded here. If you hold other zakatable wealth outside the app, add it in.')}</Notice>}
             <div className="grid grid-cols-2 gap-3">
@@ -397,34 +390,45 @@ export default function PlanPage() {
                 <NumberInput value={settings.zakat.goldPricePerGram} onChange={(goldPricePerGram) => setZakat({ goldPricePerGram })} suffix={sar} />
               </Field>
             )}
-            <button className="btn-primary w-full" disabled={zakat.due <= 0} onClick={() => setZakat({ lastPaidDate: todayISO(), lastPaidAmount: zakat.due, hawlDate: nextHawlDate(settings.zakat.hawlDate || todayISO(), settings.zakat.calendar) })}>
-              {L('أخرجتُ الزكاة — انقل الموعد للحول القادم', 'I paid it — move the date to next year')}
-            </button>
-            {settings.zakat.lastPaidDate && <p className="hint">{L('آخر إخراج مسجل', 'Last recorded payment')}: {dateLabel(settings.zakat.lastPaidDate, settings.locale)} — <Money value={settings.zakat.lastPaidAmount} /></p>}
+            <button className="btn-primary w-full" disabled={view.investable <= 0} onClick={() => setYearEnd(true)}>{L('ابدأ يوم الزكاة والتحويلة', 'Start zakat day and the transfer')}</button>
+            <p className="hint">{L('يوم الدفع هو يوم التحويلة السنوية لحساب الدخل: تراجع، تدفع، ثم يُحسب دخل السنة.', 'Payment day is also the yearly transfer to the income account: review, pay, then the year’s income is computed.')}</p>
           </section>
 
           <section className="card space-y-3">
-            <h2 className="section-title">{L('معالجة كل أصل', 'Treatment per asset')}</h2>
-            <p className="hint">{L('الافتراض قابل للتغيير لكل أصل حسب نيتك (استثمار طويل أم متاجرة) وحسب ما تأخذ به من فتوى.', 'The default can be changed per asset according to your intention (long-term or trading) and the ruling you follow.')}</p>
+            <h2 className="section-title">{L('زكاة كل أصل', 'Zakat per asset')}</h2>
+            <p className="hint">{L('اضغط أي أصل لتحديد طريقة زكاته: كامل القيمة، نسبة، زكاة السهم، مبلغ تحدده، الشركة تزكّي، أو لا زكاة.', 'Tap any asset to choose how it is zakated: full value, a share, per-share zakat, an amount you set, company pays, or none.')}</p>
             <ul className="divide-y divide-line rounded-2xl border border-line">
               {zakat.rows.map((r) => (
-                <li key={r.assetId} className="space-y-2 px-3.5 py-3">
-                  <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 truncate text-sm font-semibold">{r.name}</span><Money value={r.due} className="shrink-0 text-sm font-bold" /></div>
-                  <select className="input py-2 text-sm" aria-label={L(`معالجة زكاة ${r.name}`, `Zakat treatment for ${r.name}`)} value={r.mode} onChange={(e) => updateAsset(r.assetId, { zakatMode: e.target.value as ZakatMode })}>
-                    {(Object.keys(ZAKAT_LABEL) as ZakatMode[]).map((m) => <option key={m} value={m}>{L(ZAKAT_LABEL[m].ar, ZAKAT_LABEL[m].en)}</option>)}
-                  </select>
-                  {r.mode === 'PERCENT' && (
-                    <div className="flex items-center gap-2 text-sm"><span className="text-ink-soft">{L('نسبة الوعاء من القيمة', 'Zakatable share of value')}</span><div className="w-24"><NumberInput value={data.assets.find((a) => a.id === r.assetId)?.zakatPercent ?? 100} onChange={(zakatPercent) => updateAsset(r.assetId, { zakatPercent })} suffix="%" /></div></div>
-                  )}
+                <li key={r.assetId}>
+                  <button className="flex min-h-[60px] w-full items-center justify-between gap-3 px-3.5 py-2 text-start hover:bg-surface" onClick={() => setZakatAsset(r.assetId)}>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{r.name}</span><span className="text-xs text-ink-soft">{L(ZAKAT_LABEL[r.mode].ar, ZAKAT_LABEL[r.mode].en)} · <span className="num">{pct(r.effectivePct, 2)}</span> {L('من قيمته', 'of its value')}</span></span>
+                    <Money value={r.due} className="shrink-0 text-sm font-bold" />
+                  </button>
                 </li>
               ))}
-              {zakat.rows.length === 0 && <li className="px-3.5 py-3 text-sm text-ink-soft">{L('لا أصول بعد.', 'No assets yet.')}</li>}
+              {zakat.rows.length === 0 && <li className="px-3.5 py-3 text-sm text-ink-soft">{L('لا أصول بعد. تحدد زكاة كل أصل وأنت تسجله.', 'No assets yet. You set each asset’s zakat as you add it.')}</li>}
             </ul>
             <Disclaimer>
-              {L('هذا تقدير حسابي لمساعدتك وليس فتوى. الافتراضات: النقد والودائع وصناديق المرابحة والصكوك والذهب على كامل القيمة؛ أسهم المضاربة على كامل القيمة السوقية؛ الأسهم والصناديق للاستثمار الطويل على حصتك من الأصول الزكوية للشركة وهي عادة أقل بكثير — الافتراض هنا تقدير تقريبي 30% من القيمة السوقية فعدّله حسب قوائم الشركة أو ما تأخذ به، وفيه رأي أن زكاة الشركة المدفوعة لهيئة الزكاة تكفي (وهو الافتراض للأسهم السعودية المدرجة) والمسألة خلافية؛ العقار المؤجَّر وصناديق الريت لا زكاة على أصلها بل على الإيجار أو التوزيعات إذا حال عليها الحول. راجع جهة شرعية تثق بها.',
-                'An arithmetic estimate to help you, not a religious ruling. Defaults: cash, deposits, money-market funds, sukuk and gold on full value; trading shares on full market value; long-term shares and funds on your share of the company’s zakatable assets, usually far lower — the default here is a rough estimate of 30% of market value, so adjust it to the company’s statements or the view you follow — one view holds that the zakat the company pays to ZATCA suffices (the default for Saudi-listed shares), and scholars differ; rented property and REITs are not zakatable on the asset, only on rent or distributions held for a full year. Check with a Shariah authority you trust.')}
+              {L('تقدير حسابي لمساعدتك وليس فتوى. الافتراضات عند تسجيل الأصل: النقد والودائع والصكوك والذهب على كامل القيمة؛ الأسهم والصناديق طويلة الأجل على 30% من قيمتها كتقدير تقريبي للأصول الزكوية؛ الأسهم السعودية المدرجة تزكّيها الشركة (والمسألة خلافية)؛ العقار المؤجَّر والريت لا زكاة على أصلها. عدّل كل أصل بما تأخذ به، وراجع جهة شرعية تثق بها.',
+                'An arithmetic estimate to help you, not a religious ruling. Defaults when an asset is added: cash, deposits, sukuk and gold on full value; long-term shares and funds on 30% of value as a rough stand-in for zakatable assets; Saudi-listed shares are covered by the company (scholars differ); rented property and REITs are not zakatable on the asset. Adjust each asset to the view you follow and check with a Shariah authority you trust.')}
             </Disclaimer>
           </section>
+
+          {settings.zakat.history.length > 0 && (
+            <section className="card">
+              <h2 className="section-title mb-3">{L('سجل السنوات', 'Year records')}</h2>
+              <ul className="divide-y divide-line">
+                {settings.zakat.history.map((h, i) => (
+                  <li key={h.date + i} className="py-2.5 text-sm">
+                    <details>
+                      <summary className="flex cursor-pointer items-center justify-between gap-3"><span>{dateLabel(h.date, settings.locale)}</span><span className="text-end"><Money value={h.actual} className="font-semibold" /><span className="block text-xs text-ink-soft">{L('المخطط', 'planned')} <Money value={h.planned} /> · {L('دخل السنة', 'income')} <Money value={h.income} /></span></span></summary>
+                      <ul className="mt-2 space-y-1 text-[13px] text-ink-soft">{h.items.map((it, j) => <li key={j} className="flex justify-between gap-3"><span className="truncate">{it.name}</span><Money value={it.amount} /></li>)}</ul>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
 
@@ -477,6 +481,8 @@ export default function PlanPage() {
           )}
         </>
       )}
+      <YearEndSheet open={yearEnd} onClose={() => setYearEnd(false)} />
+      <ZakatSheet assetId={zakatAsset} onClose={() => setZakatAsset(null)} />
     </>
   )
 }

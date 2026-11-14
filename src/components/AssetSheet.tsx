@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
-import type { Asset, TxType, ZakatMode } from '@/lib/types'
+import type { Asset, TxType } from '@/lib/types'
+import { fxRate } from '@/lib/engine/valuation'
+import { zakatDue, zakatRate } from '@/lib/engine/zakat'
+import { ZakatSheet } from './ZakatControl'
 import { CLASS_LABEL, REGION_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
 import { dateLabel, daysAgo, num, pct, unit } from '@/lib/format'
 import { ClassFields } from './AssetWizard'
@@ -21,6 +24,7 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
   const [date, setDate] = useState(todayISO())
   const [edit, setEdit] = useState<Asset | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [zakatOpen, setZakatOpen] = useState(false)
 
   useEffect(() => { setMode(null) }, [assetId])
   if (!row) return null
@@ -29,6 +33,7 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
   const weight = view.netWorth > 0 ? (row.value / view.netWorth) * 100 : 0
   const txs = data.transactions.filter((t) => t.assetId === a.id).sort((x, y) => y.date.localeCompare(x.date) || y.createdAt.localeCompare(x.createdAt))
   const age = daysAgo(a.valueUpdatedAt)
+  const zakatNow = zakatDue(a, row.value, a.quantity, fxRate(a.currency, settings.fx), zakatRate(settings)).due
 
   const open = (m: Mode) => {
     setQty(0)
@@ -126,12 +131,16 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
                 [L('الجهة', 'Held at'), row.account?.name ?? '—'],
                 [L('الفئة', 'Class'), L(CLASS_LABEL[a.assetClass].ar, CLASS_LABEL[a.assetClass].en)],
                 [L('الجغرافيا', 'Geography'), L(REGION_LABEL[a.region].ar, REGION_LABEL[a.region].en)],
-                [L('الزكاة', 'Zakat'), L(ZAKAT_LABEL[a.zakatMode].ar, ZAKAT_LABEL[a.zakatMode].en) + (a.zakatMode === 'PERCENT' ? ` (${a.zakatPercent}%)` : '')],
                 ...(a.isEmergencyFund ? [[L('الدور', 'Role'), L('صندوق الطوارئ', 'Emergency fund')]] : []),
+                ...(a.isIncomeAccount ? [[L('الدور', 'Role'), L('حساب الدخل', 'Income account')]] : []),
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-3 px-3.5 py-2.5"><dt className="text-ink-soft">{k}</dt><dd className="text-end font-medium">{v}</dd></div>
               ))}
             </dl>
+            <button className="flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl border border-line px-3.5 py-2 text-start hover:bg-surface" onClick={() => setZakatOpen(true)}>
+              <span><span className="block text-xs text-ink-soft">{L('الزكاة', 'Zakat')}</span><span className="text-sm font-semibold">{L(ZAKAT_LABEL[a.zakatMode].ar, ZAKAT_LABEL[a.zakatMode].en)}{a.zakatMode === 'PERCENT' ? ` (${a.zakatPercent}%)` : ''}</span></span>
+              <span className="text-end"><Money value={zakatNow} className="block text-sm font-bold" /><span className="text-xs font-semibold text-brand-700">{L('تغيير', 'Change')}</span></span>
+            </button>
             <button className="btn-soft w-full" onClick={() => open('EDIT')}>{L('تعديل الأصل والتصنيف', 'Edit asset & classification')}</button>
 
             <div>
@@ -213,17 +222,10 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
               <input type="checkbox" className="h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={edit.isEmergencyFund} onChange={(e) => setEdit({ ...edit, isEmergencyFund: e.target.checked })} />
               <span className="text-sm">{L('جزء من صندوق الطوارئ', 'Part of the emergency fund')}</span>
             </label>
-            <Field label={L('معالجة الزكاة', 'Zakat treatment')}>
-              <select className="input" value={edit.zakatMode} onChange={(e) => setEdit({ ...edit, zakatMode: e.target.value as ZakatMode })}>
-                {(Object.keys(ZAKAT_LABEL) as ZakatMode[]).map((z) => <option key={z} value={z}>{L(ZAKAT_LABEL[z].ar, ZAKAT_LABEL[z].en)}</option>)}
-              </select>
-            </Field>
-            {edit.zakatMode === 'PERCENT' && (
-              <Field label={L('نسبة الوعاء الزكوي من القيمة', 'Zakatable share of value')}><NumberInput value={edit.zakatPercent} onChange={(zakatPercent) => setEdit({ ...edit, zakatPercent })} suffix="%" /></Field>
-            )}
           </div>
         )}
       </Sheet>
+      {zakatOpen && <ZakatSheet assetId={a.id} onClose={() => setZakatOpen(false)} />}
       <Confirm open={confirmDelete} onClose={() => setConfirmDelete(false)} title={L('حذف الأصل؟', 'Delete asset?')}
         body={L(`سيُحذف «${a.name}» وكل عملياته المسجلة نهائيًا.`, `“${a.name}” and all its recorded transactions will be permanently deleted.`)}
         confirmLabel={L('حذف', 'Delete')} onConfirm={() => { deleteAsset(a.id); onClose() }} />

@@ -2,10 +2,10 @@ import type { AppData, Pick2, Quotes } from './types.ts'
 import type { PortfolioView } from './engine/valuation.ts'
 import { insights, staleManualRows } from './engine/exposure.ts'
 import { DRIFT_THRESHOLD, allocateContribution, driftRows, maxDrift } from './engine/guidance.ts'
-import { emergencyStatus } from './engine/plan.ts'
+import { emergencyStatus, planIncomeRate } from './engine/plan.ts'
 import { reviewStatus } from './engine/review.ts'
 import { zakatStatus } from './engine/zakat.ts'
-import { annualTransfer, balanceEquation, effectiveZakatRate, guardrail, layers } from './engine/income.ts'
+import { annualTransfer, balanceEquation, guardrail, layers } from './engine/income.ts'
 import { num } from './format.ts'
 
 export interface NextAction {
@@ -51,17 +51,17 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
       const t = annualTransfer(investRows, z.due, data.snapshots, s, L, now)
       out.push({
         id: 'transfer', tone: z.daysToHawl <= 0 ? 'warn' : 'info',
-        title: z.daysToHawl <= 0 ? L('حان موعد التحويلة السنوية', 'Your yearly transfer is due') : L(`التحويلة السنوية بعد ${z.daysToHawl} يوم`, `Yearly transfer in ${z.daysToHawl} days`),
-        body: L(`دخل السنة ${num(t.income, 0)} + زكاة ${num(t.zakat, 0)} = ${num(t.transfer, 0)} ر.س إلى حساب الدخل.`, `Year’s income ${num(t.income, 0)} + zakat ${num(t.zakat, 0)} = SAR ${num(t.transfer, 0)} into the income account.`),
-        href: '/plan/#income', cta: L('خطوات التحويلة', 'Transfer steps'),
+        title: z.daysToHawl <= 0 ? L('حان يوم الزكاة والتحويلة السنوية', 'Zakat day and your yearly transfer are due') : L(`يوم الزكاة والتحويلة بعد ${z.daysToHawl} يوم`, `Zakat day and the transfer in ${z.daysToHawl} days`),
+        body: L(`زكاة فعلية ${num(t.zakat, 0)} + دخل السنة ${num(t.income, 0)} = ${num(t.transfer, 0)} ر.س إلى حساب الدخل. راجع زكاة كل أصل ثم ادفع.`, `Actual zakat ${num(t.zakat, 0)} + year’s income ${num(t.income, 0)} = SAR ${num(t.transfer, 0)} into the income account. Review each asset’s zakat, then pay.`),
+        href: '/plan/#zakat', cta: L('ابدأ', 'Start'),
       })
     }
-    const g = guardrail(s.income.annualIncome, view.investable, s.income.upper, s.income.lower)
+    const g = guardrail(s.income.annualIncome, view.investable, s.income.lastRate || planIncomeRate(s))
     if (g.state === 'cut' || g.state === 'raise') {
       out.push({
         id: 'guardrail', tone: g.state === 'cut' ? 'warn' : 'good',
         title: g.state === 'cut' ? L('خفّض دخلك 10% لحماية المحفظة', 'Cut your income 10% to protect the portfolio') : L('تقدر ترفع دخلك 10%', 'You can raise your income 10%'),
-        body: L(`دخلك الآن ${g.ratePct.toFixed(1)}% من قيمة المحفظة (الحدود ${s.income.lower}–${s.income.upper}%).`, `Your income is now ${g.ratePct.toFixed(1)}% of the portfolio (bounds ${s.income.lower}–${s.income.upper}%).`),
+        body: L(`دخلك الآن ${g.ratePct.toFixed(1)}% من قيمة المحفظة (الحدود ${g.lower.toFixed(1)}–${g.upper.toFixed(1)}%).`, `Your income is now ${g.ratePct.toFixed(1)}% of the portfolio (bounds ${g.lower.toFixed(1)}–${g.upper.toFixed(1)}%).`),
         href: '/plan/#income', cta: L('عدّل الدخل', 'Adjust income'),
       })
     }
@@ -79,9 +79,9 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
         body: L(`${num(lay.reserve.value, 0)} من ${num(lay.reserve.target, 0)} ر.س. وجّه له مساهمات أو جزءًا من أرباح سنة جيدة.`, `${num(lay.reserve.value, 0)} of SAR ${num(lay.reserve.target, 0)}. Send contributions or part of a good year’s gains there.`), href: '/plan/#income', cta: L('الطبقات', 'Layers'),
       })
     }
-    const eq = balanceEquation(s.goal.expectedReturn, s.goal.inflation, effectiveZakatRate(z.due, view.investable, s), s.income.rate)
-    if (!eq.sustainable) {
-      out.push({ id: 'eroding', tone: 'warn', title: L('خطة الدخل تأكل من رأس المال', 'The income plan is eating capital'), body: L(`الدخل + الزكاة + التضخم يتجاوز العائد المتوقع بـ ${Math.abs(eq.growth).toFixed(1)}%.`, `Income + zakat + inflation exceed the expected return by ${Math.abs(eq.growth).toFixed(1)}%.`), href: '/plan/#income', cta: L('وازن', 'Rebalance the mix') })
+    const eq = balanceEquation(s.goal.expectedReturn, s.income.planZakatRate, s.goal.inflation, s.income.growthTarget)
+    if (!eq.feasible) {
+      out.push({ id: 'no-income', tone: 'warn', title: L('خطتك لا تترك دخلًا', 'Your plan leaves nothing for income'), body: L(`العائد لا يغطي الزكاة والتضخم والنمو المطلوب (ينقص ${Math.abs(eq.remainder).toFixed(1)}%).`, `The return does not cover zakat, inflation and the growth target (short by ${Math.abs(eq.remainder).toFixed(1)}%).`), href: '/plan/#income', cta: L('وازن', 'Rebalance the mix') })
     }
   } else if (z.daysToHawl !== null && z.daysToHawl <= 30 && z.due > 0) {
     out.push({

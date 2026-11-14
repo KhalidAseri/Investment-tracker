@@ -5,7 +5,7 @@ export type Locale = 'ar' | 'en'
 export type AssetClass = 'EQUITY' | 'FIXED_INCOME' | 'CASH' | 'GOLD' | 'REAL_ESTATE' | 'CRYPTO' | 'OTHER'
 export type Region = 'SA' | 'US' | 'DEV' | 'EM' | 'GCC' | 'GLOBAL' | 'NONE'
 export type Pricing = 'live' | 'manual'
-export type ZakatMode = 'FULL' | 'COMPANY_PAYS' | 'PERCENT' | 'EXEMPT'
+export type ZakatMode = 'FULL' | 'PERCENT' | 'PER_UNIT' | 'AMOUNT' | 'COMPANY_PAYS' | 'EXEMPT'
 export type Liquidity = 'HIGH' | 'MEDIUM' | 'LOW'
 export type AccountKind = 'BROKERAGE' | 'EMPLOYER' | 'ROBO' | 'BANK' | 'OTHER'
 export type TxType = 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'VALUE_UPDATE'
@@ -45,7 +45,12 @@ export interface Asset {
   /** Cash set aside as the income account the monthly salary is paid from. */
   isIncomeAccount?: boolean
   zakatMode: ZakatMode
+  /** PERCENT: share of market value treated as zakatable. */
   zakatPercent: number
+  /** PER_UNIT: zakat owed per share/unit, in the asset currency. */
+  zakatPerUnit?: number
+  /** AMOUNT: a yearly zakat amount in SAR entered by the user. */
+  zakatAmount?: number
   domicile: string
   createdAt: string
   updatedAt: string
@@ -85,6 +90,17 @@ export interface Review {
   note: string
 }
 
+export interface ZakatYear {
+  date: string
+  /** Investable portfolio value on the day. */
+  value: number
+  planned: number
+  actual: number
+  /** Income fixed for the following year. */
+  income: number
+  items: { name: string; amount: number }[]
+}
+
 export interface Settings {
   locale: Locale
   hideAmounts: boolean
@@ -106,20 +122,19 @@ export interface Settings {
     inflation: number
   }
   income: {
-    /** Annual income as a percent of the smoothed portfolio value. */
-    rate: number
+    /** Real growth the user wants the portfolio to keep, percent per year. Income is what is left after it. */
+    growthTarget: number
+    /** Zakat assumed while planning, percent of the whole portfolio. The actual figure comes from the assets on zakat day. */
+    planZakatRate: number
     /** Years of income kept in the low-volatility reserve layer. */
     reserveYears: number
-    /** Guardrails: cut income when it exceeds `upper`% of current value, raise when below `lower`%. */
-    upper: number
-    lower: number
     /** Market drop (percent from the 12-month peak) at which refills come from the reserve instead of sales. */
     drawdownTrigger: number
     /** Fixed annual income set at the last yearly transfer; 0 until the first one. */
     annualIncome: number
+    /** Income rate (percent of the portfolio) that the last transfer was based on. */
+    lastRate: number
     lastTransferDate: string
-    /** Planning zakat rate as a percent of the portfolio; negative = derive it from the actual holdings. */
-    zakatRateOverride: number
   }
   zakat: {
     hawlDate: string
@@ -127,6 +142,8 @@ export interface Settings {
     goldPricePerGram: number
     lastPaidDate: string
     lastPaidAmount: number
+    /** One record per zakat day, newest first. */
+    history: ZakatYear[]
   }
   review: { frequency: ReviewFrequency; lastReviewAt: string }
   /** Value of 1 unit of a foreign currency in SAR. */

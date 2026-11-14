@@ -5,7 +5,10 @@ import { Briefcase, ChevronLeft, ChevronRight, Coins, Gem, Globe, Home, Landmark
 import { useStore, type NewAsset } from '@/lib/store'
 import type { AccountKind, AssetClass, Region } from '@/lib/types'
 import { ASSET_KINDS, KARATS, searchCatalog, type AssetKind, type CatalogItem } from '@/lib/catalog'
-import { ASSET_CLASSES, CLASS_LABEL, KIND_LABEL, REGION_LABEL, SECTORS, DEFAULT_ZAKAT_PERCENT, defaultZakatMode } from '@/lib/labels'
+import { ASSET_CLASSES, CLASS_LABEL, KIND_LABEL, REGION_LABEL, SECTORS, ZAKAT_LABEL, DEFAULT_ZAKAT_PERCENT, defaultZakatMode } from '@/lib/labels'
+import { fxRate } from '@/lib/engine/valuation'
+import type { ZakatFields } from '@/lib/engine/zakat'
+import { ZakatControl } from './ZakatControl'
 import { emergencyStatus } from '@/lib/engine/plan'
 import { TROY_OUNCE_GRAMS, GOLD_SYMBOL } from '@/lib/engine/zakat'
 import { fetchQuote } from '@/lib/market-client'
@@ -31,6 +34,9 @@ interface Draft {
   isEmergencyFund: boolean
   accountId: string
   newAccount: string
+  zakat: ZakatFields
+  /** Once the user picks a treatment it no longer follows the asset class. */
+  zakatTouched: boolean
 }
 
 export default function AssetWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -40,18 +46,22 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
   const [query, setQuery] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [showClass, setShowClass] = useState(false)
+  const [showZakat, setShowZakat] = useState(false)
   const [checking, setChecking] = useState(false)
   const Back = settings.locale === 'ar' ? ChevronRight : ChevronLeft
   const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d))
 
-  const reset = () => { setStep(1); setKind(null); setQuery(''); setDraft(null); setShowClass(false) }
+  const reset = () => { setStep(1); setKind(null); setQuery(''); setDraft(null); setShowClass(false); setShowZakat(false) }
   const close = () => { reset(); onClose() }
 
   const efIncomplete = settings.monthlyExpenses > 0 && !emergencyStatus(view, settings).ready
 
   const startDraft = (k: AssetKind, item?: CatalogItem, custom?: { symbol: string; name?: string; currency?: string }, bullion = false) => {
     const sameKind = data.accounts.find((a) => a.kind === k.accountKind)
+    const zBase = { assetClass: item?.assetClass ?? k.assetClass, region: item?.region ?? k.region, isFund: bullion ? true : item?.isFund ?? k.isFund, symbol: k.pricing === 'live' ? (bullion ? GOLD_SYMBOL : item?.symbol ?? custom?.symbol ?? '') : null, pricing: k.pricing }
     setDraft({
+      zakat: { zakatMode: defaultZakatMode(zBase), zakatPercent: DEFAULT_ZAKAT_PERCENT, zakatPerUnit: 0, zakatAmount: 0 },
+      zakatTouched: false,
       name: item ? L(item.ar, item.en) : custom?.name ?? (bullion ? L('ذهب (سبائك)', 'Gold bullion') : ''),
       symbol: bullion ? GOLD_SYMBOL : item?.symbol ?? custom?.symbol ?? '',
       assetClass: item?.assetClass ?? k.assetClass,
@@ -89,6 +99,9 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
   const results = useMemo(() => (kind ? searchCatalog(kind.id, query, settings.shariahFirst) : []), [kind, query, settings.shariahFirst])
 
   const live = !!draft && kind?.pricing === 'live'
+  // Until the user picks a treatment, it follows the class chosen in the classification fields.
+  const zakatShown: ZakatFields = !draft ? { zakatMode: 'FULL', zakatPercent: DEFAULT_ZAKAT_PERCENT } : draft.zakatTouched ? draft.zakat
+    : { ...draft.zakat, zakatMode: defaultZakatMode({ assetClass: draft.assetClass, region: draft.region, isFund: draft.isFund, symbol: live ? draft.symbol : null, pricing: kind?.pricing ?? 'manual' }) }
   const canSave = !!draft && draft.name.trim().length > 0 && (draft.accountId || draft.newAccount.trim()) && (live ? draft.quantity > 0 : draft.value > 0)
 
   const save = () => {
@@ -105,8 +118,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
       manualValue: live ? 0 : draft.value,
       valueUpdatedAt: new Date().toISOString(),
       isEmergencyFund: draft.isEmergencyFund,
-      zakatMode: defaultZakatMode(base),
-      zakatPercent: DEFAULT_ZAKAT_PERCENT,
+      ...(draft.zakatTouched ? draft.zakat : { ...draft.zakat, zakatMode: defaultZakatMode(base) }),
       domicile: draft.domicile,
     }
     const existing = data.accounts.find((a) => a.id === draft.accountId)
@@ -245,6 +257,19 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
               )}
             </div>
           </Field>
+
+          <div className="rounded-2xl border border-line">
+            <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-3.5 py-2 text-start" aria-expanded={showZakat} onClick={() => setShowZakat((v) => !v)}>
+              <span><span className="block text-xs text-ink-soft">{L('الزكاة', 'Zakat')}</span><span className="text-sm font-semibold">{L(ZAKAT_LABEL[zakatShown.zakatMode].ar, ZAKAT_LABEL[zakatShown.zakatMode].en)}{zakatShown.zakatMode === 'PERCENT' ? ` (${zakatShown.zakatPercent}%)` : ''}</span></span>
+              <span className="text-sm font-semibold text-brand-700">{showZakat ? L('إخفاء', 'Hide') : L('تغيير', 'Change')}</span>
+            </button>
+            {showZakat && (
+              <div className="border-t border-line p-3.5">
+                <ZakatControl value={zakatShown} onChange={(patch) => set({ zakat: { ...zakatShown, ...patch }, zakatTouched: true })}
+                  assetValue={(live ? draft.quantity * draft.unitCost : draft.value) * fxRate(draft.currency, settings.fx)} quantity={draft.quantity} currency={draft.currency} live={live} />
+              </div>
+            )}
+          </div>
 
           <button className="text-sm font-medium text-brand-600" onClick={() => setShowClass((v) => !v)} aria-expanded={showClass}>
             {showClass ? L('إخفاء التصنيف', 'Hide classification') : L('تعديل التصنيف (الفئة، الجغرافيا، القطاع)', 'Edit classification (class, region, sector)')}

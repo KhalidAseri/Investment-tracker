@@ -1,38 +1,37 @@
 import type { Pick2, Settings, Snapshot } from '../types.ts'
 import type { AssetView } from './valuation.ts'
 import { allocateWithdrawal, type ContributionLine } from './guidance.ts'
+import { incomeRate } from './plan.ts'
 
-// The income plan rests on one inequality:
-//   expected return >= income withdrawn + zakat + inflation
-// Whatever is left over is real growth. A negative remainder means capital is being consumed,
-// even when dividends happen to cover the withdrawal.
+// The income plan is one subtraction:
+//   income = expected return - zakat - inflation - the real growth the user wants to keep
+// Zakat is a flat planning figure until zakat day, when the actual figure from the assets replaces it;
+// a lower actual zakat therefore raises the income and leaves the growth target untouched.
 
 export interface Balance {
   expectedReturn: number
-  inflation: number
   zakatRate: number
+  inflation: number
+  growthTarget: number
+  /** What is left for income, percent of the portfolio per year (0 when nothing is left). */
   incomeRate: number
-  /** Real growth left after inflation, zakat and income — percent of the portfolio per year. */
-  growth: number
-  /** Highest income rate that leaves growth at zero. */
-  maxIncomeRate: number
-  sustainable: boolean
+  /** The raw remainder; negative when the return cannot cover zakat, inflation and the growth target. */
+  remainder: number
+  feasible: boolean
 }
 
-export function balanceEquation(expectedReturn: number, inflation: number, zakatRate: number, incomeRate: number): Balance {
-  const maxIncomeRate = expectedReturn - inflation - zakatRate
-  const growth = maxIncomeRate - incomeRate
-  return { expectedReturn, inflation, zakatRate, incomeRate, growth, maxIncomeRate, sustainable: growth >= -1e-9 }
+export function balanceEquation(expectedReturn: number, zakatRate: number, inflation: number, growthTarget: number): Balance {
+  const remainder = expectedReturn - zakatRate - inflation - growthTarget
+  return { expectedReturn, zakatRate, inflation, growthTarget, incomeRate: incomeRate(expectedReturn, zakatRate, inflation, growthTarget), remainder, feasible: remainder > 1e-9 }
 }
 
-/** Zakat as a percent of the investable portfolio: the user's planning figure, or what the holdings actually imply. */
-export function effectiveZakatRate(zakatDue: number, investable: number, settings: Settings): number {
-  if (settings.income.zakatRateOverride >= 0) return settings.income.zakatRateOverride
+/** Zakat actually implied by the holdings, as a percent of the investable portfolio. */
+export function actualZakatRate(zakatDue: number, investable: number): number {
   return investable > 0 ? (zakatDue / investable) * 100 : 0
 }
 
-export function requiredPortfolio(monthlyIncome: number, incomeRate: number): number {
-  return incomeRate > 0 ? (monthlyIncome * 12) / (incomeRate / 100) : 0
+export function requiredPortfolio(monthlyIncome: number, ratePct: number): number {
+  return ratePct > 0 ? (monthlyIncome * 12) / (ratePct / 100) : 0
 }
 
 // ---- The three layers ----
@@ -75,15 +74,24 @@ export interface Guardrail {
   state: 'none' | 'ok' | 'cut' | 'raise'
   /** The income as a percent of the current portfolio value. */
   ratePct: number
+  upper: number
+  lower: number
   suggested: number
 }
 
-export function guardrail(annualIncome: number, current: number, upper: number, lower: number): Guardrail {
-  if (!(annualIncome > 0) || !(current > 0)) return { state: 'none', ratePct: 0, suggested: annualIncome }
+// Bounds scale with the plan's own income rate (5% and 3% around a 3.5% plan).
+const UPPER_FACTOR = 5 / 3.5
+const LOWER_FACTOR = 3 / 3.5
+
+/** Cut 10% when income has grown past the upper bound of today's value, raise 10% when it has fallen below the lower one. */
+export function guardrail(annualIncome: number, current: number, planRatePct: number): Guardrail {
+  const upper = planRatePct * UPPER_FACTOR
+  const lower = planRatePct * LOWER_FACTOR
+  if (!(annualIncome > 0) || !(current > 0) || !(planRatePct > 0)) return { state: 'none', ratePct: 0, upper, lower, suggested: annualIncome }
   const ratePct = (annualIncome / current) * 100
-  if (ratePct > upper) return { state: 'cut', ratePct, suggested: annualIncome * 0.9 }
-  if (ratePct < lower) return { state: 'raise', ratePct, suggested: annualIncome * 1.1 }
-  return { state: 'ok', ratePct, suggested: annualIncome }
+  if (ratePct > upper) return { state: 'cut', ratePct, upper, lower, suggested: annualIncome * 0.9 }
+  if (ratePct < lower) return { state: 'raise', ratePct, upper, lower, suggested: annualIncome * 1.1 }
+  return { state: 'ok', ratePct, upper, lower, suggested: annualIncome }
 }
 
 // ---- The yearly transfer, done on the zakat date ----
@@ -91,6 +99,9 @@ export function guardrail(annualIncome: number, current: number, upper: number, 
 export interface TransferPlan {
   smoothed: number
   smoothedMonths: number
+  /** Actual zakat as a percent of the portfolio, and the income rate left after it. */
+  zakatRatePct: number
+  ratePct: number
   /** rate x smoothed value, before any rule is applied. */
   baseIncome: number
   /** Income for the coming year after the rules. */
@@ -120,20 +131,23 @@ export function annualTransfer(
   const inc = settings.income
   const current = rows.reduce((s, r) => s + r.value, 0)
   const { value: smoothed, months } = smoothedValue(snapshots, current, now)
-  const baseIncome = smoothed * (inc.rate / 100)
+  const zakatRatePct = actualZakatRate(zakatDue, current)
+  const ratePct = incomeRate(settings.goal.expectedReturn, zakatRatePct, settings.goal.inflation, inc.growthTarget)
+  const baseIncome = smoothed * (ratePct / 100)
   let income = baseIncome
   let rule: TransferPlan['rule'] = 'none'
 
-  // No raise in a year the portfolio lost value.
   const yearAgo = new Date(now)
   yearAgo.setFullYear(yearAgo.getFullYear() - 1)
   const before = snapshots.find((s) => s.month === monthKey(yearAgo))
-  if (inc.annualIncome > 0 && before && current < snapValue(before) && income > inc.annualIncome) {
+  const lossYear = !!before && current < snapValue(before)
+  // No raise in a year the portfolio lost value.
+  if (inc.annualIncome > 0 && lossYear && income > inc.annualIncome) {
     income = inc.annualIncome
     rule = 'held'
   }
-  const g = guardrail(income, current, inc.upper, inc.lower)
-  if (g.state === 'cut' || g.state === 'raise') {
+  const g = guardrail(income, current, ratePct)
+  if (g.state === 'cut' || (g.state === 'raise' && !lossYear)) {
     income = g.suggested
     rule = g.state
   }
@@ -151,9 +165,58 @@ export function annualTransfer(
   const fromReserve = marketDown ? Math.min(need, lay.reserve.value) : 0
   const sellFrom = marketDown ? outside.filter((r) => !isReserve(r)) : outside
   return {
-    smoothed, smoothedMonths: months, baseIncome, income, monthly: income / 12, rule, zakat: zakatDue, transfer,
+    smoothed, smoothedMonths: months, zakatRatePct, ratePct, baseIncome, income, monthly: income / 12, rule, zakat: zakatDue, transfer,
     inAccount: lay.income.value, need, drawdownPct, marketDown, fromReserve,
     sells: allocateWithdrawal(need - fromReserve, sellFrom, settings, L),
+  }
+}
+
+// ---- Plan vs actual, shown on zakat day ----
+
+export interface YearEnd {
+  zakatPlanned: number
+  zakatActual: number
+  zakatPlannedPct: number
+  zakatActualPct: number
+  incomeRatePlanned: number
+  incomeRateActual: number
+  incomePlanned: number
+  incomeActual: number
+  growthTarget: number
+  /** Last year's return net of money added or withdrawn, then net of inflation; null without a snapshot from a year ago. */
+  realizedPct: number | null
+  realizedRealPct: number | null
+  /** Change in income against last year's, and the same after inflation; null on the first transfer. */
+  incomeChangePct: number | null
+  incomeRealChangePct: number | null
+}
+
+export function yearEndSummary(t: TransferPlan, current: number, investedNow: number, snapshots: Snapshot[], settings: Settings, now = new Date()): YearEnd {
+  const inc = settings.income
+  const incomeRatePlanned = incomeRate(settings.goal.expectedReturn, inc.planZakatRate, settings.goal.inflation, inc.growthTarget)
+  const yearAgo = new Date(now)
+  yearAgo.setFullYear(yearAgo.getFullYear() - 1)
+  const before = snapshots.find((s) => s.month === monthKey(yearAgo))
+  let realizedPct: number | null = null
+  if (before && snapValue(before) > 0) {
+    const added = investedNow - before.invested
+    realizedPct = ((current - snapValue(before) - added) / snapValue(before)) * 100
+  }
+  const incomeChangePct = inc.annualIncome > 0 ? ((t.income - inc.annualIncome) / inc.annualIncome) * 100 : null
+  return {
+    zakatPlanned: current * (inc.planZakatRate / 100),
+    zakatActual: t.zakat,
+    zakatPlannedPct: inc.planZakatRate,
+    zakatActualPct: t.zakatRatePct,
+    incomeRatePlanned,
+    incomeRateActual: t.ratePct,
+    incomePlanned: t.smoothed * (incomeRatePlanned / 100),
+    incomeActual: t.income,
+    growthTarget: inc.growthTarget,
+    realizedPct,
+    realizedRealPct: realizedPct === null ? null : realizedPct - settings.goal.inflation,
+    incomeChangePct,
+    incomeRealChangePct: incomeChangePct === null ? null : incomeChangePct - settings.goal.inflation,
   }
 }
 

@@ -70,11 +70,24 @@ export const KIND_LABEL: Record<AccountKind, Bi> = {
   OTHER: { ar: 'أخرى', en: 'Other' },
 }
 
+export const ZAKAT_MODES: ZakatMode[] = ['FULL', 'PERCENT', 'PER_UNIT', 'AMOUNT', 'COMPANY_PAYS', 'EXEMPT']
+
 export const ZAKAT_LABEL: Record<ZakatMode, Bi> = {
   FULL: { ar: 'كامل القيمة السوقية', en: 'Full market value' },
-  COMPANY_PAYS: { ar: 'الشركة تزكّي عني', en: 'Company pays zakat' },
   PERCENT: { ar: 'نسبة من القيمة', en: 'Share of value' },
+  PER_UNIT: { ar: 'زكاة السهم', en: 'Zakat per share' },
+  AMOUNT: { ar: 'مبلغ أحدده', en: 'Amount I set' },
+  COMPANY_PAYS: { ar: 'الشركة تزكّي عني', en: 'Company pays zakat' },
   EXEMPT: { ar: 'لا زكاة على الأصل', en: 'Not zakatable' },
+}
+
+export const ZAKAT_HINT: Record<ZakatMode, Bi> = {
+  FULL: { ar: 'نقد، ودائع، صكوك، ذهب، وأسهم المضاربة.', en: 'Cash, deposits, sukuk, gold and trading shares.' },
+  PERCENT: { ar: 'استثمار طويل: حصتك من الأصول الزكوية كنسبة من القيمة.', en: 'Long-term holding: your share of zakatable assets as a share of value.' },
+  PER_UNIT: { ar: 'حين تُعلن الشركة أو حاسبة موثوقة زكاة السهم الواحد.', en: 'When the company or a trusted calculator publishes zakat per share.' },
+  AMOUNT: { ar: 'حسبتها خارج التطبيق. راجع المبلغ كل سنة لأنه لا يتغير مع القيمة.', en: 'Worked out elsewhere. Review it yearly: it does not move with the value.' },
+  COMPANY_PAYS: { ar: 'أسهم سعودية مدرجة لمستثمر طويل الأجل.', en: 'Saudi-listed shares held for the long term.' },
+  EXEMPT: { ar: 'عقار مؤجَّر وريت: الزكاة على الدخل لا على الأصل.', en: 'Rented property and REITs: zakat is on the income, not the asset.' },
 }
 
 export const FREQ_LABEL: Record<ReviewFrequency, Bi> = {
@@ -135,9 +148,9 @@ export function defaultSettings(): Settings {
     riskProfile: 'BALANCED',
     targetsSet: false,
     targets: { ...PROFILE_TARGETS.BALANCED },
-    goal: { mode: 'AMOUNT', amount: 0, monthlyIncome: 0, targetYear: y + 15, expectedReturn: 7, inflation: 3 },
-    income: { rate: 3.5, reserveYears: 1.5, upper: 5, lower: 3, drawdownTrigger: 15, annualIncome: 0, lastTransferDate: '', zakatRateOverride: -1 },
-    zakat: { hawlDate: '', calendar: 'HIJRI', goldPricePerGram: 0, lastPaidDate: '', lastPaidAmount: 0 },
+    goal: { mode: 'AMOUNT', amount: 0, monthlyIncome: 0, targetYear: y + 15, expectedReturn: 7, inflation: 2 },
+    income: { growthTarget: 0, planZakatRate: 2.5, reserveYears: 1.5, drawdownTrigger: 15, annualIncome: 0, lastRate: 0, lastTransferDate: '' },
+    zakat: { hawlDate: '', calendar: 'HIJRI', goldPricePerGram: 0, lastPaidDate: '', lastPaidAmount: 0, history: [] },
     review: { frequency: 'QUARTERLY', lastReviewAt: '' },
     fx: { USD: 3.75 },
     lookThrough: { US: 64, DEV: 25, EM: 11 },
