@@ -1,6 +1,6 @@
 import type { AssetClass, Pick2, Settings } from '../types.ts'
 import { ASSET_CLASSES, CLASS_LABEL } from '../labels.ts'
-import { classTotals } from './exposure.ts'
+import { classTotals, type Profiles } from './exposure.ts'
 import type { AssetView } from './valuation.ts'
 
 export const DRIFT_THRESHOLD = 5
@@ -15,8 +15,8 @@ export interface DriftRow {
   drift: number
 }
 
-export function driftRows(rows: AssetView[], settings: Settings, L: Pick2): DriftRow[] {
-  const totals = classTotals(rows)
+export function driftRows(rows: AssetView[], settings: Settings, L: Pick2, profiles: Profiles = {}): DriftRow[] {
+  const totals = classTotals(rows, profiles)
   const total = Object.values(totals).reduce((s, v) => s + v, 0)
   return ASSET_CLASSES.map((c) => {
     const actualPct = total > 0 ? (totals[c] / total) * 100 : 0
@@ -44,9 +44,9 @@ export interface ContributionLine {
  * without selling anything: the money goes to the classes that are short of
  * their target, in proportion to how short they are.
  */
-export function allocateContribution(amount: number, rows: AssetView[], settings: Settings, L: Pick2): ContributionLine[] {
+export function allocateContribution(amount: number, rows: AssetView[], settings: Settings, L: Pick2, profiles: Profiles = {}): ContributionLine[] {
   if (!(amount > 0)) return []
-  const totals = classTotals(rows)
+  const totals = classTotals(rows, profiles)
   const total = Object.values(totals).reduce((s, v) => s + v, 0)
   const after = total + amount
   const targetSum = ASSET_CLASSES.reduce((s, c) => s + (settings.targets[c] ?? 0), 0) || 100
@@ -85,9 +85,9 @@ export function allocateContribution(amount: number, rows: AssetView[], settings
 }
 
 /** Where to take a withdrawal from: overweight classes first, then pro-rata. */
-export function allocateWithdrawal(amount: number, rows: AssetView[], settings: Settings, L: Pick2): ContributionLine[] {
+export function allocateWithdrawal(amount: number, rows: AssetView[], settings: Settings, L: Pick2, profiles: Profiles = {}): ContributionLine[] {
   if (!(amount > 0)) return []
-  const totals = classTotals(rows)
+  const totals = classTotals(rows, profiles)
   const total = Object.values(totals).reduce((s, v) => s + v, 0)
   if (total <= 0) return []
   const after = Math.max(0, total - amount)

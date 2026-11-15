@@ -101,8 +101,37 @@ export interface ZakatYear {
   items: { name: string; amount: number }[]
 }
 
+/**
+ * Researched look-through of one asset: what it actually holds. Written by Claude into the shared
+ * store (or edited by the user) and used by the analysis instead of the asset's single class/region/sector.
+ * All weight maps are percentages that sum to about 100; a missing map falls back to the asset's own field.
+ */
+export interface AssetProfile {
+  assetId: string
+  source: 'claude' | 'user'
+  /** Edited by the user: refreshes must not overwrite it. */
+  locked: boolean
+  /** Date the underlying figures refer to (fund factsheet date), YYYY-MM-DD. */
+  asOf: string
+  updatedAt: string
+  /** 'reported' = taken from the issuer's own figures; 'estimated' = derived from the benchmark it tracks. */
+  confidence: 'reported' | 'estimated'
+  classSplit?: Partial<Record<AssetClass, number>>
+  /** ISO 3166-1 alpha-2 codes, plus 'OTHER'. */
+  countries?: Record<string, number>
+  /** Sector keys from labels.SECTORS. */
+  sectors?: Record<string, number>
+  industries?: Record<string, number>
+  topHoldings?: { name: string; weight: number }[]
+  benchmark?: string
+  domicile?: string
+  note?: string
+  sources?: { title: string; url: string }[]
+}
+
 export interface Settings {
   locale: Locale
+  theme: 'system' | 'light' | 'dark'
   hideAmounts: boolean
   onboarded: boolean
   monthlyExpenses: number
@@ -162,6 +191,10 @@ export interface AppData {
   transactions: Transaction[]
   snapshots: Snapshot[]
   reviews: Review[]
+  /** Look-through per asset id; mirrored from the shared store. */
+  profiles: Record<string, AssetProfile>
+  /** Last local change, for sync. */
+  updatedAt: string
 }
 
 export interface Quote {

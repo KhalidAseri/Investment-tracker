@@ -29,10 +29,10 @@ export function ZakatControl({ value, onChange, assetValue, quantity, currency, 
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-brand-50 p-3.5">
-        <p className="text-xs text-brand-700">{L('زكاة هذا الأصل في السنة', 'Zakat on this asset per year')}</p>
-        <p className="text-2xl font-bold text-brand-900"><Money value={due} /></p>
-        <p className="text-xs text-brand-700">{assetValue > 0 ? <><span className="num">{pct((due / assetValue) * 100, 2)}</span> {L('من قيمته', 'of its value')}</> : L('أدخل القيمة ليظهر المبلغ', 'Enter the value to see the amount')}</p>
+      <div className="rounded-2xl bg-tint p-3.5">
+        <p className="text-xs text-link">{L('زكاة هذا الأصل في السنة', 'Zakat on this asset per year')}</p>
+        <p className="text-2xl font-bold text-tint-ink"><Money value={due} /></p>
+        <p className="text-xs text-link">{assetValue > 0 ? <><span className="num">{pct((due / assetValue) * 100, 2)}</span> {L('من قيمته', 'of its value')}</> : L('أدخل القيمة ليظهر المبلغ', 'Enter the value to see the amount')}</p>
       </div>
 
       <div role="radiogroup" aria-label={L('طريقة زكاة الأصل', 'Zakat treatment')} className="grid grid-cols-2 gap-2">
@@ -40,7 +40,7 @@ export function ZakatControl({ value, onChange, assetValue, quantity, currency, 
           const on = value.zakatMode === m
           return (
             <button key={m} type="button" role="radio" aria-checked={on} onClick={() => onChange({ zakatMode: m as ZakatMode })}
-              className={cx('flex min-h-[76px] flex-col items-start gap-1 rounded-2xl border p-3 text-start transition', on ? 'border-brand-600 bg-brand-50' : 'border-line bg-white hover:border-brand-500')}>
+              className={cx('flex min-h-[76px] flex-col items-start gap-1 rounded-2xl border p-3 text-start transition', on ? 'border-accent bg-tint' : 'border-line bg-card hover:border-accent')}>
               <span className="text-sm font-semibold leading-tight">{L(ZAKAT_LABEL[m].ar, ZAKAT_LABEL[m].en)}</span>
               <span className="text-[11px] leading-snug text-ink-soft">{L(ZAKAT_HINT[m].ar, ZAKAT_HINT[m].en)}</span>
             </button>

@@ -80,10 +80,10 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
 
         {step === 2 && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-brand-50 p-4">
-              <p className="text-xs text-brand-700">{L('راتبك الشهري للسنة القادمة', 'Your monthly salary for the coming year')}</p>
-              <p className="text-3xl font-bold text-brand-900"><Money value={t.monthly} /></p>
-              <p className="mt-1 text-xs text-brand-700">{L('دخل السنة', 'Year’s income')} <Money value={t.income} /> = <span className="num">{pct(t.ratePct, 2)}</span> × {L('متوسط القيمة', 'average value')} <Money value={t.smoothed} /></p>
+            <div className="rounded-2xl bg-tint p-4">
+              <p className="text-xs text-link">{L('راتبك الشهري للسنة القادمة', 'Your monthly salary for the coming year')}</p>
+              <p className="text-3xl font-bold text-tint-ink"><Money value={t.monthly} /></p>
+              <p className="mt-1 text-xs text-link">{L('دخل السنة', 'Year’s income')} <Money value={t.income} /> = <span className="num">{pct(t.ratePct, 2)}</span> × {L('متوسط القيمة', 'average value')} <Money value={t.smoothed} /></p>
             </div>
             <p className="text-sm leading-relaxed text-ink-soft">
               {L(`نسبة الدخل = العائد ${settings.goal.expectedReturn}% − الزكاة الفعلية ${t.zakatRatePct.toFixed(2)}% − التضخم ${settings.goal.inflation}% − النمو ${settings.income.growthTarget}%.`, `Income rate = return ${settings.goal.expectedReturn}% − actual zakat ${t.zakatRatePct.toFixed(2)}% − inflation ${settings.goal.inflation}% − growth ${settings.income.growthTarget}%.`)}

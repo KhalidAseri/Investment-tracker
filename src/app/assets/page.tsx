@@ -1,83 +1,116 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Layers, Pencil, Plus } from 'lucide-react'
+import { Layers, Pencil, Plus, Search } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Account } from '@/lib/types'
-import { CLASS_COLOR, KIND_LABEL } from '@/lib/labels'
+import { ASSET_CLASSES, CLASS_COLOR, CLASS_LABEL, KIND_LABEL } from '@/lib/labels'
+import { dividendStats, type AssetView } from '@/lib/engine/valuation'
 import { daysAgo, num, pct } from '@/lib/format'
-import AssetWizard from '@/components/AssetWizard'
-import AssetSheet from '@/components/AssetSheet'
-import { Confirm, Delta, Empty, Field, Money, Sheet } from '@/components/ui'
+import { useActions } from '@/components/AppShell'
+import { BarList } from '@/components/charts'
+import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat } from '@/components/ui'
+
+type Sort = 'value' | 'gain' | 'day' | 'name'
+type Group = 'account' | 'class'
 
 export default function AssetsPage() {
   const { L, data, view, renameAccount, deleteAccount } = useStore()
-  const [adding, setAdding] = useState(false)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const { openWizard, openAsset } = useActions()
+  const [tab, setTab] = useState<'assets' | 'income'>('assets')
+  const [q, setQ] = useState('')
+  const [sort, setSort] = useState<Sort>('value')
+  const [group, setGroup] = useState<Group>('account')
   const [editAccount, setEditAccount] = useState<Account | null>(null)
   const [name, setName] = useState('')
   const [confirm, setConfirm] = useState(false)
 
   const groups = useMemo(() => {
-    return data.accounts
-      .map((account) => {
-        const rows = view.rows.filter((r) => r.asset.accountId === account.id)
-        return { account, rows, total: rows.reduce((s, r) => s + r.value, 0) }
-      })
-      .sort((a, b) => b.total - a.total)
-  }, [data.accounts, view.rows])
+    const needle = q.trim().toLowerCase()
+    const rows = view.rows.filter((r) => !needle || r.asset.name.toLowerCase().includes(needle) || (r.asset.symbol ?? '').toLowerCase().includes(needle))
+    const order: Record<Sort, (a: AssetView, b: AssetView) => number> = {
+      value: (a, b) => b.value - a.value, gain: (a, b) => b.gainPct - a.gainPct, day: (a, b) => b.dayChange - a.dayChange, name: (a, b) => a.asset.name.localeCompare(b.asset.name, 'ar'),
+    }
+    const sorted = [...rows].sort(order[sort])
+    const buckets = group === 'account'
+      ? data.accounts.map((account) => ({ key: account.id, title: account.name, sub: L(KIND_LABEL[account.kind].ar, KIND_LABEL[account.kind].en), account: account as Account | null, rows: sorted.filter((r) => r.asset.accountId === account.id) }))
+      : ASSET_CLASSES.map((c) => ({ key: c as string, title: L(CLASS_LABEL[c].ar, CLASS_LABEL[c].en), sub: '', account: null as Account | null, rows: sorted.filter((r) => r.asset.assetClass === c) }))
+    return buckets.map((b) => ({ ...b, total: b.rows.reduce((s, r) => s + r.value, 0) })).filter((b) => b.rows.length > 0 || (group === 'account' && !needle)).sort((a, b) => b.total - a.total)
+  }, [data.accounts, view.rows, q, sort, group, L])
+  const divs = useMemo(() => dividendStats(data, view.cost), [data, view.cost])
+  const divTotal = divs.byYear.reduce((s, y) => s + y.amount, 0)
+
+  if (data.assets.length === 0) {
+    return (
+      <Empty icon={<Layers className="h-7 w-7" />} title={L('أضف أول أصل', 'Add your first asset')}
+        body={L('سهم، صندوق، ادخار جهة العمل، ذهب، نقد أو عقار. الأصول المدرجة تتحدث أسعارها تلقائيًا، والباقي تحدّث قيمته بضغطة.', 'A stock, fund, employer plan, gold, cash or property. Listed assets update automatically; the rest you update with one tap.')}
+        action={<button className="btn-primary" onClick={openWizard}><Plus className="h-4 w-4" />{L('إضافة أصل', 'Add asset')}</button>} />
+    )
+  }
 
   return (
     <>
-      {data.assets.length === 0 ? (
-        <Empty icon={<Layers className="h-7 w-7" />} title={L('أضف أول أصل', 'Add your first asset')}
-          body={L('سهم، صندوق، ادخار جهة العمل، ذهب، نقد أو عقار. الأصول المدرجة تتحدث أسعارها تلقائيًا، والباقي تحدّث قيمته بضغطة.', 'A stock, fund, employer plan, gold, cash or property. Listed assets update automatically; the rest you update with one tap.')}
-          action={<button className="btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" />{L('إضافة أصل', 'Add asset')}</button>} />
-      ) : (
-        <>
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-xs text-ink-soft">{L(`${data.assets.length} أصل في ${data.accounts.length} جهة`, `${data.assets.length} assets across ${data.accounts.length} providers`)}</p>
-              <p className="text-2xl font-bold"><Money value={view.netWorth} /></p>
-            </div>
-            <button className="btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" />{L('أصل', 'Asset')}</button>
-          </div>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs text-ink-soft">{L(`${data.assets.length} أصل في ${data.accounts.length} جهة`, `${data.assets.length} assets across ${data.accounts.length} providers`)}</p>
+          <p className="text-2xl font-bold"><Money value={view.netWorth} /></p>
+        </div>
+        <Chips wrap value={tab} onChange={setTab} options={[{ value: 'assets', label: L('الأصول', 'Assets') }, { value: 'income', label: L('التوزيعات', 'Dividends') }]} />
+      </div>
 
-          {groups.map(({ account, rows, total }) => (
-            <section key={account.id} className="card p-0">
+      {tab === 'assets' && (
+        <>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+              <input className="input ps-9" placeholder={L('ابحث في أصولك', 'Search your assets')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={L('بحث', 'Search')} />
+            </div>
+            <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={L('الترتيب', 'Sort')}>
+              <option value="value">{L('الأعلى قيمة', 'Value')}</option>
+              <option value="gain">{L('الأعلى ربحًا', 'Gain')}</option>
+              <option value="day">{L('تغيّر اليوم', 'Today')}</option>
+              <option value="name">{L('الاسم', 'Name')}</option>
+            </select>
+          </div>
+          <Chips value={group} onChange={setGroup} options={[{ value: 'account', label: L('حسب الجهة', 'By provider') }, { value: 'class', label: L('حسب الفئة', 'By class') }]} />
+
+          {groups.map((g) => (
+            <section key={g.key} className="card p-0">
               <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold">{account.name}</h2>
-                  <p className="text-xs text-ink-soft">{L(KIND_LABEL[account.kind].ar, KIND_LABEL[account.kind].en)} · <span className="num">{pct(view.netWorth > 0 ? (total / view.netWorth) * 100 : 0, 0)}</span></p>
+                  <h2 className="truncate text-sm font-bold">{g.title}</h2>
+                  <p className="text-xs text-ink-soft">{g.sub && `${g.sub} · `}<span className="num">{pct(view.netWorth > 0 ? (g.total / view.netWorth) * 100 : 0, 0)}</span></p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Money value={total} className="text-sm font-semibold" />
-                  <button onClick={() => { setEditAccount(account); setName(account.name) }} className="flex h-11 w-9 items-center justify-center text-ink-faint hover:text-ink" aria-label={L('تعديل الجهة', 'Edit provider')}><Pencil className="h-4 w-4" /></button>
+                  <Money value={g.total} className="text-sm font-semibold" />
+                  {g.account && <button onClick={() => { setEditAccount(g.account); setName(g.account!.name) }} className="flex h-11 w-9 items-center justify-center text-ink-faint hover:text-ink" aria-label={L('تعديل الجهة', 'Edit provider')}><Pencil className="h-4 w-4" /></button>}
                 </div>
               </div>
-              {rows.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">{L('لا أصول في هذه الجهة.', 'No assets here.')}</p>}
+              {g.rows.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">{L('لا أصول في هذه الجهة.', 'No assets here.')}</p>}
               <ul className="divide-y divide-line">
-                {rows.map((r) => {
+                {g.rows.map((r) => {
                   const a = r.asset
                   const age = daysAgo(a.valueUpdatedAt)
+                  const stale = a.pricing === 'manual' && age !== null && age > 30
                   // Symbol and quantity are isolated so Latin tickers do not reorder inside Arabic text.
                   const sub = a.pricing === 'live'
                     ? <><span className="num">{a.symbol}</span> · <span className="num">{num(a.quantity, 'auto')}</span>{r.source === 'cost' ? ' · ' + L('بانتظار السعر', 'awaiting price') : r.source === 'cached' ? ' · ' + L('سعر محفوظ', 'saved price') : ''}</>
-                    : L('قيمة يدوية', 'Manual') + (age !== null && age > 30 ? ' · ' + L(`لم تُحدَّث منذ ${age} يوم`, `not updated for ${age}d`) : '')
+                    : L('قيمة يدوية', 'Manual') + (stale ? ' · ' + L(`لم تُحدَّث منذ ${age} يوم`, `not updated for ${age}d`) : '')
                   return (
                     <li key={a.id}>
-                      <button onClick={() => setOpenId(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-surface">
+                      <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-surface">
                         <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: CLASS_COLOR[a.assetClass] }} aria-hidden />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-semibold">{a.name}</span>
-                            {a.isEmergencyFund && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700">{L('طوارئ', 'Emergency')}</span>}
+                            {a.isEmergencyFund && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[10px] font-semibold text-link">{L('طوارئ', 'Emergency')}</span>}
+                            {a.isIncomeAccount && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[10px] font-semibold text-link">{L('دخل', 'Income')}</span>}
                           </span>
-                          <span className={`block truncate text-xs ${a.pricing === 'manual' && age !== null && age > 30 ? 'text-warn-600' : 'text-ink-soft'}`}>{sub}</span>
+                          <span className={`block truncate text-xs ${stale ? 'text-warn-600' : 'text-ink-soft'}`}>{sub}</span>
                         </span>
                         <span className="shrink-0 text-end">
                           <Money value={r.value} className="block text-sm font-semibold" />
-                          {r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
+                          {sort === 'day' && r.dayChange !== 0 ? <Delta value={r.dayChange} className="text-xs" /> : r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
                         </span>
                       </button>
                     </li>
@@ -86,11 +119,42 @@ export default function AssetsPage() {
               </ul>
             </section>
           ))}
+          {groups.length === 0 && <p className="py-6 text-center text-sm text-ink-soft">{L('لا نتائج.', 'No results.')}</p>}
         </>
       )}
 
-      <AssetWizard open={adding} onClose={() => setAdding(false)} />
-      <AssetSheet assetId={openId} onClose={() => setOpenId(null)} />
+      {tab === 'income' && (
+        <>
+          <section className="card">
+            <h2 className="section-title">{L('دخل التوزيعات', 'Dividend income')}</h2>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              <Stat label={L('آخر 12 شهرًا', 'Last 12 months')}><Money value={divs.ttm} /></Stat>
+              <Stat label={L('متوسط شهري', 'Monthly average')}><Money value={divs.monthlyAvg} /></Stat>
+              <Stat label={L('العائد على التكلفة', 'Yield on cost')}><span className="num">{pct(divs.yieldOnCost, 2)}</span></Stat>
+              <Stat label={L('النمو السنوي', 'Yearly growth')} sub={divs.growthPct === null ? L('يحتاج سنتين كاملتين', 'Needs two full years') : undefined}><span className="num">{divs.growthPct === null ? '—' : pct(divs.growthPct, 1, true)}</span></Stat>
+            </div>
+            <p className="hint mt-3">{L('سجّل كل توزيعة من زر + ← «توزيعة أو عائد».', 'Record each dividend from the + button → “Dividend or income”.')}</p>
+          </section>
+          {divs.byYear.length > 0 && (
+            <section className="card"><h2 className="section-title mb-3">{L('حسب السنة', 'By year')}</h2>
+              <BarList items={divs.byYear.map((y) => ({ key: String(y.year), label: String(y.year), value: y.amount, pct: divTotal > 0 ? (y.amount / divTotal) * 100 : 0 }))} />
+            </section>
+          )}
+          <section className="card">
+            <h2 className="section-title mb-3">{L('حسب الأصل (كل الفترات)', 'By asset (all time)')}</h2>
+            {divs.byAsset.length === 0 ? <p className="hint">{L('لا توزيعات مسجلة بعد.', 'No dividends recorded yet.')}</p> : (
+              <ul className="divide-y divide-line">
+                {divs.byAsset.map((d) => (
+                  <li key={d.assetId} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                    <span className="min-w-0"><span className="block truncate font-medium">{d.name}</span><span className="text-xs text-ink-soft">{L(`${d.count} توزيعة`, `${d.count} payments`)}</span></span>
+                    <Money value={d.amount} className="font-semibold" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
 
       <Sheet open={!!editAccount} onClose={() => setEditAccount(null)} title={L('تعديل الجهة', 'Edit provider')} footer={
         <div className="flex gap-2">

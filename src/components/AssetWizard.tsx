@@ -143,8 +143,8 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
           {ASSET_KINDS.map((k) => {
             const Icon = ICONS[k.icon] ?? Package
             return (
-              <button key={k.id} onClick={() => pickKind(k)} className="flex min-h-[104px] flex-col items-start gap-2 rounded-2xl border border-line bg-white p-3.5 text-start transition hover:border-brand-500 active:scale-[0.98]">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Icon className="h-5 w-5" /></span>
+              <button key={k.id} onClick={() => pickKind(k)} className="flex min-h-[104px] flex-col items-start gap-2 rounded-2xl border border-line bg-card p-3.5 text-start transition hover:border-accent active:scale-[0.98]">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tint text-link"><Icon className="h-5 w-5" /></span>
                 <span className="text-sm font-semibold leading-tight">{L(k.ar, k.en)}</span>
                 <span className="text-[11px] leading-snug text-ink-soft">{L(k.hintAr, k.hintEn)}</span>
               </button>
@@ -156,36 +156,36 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
       {/* Step 2 — pick from the catalogue or type a symbol */}
       {step === 2 && kind && (
         <div className="space-y-3">
-          <button className="flex items-center gap-1 text-sm font-medium text-brand-600" onClick={() => setStep(1)}><Back className="h-4 w-4" />{L('تغيير النوع', 'Change type')}</button>
+          <button className="flex items-center gap-1 text-sm font-medium text-link" onClick={() => setStep(1)}><Back className="h-4 w-4" />{L('تغيير النوع', 'Change type')}</button>
           <div className="relative">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
             <input className="input ps-9" placeholder={L('ابحث بالاسم أو الرمز', 'Search by name or symbol')} value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           {kind.id === 'GOLD' && !query && (
-            <button onClick={() => startDraft(kind, undefined, undefined, true)} className="flex w-full items-center justify-between rounded-2xl border border-brand-500 bg-brand-50 p-3.5 text-start">
+            <button onClick={() => startDraft(kind, undefined, undefined, true)} className="flex w-full items-center justify-between rounded-2xl border border-accent bg-tint p-3.5 text-start">
               <span>
                 <span className="block text-sm font-semibold">{L('سبائك أو مشغولات بالجرام', 'Bullion or jewellery by gram')}</span>
                 <span className="text-xs text-ink-soft">{L('يُسعَّر مباشرة من سعر الذهب العالمي حسب العيار', 'Priced live from the gold spot price by karat')}</span>
               </span>
-              <Gem className="h-5 w-5 text-brand-600" />
+              <Gem className="h-5 w-5 text-link" />
             </button>
           )}
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
             {results.map((c) => (
               <li key={c.symbol}>
-                <button onClick={() => startDraft(kind, c)} className="flex min-h-[56px] w-full items-center justify-between gap-3 bg-white px-3.5 py-2 text-start hover:bg-surface">
+                <button onClick={() => startDraft(kind, c)} className="flex min-h-[56px] w-full items-center justify-between gap-3 bg-card px-3.5 py-2 text-start hover:bg-surface">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{L(c.ar, c.en)}</span>
                     <span className="num text-xs text-ink-soft">{c.symbol}</span>
                   </span>
                   <span className="flex shrink-0 gap-1">
-                    {c.shariah && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-gain">{L('متوافق شرعيًا', 'Shariah')}</span>}
+                    {c.shariah && <span className="rounded-full bg-good-tint px-2 py-0.5 text-[10px] font-semibold text-gain">{L('متوافق شرعيًا', 'Shariah')}</span>}
                     {c.domicile === 'IE' && <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-soft">{L('أيرلندي', 'Irish')}</span>}
                   </span>
                 </button>
               </li>
             ))}
-            {results.length === 0 && <li className="bg-white px-3.5 py-4 text-sm text-ink-soft">{L('غير موجود في القائمة.', 'Not in the list.')}</li>}
+            {results.length === 0 && <li className="bg-card px-3.5 py-4 text-sm text-ink-soft">{L('غير موجود في القائمة.', 'Not in the list.')}</li>}
           </ul>
           {query.trim() && (
             <button className="btn-soft w-full" disabled={checking} onClick={useCustomSymbol}>
@@ -238,7 +238,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
 
           {(kind.id === 'CASH' || draft.isEmergencyFund) && (
             <label className="flex items-start gap-3 rounded-2xl border border-line p-3.5">
-              <input type="checkbox" className="mt-0.5 h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={draft.isEmergencyFund} onChange={(e) => set({ isEmergencyFund: e.target.checked })} />
+              <input type="checkbox" className="mt-0.5 h-5 w-5 rounded border-line text-link focus:ring-accent" checked={draft.isEmergencyFund} onChange={(e) => set({ isEmergencyFund: e.target.checked })} />
               <span>
                 <span className="block text-sm font-semibold">{L('هذا جزء من صندوق الطوارئ', 'This is part of my emergency fund')}</span>
                 <span className="hint">{L('يُحتسب للطوارئ ويُستثنى من تحليل الاستثمار.', 'Counted toward the emergency fund and left out of the investment analysis.')}</span>
@@ -261,7 +261,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
           <div className="rounded-2xl border border-line">
             <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-3.5 py-2 text-start" aria-expanded={showZakat} onClick={() => setShowZakat((v) => !v)}>
               <span><span className="block text-xs text-ink-soft">{L('الزكاة', 'Zakat')}</span><span className="text-sm font-semibold">{L(ZAKAT_LABEL[zakatShown.zakatMode].ar, ZAKAT_LABEL[zakatShown.zakatMode].en)}{zakatShown.zakatMode === 'PERCENT' ? ` (${zakatShown.zakatPercent}%)` : ''}</span></span>
-              <span className="text-sm font-semibold text-brand-700">{showZakat ? L('إخفاء', 'Hide') : L('تغيير', 'Change')}</span>
+              <span className="text-sm font-semibold text-link">{showZakat ? L('إخفاء', 'Hide') : L('تغيير', 'Change')}</span>
             </button>
             {showZakat && (
               <div className="border-t border-line p-3.5">
@@ -271,7 +271,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
             )}
           </div>
 
-          <button className="text-sm font-medium text-brand-600" onClick={() => setShowClass((v) => !v)} aria-expanded={showClass}>
+          <button className="text-sm font-medium text-link" onClick={() => setShowClass((v) => !v)} aria-expanded={showClass}>
             {showClass ? L('إخفاء التصنيف', 'Hide classification') : L('تعديل التصنيف (الفئة، الجغرافيا، القطاع)', 'Edit classification (class, region, sector)')}
           </button>
           {showClass && <ClassFields value={draft} onChange={set} />}
@@ -302,7 +302,7 @@ export function ClassFields({ value, onChange }: { value: { assetClass: AssetCla
         </select>
       </Field>
       <label className="flex items-center gap-3">
-        <input type="checkbox" className="h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={value.isFund} onChange={(e) => onChange({ isFund: e.target.checked })} />
+        <input type="checkbox" className="h-5 w-5 rounded border-line text-link focus:ring-accent" checked={value.isFund} onChange={(e) => onChange({ isFund: e.target.checked })} />
         <span className="text-sm">{L('صندوق متنوع (لا يُعد تركّزًا في أصل واحد)', 'Diversified fund (not counted as single-asset concentration)')}</span>
       </label>
     </div>

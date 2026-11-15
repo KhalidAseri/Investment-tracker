@@ -68,8 +68,25 @@ function parseChart(symbol: string, data: unknown): Quote | null {
   }
 }
 
+/** Inside the Android app requests leave through the system, not the WebView, so no CORS relay is needed. */
+function isNativeApp(): boolean {
+  return typeof window !== 'undefined' && !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+}
+
 export async function fetchQuote(symbol: string): Promise<Quote | null> {
   const target = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`
+  if (isNativeApp()) {
+    for (const host of ['query1', 'query2']) {
+      try {
+        const res = await fetch(target.replace('query1', host), { signal: AbortSignal.timeout(TIMEOUT_MS) })
+        if (!res.ok) continue
+        const quote = parseChart(symbol, await res.json())
+        if (quote) return quote
+      } catch {
+        /* try the other host, then fall through to the relays */
+      }
+    }
+  }
   for (let i = 0; i < RELAYS.length; i++) {
     const idx = (preferred + i) % RELAYS.length
     const { url, unwrap } = RELAYS[idx](target)

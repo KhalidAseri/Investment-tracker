@@ -1,0 +1,76 @@
+// Shared store (Supabase). The app syncs the portfolio document here; Claude reads it through the
+// Supabase connector, researches each asset and writes its look-through into invest_asset_profiles.
+// The key below is a publishable key: it is meant to ship in clients, and row-level security limits
+// every signed-in user to their own rows.
+
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { AppData, AssetProfile } from './types'
+
+const URL = 'https://ivicgwjratcfcbmyrnld.supabase.co'
+const KEY = 'sb_publishable_Ikf9bS82eaFOe4QA-H0zEQ_34cBGjZS'
+
+let client: SupabaseClient | null = null
+export function cloud(): SupabaseClient {
+  if (!client) client = createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'investtrack_auth' } })
+  return client
+}
+
+export async function sessionEmail(): Promise<string | null> {
+  const { data } = await cloud().auth.getSession()
+  return data.session?.user.email ?? null
+}
+
+/** Returns an error message, or null on success. */
+export async function signIn(email: string, password: string): Promise<string | null> {
+  const { error } = await cloud().auth.signInWithPassword({ email: email.trim(), password })
+  return error ? error.message : null
+}
+
+export async function signOut(): Promise<void> {
+  await cloud().auth.signOut()
+}
+
+export interface RemotePortfolio { data: unknown; updatedAt: string }
+
+export async function pullPortfolio(): Promise<RemotePortfolio | null> {
+  const { data, error } = await cloud().from('invest_portfolios').select('data, updated_at').maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? { data: data.data, updatedAt: data.updated_at } : null
+}
+
+/** Uploads the document and returns the server timestamp it was stored with. */
+export async function pushPortfolio(doc: AppData, device: string): Promise<string> {
+  const updated_at = new Date().toISOString()
+  const { error } = await cloud().from('invest_portfolios').upsert({ data: doc, updated_at, device })
+  if (error) throw new Error(error.message)
+  return updated_at
+}
+
+interface ProfileRow { asset_id: string; profile: Partial<AssetProfile>; source: 'claude' | 'user'; locked: boolean; as_of: string | null; updated_at: string }
+
+export async function fetchProfiles(): Promise<AssetProfile[]> {
+  const { data, error } = await cloud().from('invest_asset_profiles').select('asset_id, profile, source, locked, as_of, updated_at')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as ProfileRow[]).map((r) => ({
+    confidence: 'estimated', ...r.profile,
+    assetId: r.asset_id, source: r.source, locked: r.locked, asOf: r.as_of ?? '', updatedAt: r.updated_at,
+  }))
+}
+
+/** Saves a profile the user edited by hand; it is marked locked so refreshes leave it alone. */
+export async function saveProfile(p: AssetProfile, name: string, symbol: string | null): Promise<void> {
+  const { assetId, source, locked, asOf, updatedAt: _u, ...body } = p
+  const { error } = await cloud().from('invest_asset_profiles').upsert({ asset_id: assetId, name, symbol, profile: body, source, locked, as_of: asOf || null, updated_at: new Date().toISOString() })
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteProfile(assetId: string): Promise<void> {
+  const { error } = await cloud().from('invest_asset_profiles').delete().eq('asset_id', assetId)
+  if (error) throw new Error(error.message)
+}
+
+export interface ProfileRun { ran_at: string; kind: string; summary: string }
+export async function fetchRuns(): Promise<ProfileRun[]> {
+  const { data } = await cloud().from('invest_profile_runs').select('ran_at, kind, summary').order('ran_at', { ascending: false }).limit(8)
+  return (data ?? []) as ProfileRun[]
+}

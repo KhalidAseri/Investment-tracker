@@ -97,9 +97,9 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
   }
 
   if (s.targetsSet && investRows.length > 0) {
-    const worst = maxDrift(driftRows(investRows, s, L))
+    const worst = maxDrift(driftRows(investRows, s, L, data.profiles))
     if (worst && Math.abs(worst.drift) > DRIFT_THRESHOLD) {
-      const lines = allocateContribution(s.monthlyContribution || 1000, investRows, s, L)
+      const lines = allocateContribution(s.monthlyContribution || 1000, investRows, s, L, data.profiles)
       const first = lines.sort((a, b) => b.amount - a.amount)[0]
       out.push({
         id: 'drift', tone: 'info',
@@ -112,7 +112,7 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
     out.push({ id: 'targets', tone: 'info', title: L('حدّد توزيعك المستهدف', 'Set your target allocation'), body: L('ليقترح التطبيق أين تضع كل مساهمة قادمة.', 'So the app can suggest where each new contribution should go.'), href: '/analysis/#targets', cta: L('تحديد', 'Set') })
   }
 
-  const risk = insights(investRows, s, L, now.getTime()).find((i) => i.severity === 'warn')
+  const risk = insights(investRows, s, L, now.getTime(), data.profiles).find((i) => i.severity === 'warn')
   if (risk) out.push({ id: risk.id, tone: 'warn', title: risk.title, body: risk.body, href: '/analysis/', cta: L('التحليل', 'Analysis') })
 
   if (out.length === 0) {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { Check, Circle, CircleCheck, CircleDot } from 'lucide-react'
+import { Banknote, CalendarCheck, Check, ChevronLeft, ChevronRight, Circle, CircleCheck, CircleDot, HandCoins, LifeBuoy, Target } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { ReviewFrequency } from '@/lib/types'
 import { CLASS_COLOR, FREQ_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
@@ -17,19 +17,23 @@ import { useHash } from '@/lib/useHash'
 import { LineChart, Meter, SegBar } from '@/components/charts'
 import YearEndSheet from '@/components/YearEndSheet'
 import { ZakatSheet } from '@/components/ZakatControl'
-import { Chips, Disclaimer, Field, Money, Notice, NumberInput, Slider, Stat, cx } from '@/components/ui'
+import { Chips, Disclaimer, Field, Money, Notice, NumberInput, Slider, Stagger, Stat, cx } from '@/components/ui'
 
 function Num({ n }: { n: number }) {
-  return <span className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">{n}</span>
+  return <span className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-bold text-link">{n}</span>
 }
 
-type Tab = 'roadmap' | 'emergency' | 'goal' | 'income' | 'zakat' | 'review'
-const TABS: Tab[] = ['roadmap', 'emergency', 'goal', 'income', 'zakat', 'review']
+type Tab = 'hub' | 'roadmap' | 'emergency' | 'goal' | 'income' | 'zakat' | 'review'
+type IncomeStep = 'balance' | 'size' | 'layers' | 'track'
+const TABS: Tab[] = ['hub', 'emergency', 'goal', 'income', 'zakat', 'review', 'roadmap']
 
 export default function PlanPage() {
   const { L, data, settings, view, quotes, quoteStatus, updateSettings, updateAsset, completeReview } = useStore()
-  const [hash, setHash] = useHash('roadmap')
-  const tab: Tab = (TABS as string[]).includes(hash) ? (hash as Tab) : 'roadmap'
+  const [hash, setHash] = useHash('hub')
+  const tab: Tab = (TABS as string[]).includes(hash) ? (hash as Tab) : 'hub'
+  const [step, setStep] = useState<IncomeStep | null>(null)
+  const Back = settings.locale === 'ar' ? ChevronRight : ChevronLeft
+  const Fwd = settings.locale === 'ar' ? ChevronLeft : ChevronRight
   const [note, setNote] = useState('')
   const [yearEnd, setYearEnd] = useState(false)
   const [zakatAsset, setZakatAsset] = useState<string | null>(null)
@@ -38,9 +42,9 @@ export default function PlanPage() {
   const investRows = useMemo(() => view.rows.filter((r) => !r.asset.isEmergencyFund), [view.rows])
   const ef = useMemo(() => emergencyStatus(view, settings), [view, settings])
   const goal = useMemo(() => goalStatus(view, settings), [view, settings])
-  const drift = useMemo(() => driftRows(investRows, settings, L), [investRows, settings, L])
+  const drift = useMemo(() => driftRows(investRows, settings, L, data.profiles), [investRows, settings, L, data.profiles])
   const worst = maxDrift(drift)
-  const risks = useMemo(() => insights(investRows, settings, L), [investRows, settings, L])
+  const risks = useMemo(() => insights(investRows, settings, L, Date.now(), data.profiles), [investRows, settings, L, data.profiles])
   const steps = useMemo(
     () => roadmap(data, view, { hasWarnings: risks.some((r) => r.severity === 'warn'), maxDriftAbs: Math.abs(worst?.drift ?? 0) }, L),
     [data, view, risks, worst, L],
@@ -69,7 +73,28 @@ export default function PlanPage() {
   const stale = useMemo(() => staleManualRows(view.rows), [view.rows])
   const gram = goldPricePerGram(quotes, settings)
 
+  const currentStep = steps.find((x) => x.status === 'current')
+  const doneSteps = steps.filter((x) => x.status === 'done').length
+  const incomeStep: IncomeStep = step ?? (inc.annualIncome > 0 ? 'track' : 'balance')
+  const stations: { id: Tab; icon: React.ElementType; tone: 'good' | 'warn' | 'info'; status: React.ReactNode; figure?: React.ReactNode; meter?: number }[] = [
+    { id: 'emergency', icon: LifeBuoy, tone: ef.ready ? 'good' : ef.target > 0 ? 'warn' : 'info', meter: ef.target > 0 ? ef.pct : undefined,
+      figure: ef.target > 0 ? <span className="num text-sm font-bold">{pct(ef.pct, 0)}</span> : undefined,
+      status: ef.target <= 0 ? L('أدخل مصاريفك الشهرية لنحسب حجمه.', 'Enter your monthly expenses to size it.') : ef.ready ? L(`مكتمل: يغطي ${ef.monthsCovered.toFixed(1)} شهر.`, `Complete: covers ${ef.monthsCovered.toFixed(1)} months.`) : L(`يغطي ${ef.monthsCovered.toFixed(1)} شهر من ${settings.emergencyMonths}.`, `Covers ${ef.monthsCovered.toFixed(1)} of ${settings.emergencyMonths} months.`) },
+    { id: 'goal', icon: Target, tone: goal.target > 0 && goal.pct >= 100 ? 'good' : 'info', meter: goal.target > 0 ? goal.pct : undefined,
+      figure: goal.target > 0 ? <span className="num text-sm font-bold">{pct(goal.pct, 0)}</span> : undefined,
+      status: goal.target <= 0 ? L('حدّد المبلغ أو الدخل الذي تريد الوصول إليه.', 'Set the amount or income you are aiming for.') : goal.reachYear ? L(`بوتيرتك الحالية تبلغه في ${goal.reachYear}.`, `At your pace you reach it in ${goal.reachYear}.`) : L('بالوتيرة الحالية لا يُبلغ — ارفع المساهمة.', 'Not reached at this pace — raise your contribution.') },
+    { id: 'income', icon: Banknote, tone: !eq.feasible ? 'warn' : inc.annualIncome > 0 ? 'good' : 'info',
+      figure: <span className="num text-sm font-bold">{planRate.toFixed(2).replace(/\.?0+$/, '')}%</span>,
+      status: inc.annualIncome > 0 ? <>{L('راتبك الشهري', 'Your monthly salary')} <Money value={inc.annualIncome / 12} className="font-semibold text-ink" /></> : L('وازن بين الزكاة والنمو ودخلك، واعرف حجم المحفظة المطلوب.', 'Balance zakat, growth and income, and see the portfolio size you need.') },
+    { id: 'zakat', icon: HandCoins, tone: zakat.daysToHawl !== null && zakat.daysToHawl <= 30 ? 'warn' : 'info',
+      figure: <Money value={zakat.due} className="text-sm font-bold" />,
+      status: zakat.daysToHawl === null ? L('حدّد تاريخ الحول ليذكّرك التطبيق.', 'Set the due date so the app reminds you.') : zakat.daysToHawl > 0 ? L(`يوم الزكاة والتحويلة بعد ${zakat.daysToHawl} يوم.`, `Zakat day and the transfer in ${zakat.daysToHawl} days.`) : L('حان يوم الزكاة والتحويلة السنوية.', 'Zakat day and the yearly transfer are due.') },
+    { id: 'review', icon: CalendarCheck, tone: review.due ? 'warn' : 'info',
+      status: !review.nextDue ? L('تبدأ بعد إضافة أول أصل.', 'Starts once you add your first asset.') : review.due ? L('المراجعة الدورية مستحقة الآن.', 'The periodic review is due now.') : L(`المراجعة القادمة ${dateLabel(review.nextDue, settings.locale)}.`, `Next review ${dateLabel(review.nextDue, settings.locale)}.`) },
+  ]
   const labels: Record<Tab, string> = {
+    hub: L('الخطة', 'Plan'),
+
     roadmap: L('الخارطة', 'Roadmap'), emergency: L('الطوارئ', 'Emergency'), goal: L('الهدف', 'Goal'),
     income: L('الدخل', 'Income'), zakat: L('الزكاة', 'Zakat'), review: L('المراجعة', 'Review'),
   }
@@ -79,7 +104,38 @@ export default function PlanPage() {
 
   return (
     <>
-      <Chips value={tab} onChange={setHash} options={TABS.map((t) => ({ value: t, label: labels[t] }))} />
+      {tab !== 'hub' && (
+        <button className="-ms-1 flex min-h-[44px] items-center gap-1 text-sm font-semibold text-link" onClick={() => setHash('hub')}>
+          <Back className="h-5 w-5" />{L('الخطة', 'Plan')} <span className="text-ink-soft">/ {labels[tab]}</span>
+        </button>
+      )}
+
+      {/* ---------- Hub: the plan as a journey of stations ---------- */}
+      {tab === 'hub' && (
+        <Stagger className="space-y-3">
+          <section className="rounded-3xl bg-hero p-5 text-hero-ink">
+            <p className="text-sm opacity-70">{L('رحلتك', 'Your journey')}</p>
+            <p className="mt-1 text-xl font-bold leading-snug">{currentStep ? currentStep.title : L('أكملت كل المراحل', 'Every stage is complete')}</p>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-[width] duration-700" style={{ width: `${(doneSteps / steps.length) * 100}%` }} /></div>
+              <span className="num text-sm font-semibold">{doneSteps} / {steps.length}</span>
+            </div>
+            <button className="mt-3 text-sm font-semibold underline-offset-4 hover:underline" onClick={() => setHash('roadmap')}>{L('عرض خارطة البناء كاملة', 'See the full building roadmap')}</button>
+          </section>
+          {stations.map((st) => (
+            <button key={st.id} className="card flex w-full items-center gap-3 text-start transition active:scale-[0.99]" onClick={() => setHash(st.id)}>
+              <span className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl', st.tone === 'good' ? 'bg-good-tint text-gain' : st.tone === 'warn' ? 'bg-warn-tint text-warn-600' : 'bg-tint text-link')}><st.icon className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2"><span className="text-sm font-bold">{labels[st.id]}</span>{st.figure}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-ink-soft">{st.status}</span>
+                {st.meter !== undefined && <span className="mt-2 block"><Meter value={st.meter} tone={st.tone === 'good' ? 'good' : 'brand'} label={labels[st.id]} /></span>}
+              </span>
+              <Fwd className="h-5 w-5 shrink-0 text-ink-faint" aria-hidden />
+            </button>
+          ))}
+        </Stagger>
+      )}
+
 
       {/* ---------- Roadmap ---------- */}
       {tab === 'roadmap' && (
@@ -92,17 +148,17 @@ export default function PlanPage() {
               return (
                 <li key={s.id} className="relative flex gap-3 pb-5 last:pb-0">
                   {i < steps.length - 1 && <span className="absolute start-[11px] top-7 h-[calc(100%-1.75rem)] w-0.5 bg-line" aria-hidden />}
-                  <Icon className={cx('mt-0.5 h-6 w-6 shrink-0', s.status === 'done' ? 'text-gain' : s.status === 'current' ? 'text-brand-600' : 'text-ink-faint')} aria-hidden />
+                  <Icon className={cx('mt-0.5 h-6 w-6 shrink-0', s.status === 'done' ? 'text-gain' : s.status === 'current' ? 'text-link' : 'text-ink-faint')} aria-hidden />
                   <div className="min-w-0 flex-1">
                     <p className={cx('text-sm font-bold', s.status === 'todo' && 'text-ink-soft')}>
                       {s.title}
-                      {s.status === 'current' && <span className="ms-2 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700">{L('أنت هنا', 'You are here')}</span>}
+                      {s.status === 'current' && <span className="ms-2 rounded-full bg-tint px-2 py-0.5 text-[10px] font-semibold text-link">{L('أنت هنا', 'You are here')}</span>}
                     </p>
                     <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{s.body}</p>
                     <div className="mt-1.5 flex flex-wrap gap-2">
-                      {s.href && s.status !== 'done' && <Link href={s.href} className="text-sm font-semibold text-brand-700">{L('افتح', 'Open')}</Link>}
+                      {s.href && s.status !== 'done' && <Link href={s.href} className="text-sm font-semibold text-link">{L('افتح', 'Open')}</Link>}
                       {s.manualKey && (
-                        <button className="flex min-h-[32px] items-center gap-1.5 text-sm font-semibold text-brand-700" onClick={() => updateSettings({ roadmap: { ...settings.roadmap, [s.manualKey!]: !settings.roadmap[s.manualKey!] } })}>
+                        <button className="flex min-h-[32px] items-center gap-1.5 text-sm font-semibold text-link" onClick={() => updateSettings({ roadmap: { ...settings.roadmap, [s.manualKey!]: !settings.roadmap[s.manualKey!] } })}>
                           <Check className="h-4 w-4" />{settings.roadmap[s.manualKey] ? L('تراجع عن التعليم', 'Undo') : L('تم / لا ينطبق', 'Done / not applicable')}
                         </button>
                       )}
@@ -146,7 +202,7 @@ export default function PlanPage() {
               {view.rows.filter((r) => r.asset.assetClass === 'CASH' || r.asset.isEmergencyFund).map((r) => (
                 <li key={r.asset.id}>
                   <label className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
-                    <input type="checkbox" className="h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={r.asset.isEmergencyFund} onChange={(e) => updateAsset(r.asset.id, { isEmergencyFund: e.target.checked })} />
+                    <input type="checkbox" className="h-5 w-5 rounded border-line text-link focus:ring-accent" checked={r.asset.isEmergencyFund} onChange={(e) => updateAsset(r.asset.id, { isEmergencyFund: e.target.checked })} />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.asset.name}</span>
                     <Money value={r.value} className="text-sm" />
                   </label>
@@ -202,6 +258,11 @@ export default function PlanPage() {
       {/* ---------- Income plan ---------- */}
       {tab === 'income' && (
         <>
+          <Chips value={incomeStep} onChange={(v) => setStep(v)} options={[
+            { value: 'balance', label: L('1 · التوازن', '1 · Balance') }, { value: 'size', label: L('2 · الحجم المطلوب', '2 · Size needed') },
+            { value: 'layers', label: L('3 · الطبقات', '3 · Layers') }, { value: 'track', label: L('المتابعة', 'Tracking') },
+          ]} />
+          {incomeStep === 'balance' && (<>
           {/* 1. Income is what is left of the return after zakat, inflation and the growth to keep */}
           <section className="card space-y-4">
             <div>
@@ -215,10 +276,10 @@ export default function PlanPage() {
             <Slider label={L('النمو الحقيقي الذي أريده للمحفظة', 'Real growth I want the portfolio to keep')} value={inc.growthTarget} min={0} max={6} step={0.25} display={`${inc.growthTarget}%`} onChange={(growthTarget) => setIncome({ growthTarget })}
               hint={L('صفر = المحفظة تحافظ على قوتها الشرائية فقط. كل نقطة هنا تنقص من دخلك اليوم وتكبّره لاحقًا.', 'Zero = the portfolio only keeps its purchasing power. Each point here lowers today’s income and grows it later.')} />
 
-            <div className="rounded-2xl bg-brand-50 p-4">
-              <p className="text-xs text-brand-700">{L('المتبقي: دخلك السنوي من المحفظة', 'What is left: your annual income from the portfolio')}</p>
-              <p className="num text-3xl font-bold text-brand-900">{planRate.toFixed(2).replace(/\.?0+$/, '')}%</p>
-              <p className="num mt-1 text-xs text-brand-700">{`${settings.goal.expectedReturn} − ${inc.planZakatRate} − ${settings.goal.inflation} − ${inc.growthTarget} = ${eq.remainder.toFixed(2).replace(/\.?0+$/, '')}`}</p>
+            <div className="rounded-2xl bg-tint p-4">
+              <p className="text-xs text-link">{L('المتبقي: دخلك السنوي من المحفظة', 'What is left: your annual income from the portfolio')}</p>
+              <p className="num text-3xl font-bold text-tint-ink">{planRate.toFixed(2).replace(/\.?0+$/, '')}%</p>
+              <p className="num mt-1 text-xs text-link">{`${settings.goal.expectedReturn} − ${inc.planZakatRate} − ${settings.goal.inflation} − ${inc.growthTarget} = ${eq.remainder.toFixed(2).replace(/\.?0+$/, '')}`}</p>
             </div>
             <div>
               <p className="mb-2 text-sm font-semibold">{L(`كيف يتوزع العائد ${settings.goal.expectedReturn}%؟`, `How the ${settings.goal.expectedReturn}% return is used`)}</p>
@@ -236,18 +297,23 @@ export default function PlanPage() {
             {view.investable > 0 && (
               <p className="hint">
                 {L(`الزكاة الفعلية من أصولك الآن ${actualRate.toFixed(2)}% — لو بقيت كذلك يوم الحول يصير دخلك ${incomeRate(settings.goal.expectedReturn, actualRate, settings.goal.inflation, inc.growthTarget).toFixed(2)}%.`, `Actual zakat from your assets is now ${actualRate.toFixed(2)}% — if it stays so on zakat day your income becomes ${incomeRate(settings.goal.expectedReturn, actualRate, settings.goal.inflation, inc.growthTarget).toFixed(2)}%.`)}{' '}
-                <Link href="/plan/#zakat" className="font-semibold text-brand-700">{L('اضبط زكاة كل أصل', 'Set zakat per asset')}</Link>
+                <Link href="/plan/#zakat" className="font-semibold text-link">{L('اضبط زكاة كل أصل', 'Set zakat per asset')}</Link>
               </p>
             )}
           </section>
 
+          <div className="flex gap-2">
+            <button className="btn-primary flex-1" onClick={() => setStep('size')}>{L('التالي: حجم المحفظة المطلوب', 'Next: the size you need')}</button>
+          </div>
+          </>)}
+          {incomeStep === 'size' && (<>
           {/* 2. What this mix pays, and the portfolio size the target needs */}
           <section className="card space-y-4">
             <h2 className="section-title">{L('الدخل وحجم المحفظة المطلوب', 'Income and the portfolio size you need')}</h2>
-            <div className="rounded-2xl bg-brand-50 p-4">
-              <p className="text-xs text-brand-700">{L('محفظتك اليوم تعطيك شهريًا', 'Your portfolio today pays per month')}</p>
-              <p className="text-3xl font-bold text-brand-900"><Money value={(view.investable * planRate) / 100 / 12} /></p>
-              <p className="mt-1 text-xs text-brand-700">{L('سنويًا', 'Per year')} <Money value={(view.investable * planRate) / 100} /> · {L('زكاة حسب الخطة', 'planned zakat')} <Money value={(view.investable * inc.planZakatRate) / 100} /></p>
+            <div className="rounded-2xl bg-tint p-4">
+              <p className="text-xs text-link">{L('محفظتك اليوم تعطيك شهريًا', 'Your portfolio today pays per month')}</p>
+              <p className="text-3xl font-bold text-tint-ink"><Money value={(view.investable * planRate) / 100 / 12} /></p>
+              <p className="mt-1 text-xs text-link">{L('سنويًا', 'Per year')} <Money value={(view.investable * planRate) / 100} /> · {L('زكاة حسب الخطة', 'planned zakat')} <Money value={(view.investable * inc.planZakatRate) / 100} /></p>
             </div>
             <Field label={L('الدخل الشهري الذي تريد الوصول إليه (بقيمة اليوم)', 'The monthly income you want to reach (today’s money)')}>
               <NumberInput value={settings.goal.monthlyIncome} onChange={(monthlyIncome) => setGoal({ monthlyIncome })} suffix={sar} />
@@ -270,6 +336,12 @@ export default function PlanPage() {
             )}
           </section>
 
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => setStep('balance')}>{L('السابق', 'Back')}</button>
+            <button className="btn-primary flex-1" onClick={() => setStep('layers')}>{L('التالي: الطبقات الثلاث', 'Next: the three layers')}</button>
+          </div>
+          </>)}
+          {incomeStep === 'layers' && (<>
           {/* 3. The three layers */}
           <section className="card space-y-4">
             <div>
@@ -296,7 +368,7 @@ export default function PlanPage() {
                 {investRows.filter((r) => r.asset.assetClass === 'CASH').map((r) => (
                   <li key={r.asset.id}>
                     <label className="flex min-h-[52px] items-center gap-3 px-3.5 py-2">
-                      <input type="checkbox" className="h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={!!r.asset.isIncomeAccount} onChange={(e) => updateAsset(r.asset.id, { isIncomeAccount: e.target.checked })} />
+                      <input type="checkbox" className="h-5 w-5 rounded border-line text-link focus:ring-accent" checked={!!r.asset.isIncomeAccount} onChange={(e) => updateAsset(r.asset.id, { isIncomeAccount: e.target.checked })} />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.asset.name}</span>
                       <Money value={r.value} className="text-sm" />
                     </label>
@@ -307,6 +379,12 @@ export default function PlanPage() {
             </div>
           </section>
 
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => setStep('size')}>{L('السابق', 'Back')}</button>
+            <button className="btn-primary flex-1" onClick={() => setStep('track')}>{L('تم — إلى المتابعة', 'Done — go to tracking')}</button>
+          </div>
+          </>)}
+          {incomeStep === 'track' && (<>
           {/* 4. The yearly transfer on the zakat date */}
           <section className="card space-y-4">
             <div>
@@ -314,7 +392,7 @@ export default function PlanPage() {
               <p className="hint mt-1">
                 {settings.zakat.hawlDate
                   ? <>{L('الموعد', 'Date')}: {dateLabel(settings.zakat.hawlDate, settings.locale)} · {zakat.daysToHawl !== null && zakat.daysToHawl > 0 ? L(`بعد ${zakat.daysToHawl} يوم`, `in ${zakat.daysToHawl} days`) : L('حان موعدها', 'due now')}</>
-                  : <>{L('حدّد تاريخ الحول من تبويب «الزكاة» ليذكّرك التطبيق.', 'Set the due date under the Zakat tab so the app reminds you.')} <Link href="/plan/#zakat" className="font-semibold text-brand-700">{L('تحديد', 'Set')}</Link></>}
+                  : <>{L('حدّد تاريخ الحول من تبويب «الزكاة» ليذكّرك التطبيق.', 'Set the due date under the Zakat tab so the app reminds you.')} <Link href="/plan/#zakat" className="font-semibold text-link">{L('تحديد', 'Set')}</Link></>}
               </p>
             </div>
             <p className="text-sm leading-relaxed text-ink-soft">{L('مرة في السنة، في يوم واحد: تراجع الزكاة الفعلية لكل أصل وتدفعها، ثم يُحسب دخل سنتك من المتبقي ويُثبَّت راتبك الشهري.', 'Once a year, on one day: you review and pay the actual zakat per asset, then the year’s income is computed from what is left and your monthly salary is fixed.')}</p>
@@ -357,6 +435,7 @@ export default function PlanPage() {
               <Disclaimer>{L('إطار منهجي وإسقاط حسابي بعائد ثابت، وليس استشارة مالية أو فتوى. العوائد غير مضمونة، والواقع يتقلب — ولذلك وُجدت الطبقات وقواعد الحماية.', 'A methodical framework and a constant-return projection, not financial advice or a religious ruling. Returns are not guaranteed and reality swings — hence the layers and guardrails.')}</Disclaimer>
             </section>
           )}
+          </>)}
         </>
       )}
 
@@ -365,10 +444,10 @@ export default function PlanPage() {
         <>
           <section className="card space-y-4">
             <h2 className="section-title">{L('زكاة المحفظة', 'Portfolio zakat')}</h2>
-            <div className="rounded-2xl bg-brand-50 p-4">
-              <p className="text-xs text-brand-700">{L('الزكاة الفعلية لو حال الحول اليوم', 'Actual zakat if it were due today')}</p>
-              <p className="text-3xl font-bold text-brand-900"><Money value={zakat.due} /></p>
-              <p className="mt-1 text-xs text-brand-700"><span className="num">{pct(actualRate, 2)}</span> {L('من المحفظة الاستثمارية', 'of the investable portfolio')} · {L('في الخطة', 'planned')} <span className="num">{inc.planZakatRate}%</span></p>
+            <div className="rounded-2xl bg-tint p-4">
+              <p className="text-xs text-link">{L('الزكاة الفعلية لو حال الحول اليوم', 'Actual zakat if it were due today')}</p>
+              <p className="text-3xl font-bold text-tint-ink"><Money value={zakat.due} /></p>
+              <p className="mt-1 text-xs text-link"><span className="num">{pct(actualRate, 2)}</span> {L('من المحفظة الاستثمارية', 'of the investable portfolio')} · {L('في الخطة', 'planned')} <span className="num">{inc.planZakatRate}%</span></p>
             </div>
             {zakat.aboveNisab === false && <Notice tone="info" title={L('الوعاء دون النصاب', 'The base is below the nisab')}>{L('حسب ما هو مسجل هنا فقط. إن كان لك مال زكوي آخر خارج التطبيق فاجمعه معه.', 'Based only on what is recorded here. If you hold other zakatable wealth outside the app, add it in.')}</Notice>}
             <div className="grid grid-cols-2 gap-3">
@@ -459,7 +538,7 @@ export default function PlanPage() {
               ].map((c, i) => (
                 <li key={i} className="flex gap-3">
                   {c.ok ? <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-gain" aria-label={L('سليم', 'OK')} /> : <CircleDot className="mt-0.5 h-5 w-5 shrink-0 text-warn-600" aria-label={L('يحتاج إجراء', 'Needs action')} />}
-                  <div className="min-w-0 text-sm"><p className="font-medium">{c.title}</p>{c.body && <p className="text-[13px] text-ink-soft">{c.body} {c.href && !c.ok && <Link href={c.href} className="font-semibold text-brand-700">{L('افتح', 'Open')}</Link>}</p>}</div>
+                  <div className="min-w-0 text-sm"><p className="font-medium">{c.title}</p>{c.body && <p className="text-[13px] text-ink-soft">{c.body} {c.href && !c.ok && <Link href={c.href} className="font-semibold text-link">{L('افتح', 'Open')}</Link>}</p>}</div>
                 </li>
               ))}
             </ul>

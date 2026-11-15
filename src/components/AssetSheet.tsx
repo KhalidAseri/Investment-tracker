@@ -14,7 +14,7 @@ import { Confirm, Delta, Field, Money, NumberInput, Sheet, Stat } from './ui'
 
 type Mode = null | TxType | 'EDIT' | 'PRICE'
 
-export default function AssetSheet({ assetId, onClose }: { assetId: string | null; onClose: () => void }) {
+export default function AssetSheet({ assetId, initialMode, onClose }: { assetId: string | null; initialMode?: TxType; onClose: () => void }) {
   const { L, data, view, settings, addTransaction, deleteTransaction, updateAsset, deleteAsset } = useStore()
   const row = view.rows.find((r) => r.asset.id === assetId) ?? null
   const [mode, setMode] = useState<Mode>(null)
@@ -26,7 +26,17 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [zakatOpen, setZakatOpen] = useState(false)
 
-  useEffect(() => { setMode(null) }, [assetId])
+  // Opened from the quick-add button, the sheet goes straight to the chosen action.
+  useEffect(() => {
+    const r = view.rows.find((x) => x.asset.id === assetId)
+    if (!initialMode || !r) { setMode(null); return }
+    setQty(0)
+    setPrice(initialMode === 'BUY' || initialMode === 'SELL' ? Number((r.price ?? 0).toFixed(4)) : 0)
+    setAmount(initialMode === 'VALUE_UPDATE' ? r.asset.manualValue : 0)
+    setDate(todayISO())
+    setMode(initialMode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a different asset or action is opened
+  }, [assetId, initialMode])
   if (!row) return null
   const a = row.asset
   const live = a.pricing === 'live'
@@ -105,7 +115,7 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
                 {row.price !== null
                   ? <>{L('السعر', 'Price')} <span className="num font-semibold text-ink">{num(row.price, 2)}</span> · <span className="num">{a.symbol}</span> · {row.source === 'live' ? L('سعر مباشر', 'live') : row.source === 'manual' ? L('سعر أدخلتَه يدويًا', 'price you entered') : L('آخر سعر محفوظ', 'last saved price')}</>
                   : L(`لم يتوفر سعر للرمز ${a.symbol} بعد؛ تُعرض قيمة التكلفة مؤقتًا.`, `No price for ${a.symbol} yet; showing cost for now.`)}
-                {row.source !== 'live' && <button className="ms-2 font-semibold text-brand-700 underline-offset-2 hover:underline" onClick={() => open('PRICE')}>{L('أدخل السعر يدويًا', 'Enter price by hand')}</button>}
+                {row.source !== 'live' && <button className="ms-2 font-semibold text-link underline-offset-2 hover:underline" onClick={() => open('PRICE')}>{L('أدخل السعر يدويًا', 'Enter price by hand')}</button>}
               </p>
             )}
 
@@ -139,7 +149,7 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
             </dl>
             <button className="flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl border border-line px-3.5 py-2 text-start hover:bg-surface" onClick={() => setZakatOpen(true)}>
               <span><span className="block text-xs text-ink-soft">{L('الزكاة', 'Zakat')}</span><span className="text-sm font-semibold">{L(ZAKAT_LABEL[a.zakatMode].ar, ZAKAT_LABEL[a.zakatMode].en)}{a.zakatMode === 'PERCENT' ? ` (${a.zakatPercent}%)` : ''}</span></span>
-              <span className="text-end"><Money value={zakatNow} className="block text-sm font-bold" /><span className="text-xs font-semibold text-brand-700">{L('تغيير', 'Change')}</span></span>
+              <span className="text-end"><Money value={zakatNow} className="block text-sm font-bold" /><span className="text-xs font-semibold text-link">{L('تغيير', 'Change')}</span></span>
             </button>
             <button className="btn-soft w-full" onClick={() => open('EDIT')}>{L('تعديل الأصل والتصنيف', 'Edit asset & classification')}</button>
 
@@ -219,7 +229,7 @@ export default function AssetSheet({ assetId, onClose }: { assetId: string | nul
             </div>
             <ClassFields value={edit} onChange={(p) => setEdit({ ...edit, ...p })} />
             <label className="flex items-center gap-3">
-              <input type="checkbox" className="h-5 w-5 rounded border-line text-brand-600 focus:ring-brand-500" checked={edit.isEmergencyFund} onChange={(e) => setEdit({ ...edit, isEmergencyFund: e.target.checked })} />
+              <input type="checkbox" className="h-5 w-5 rounded border-line text-link focus:ring-accent" checked={edit.isEmergencyFund} onChange={(e) => setEdit({ ...edit, isEmergencyFund: e.target.checked })} />
               <span className="text-sm">{L('جزء من صندوق الطوارئ', 'Part of the emergency fund')}</span>
             </label>
           </div>

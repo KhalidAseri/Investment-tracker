@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import type { Asset, AssetClass, Quotes, Settings } from '../types.ts'
 import { defaultSettings, defaultZakatMode } from '../labels.ts'
 import { applyTransaction, computeView, dividendStats, revertTransaction, valueAsset } from './valuation.ts'
-import { breakdown, insights } from './exposure.ts'
+import { breakdown, classTotals, insights } from './exposure.ts'
 import { allocateContribution, allocateWithdrawal, driftRows } from './guidance.ts'
 import { emergencyStatus, futureValue, goalStatus, goalTarget, incomeRate, monthsToTarget, planIncomeRate, requiredMonthly } from './plan.ts'
 import { actualZakatRate, annualTransfer, balanceEquation, guardrail, layers, requiredPortfolio, smoothedValue, yearEndSummary } from './income.ts'
@@ -102,14 +102,55 @@ test('portfolio totals separate the emergency fund', () => {
 
 test('global fund is looked through into regions', () => {
   const v = view([asset({ region: 'GLOBAL', manualValue: 100, isFund: true }), asset({ region: 'SA', manualValue: 100 })])
-  const b = breakdown(v.rows, 'region', settings(), L, true)
+  const b = breakdown(v.rows, 'region', settings(), L)
   const get = (k: string) => b.slices.find((s) => s.key === k)?.pct ?? 0
   assert.ok(Math.abs(get('SA') - 50) < 1e-9)
   assert.ok(Math.abs(get('US') - 32) < 1e-9)
   assert.ok(Math.abs(get('DEV') - 12.5) < 1e-9)
   assert.ok(Math.abs(get('EM') - 5.5) < 1e-9)
-  const raw = breakdown(v.rows, 'region', settings(), L, false)
+  const raw = breakdown(v.rows, 'region', settings(), L, { lookThrough: false })
   assert.ok(raw.slices.some((s) => s.key === 'GLOBAL'))
+})
+
+test('a researched profile spreads one fund over its real countries, sectors and classes', () => {
+  const fund = asset({ id: 'w', name: 'World fund', region: 'GLOBAL', sector: 'DIVERSIFIED', isFund: true, manualValue: 1000 })
+  const stock = asset({ id: 's', name: 'Aramco', region: 'SA', sector: 'ENERGY', manualValue: 1000 })
+  const rows = view([fund, stock]).rows
+  const profiles = { w: { assetId: 'w', source: 'claude' as const, locked: false, asOf: '2026-09-30', updatedAt: '', confidence: 'reported' as const,
+    classSplit: { EQUITY: 90, CASH: 10 }, countries: { US: 60, JP: 10, CN: 10, SA: 5, OTHER: 15 }, sectors: { TECH: 50, FINANCIALS: 30, ENERGY: 20 } } }
+  const name = (c: string) => ({ US: 'United States', JP: 'Japan', CN: 'China', SA: 'Saudi Arabia' }[c] ?? c)
+  const by = (b: ReturnType<typeof breakdown>) => Object.fromEntries(b.slices.map((x) => [x.key, x]))
+
+  const country = by(breakdown(rows, 'country', settings(), L, { profiles, countryName: name }))
+  assert.equal(country.SA.value, 1050)                         // the stock plus 5% of the fund
+  assert.equal(country.US.value, 600)
+  assert.equal(country.US.label, 'United States')
+  assert.deepEqual(country.SA.parts.map((p) => [p.name, p.value]), [['Aramco', 1000], ['World fund', 50]])
+  assert.equal(country.OTHER.value, 150)
+
+  const region = by(breakdown(rows, 'region', settings(), L, { profiles }))
+  assert.deepEqual([region.SA.value, region.US.value, region.DEV.value, region.EM.value], [1050, 600, 100, 250])   // CN + OTHER count as emerging
+
+  const sector = by(breakdown(rows, 'sector', settings(), L, { profiles }))
+  assert.equal(sector.ENERGY.value, 1200)
+  assert.equal(sector.TECH.value, 500)
+  assert.equal(sector.DIVERSIFIED, undefined)
+
+  const cls = breakdown(rows, 'class', settings(), L, { profiles })
+  assert.equal(by(cls).CASH.value, 100)
+  assert.equal(cls.profiledPct, 50)                            // half the value rests on a researched profile
+  assert.deepEqual([classTotals(rows, profiles).EQUITY, classTotals(rows, profiles).CASH], [1900, 100])
+})
+
+test('without a profile an asset counts whole under its own fields, and weights need not sum to 100', () => {
+  const rows = view([asset({ id: 'a', region: 'US', sector: 'TECH', manualValue: 400 }), asset({ id: 'b', region: 'GCC', manualValue: 100 })]).rows
+  const c = breakdown(rows, 'country', settings(), L)
+  assert.deepEqual(c.slices.map((x) => [x.key, x.value]), [['US', 400], ['~GCC', 100]])   // a region is not passed off as a country
+  assert.equal(c.profiledPct, 0)
+  const half = { a: { assetId: 'a', source: 'user' as const, locked: true, asOf: '', updatedAt: '', confidence: 'estimated' as const, countries: { US: 30, DE: 10 } } }
+  const n = Object.fromEntries(breakdown(rows, 'country', settings(), L, { profiles: half }).slices.map((x) => [x.key, x.value]))
+  assert.deepEqual([n.US, n.DE], [300, 100])                   // 30:10 normalised over the asset's 400
+  assert.deepEqual(breakdown(rows, 'sector', settings(), L, { profiles: { a: { ...half.a, sectors: {} } } }).slices[0].key, 'TECH')   // empty map falls back
 })
 
 test('breakdown reports concentration level and effective count', () => {
@@ -427,4 +468,32 @@ test('share link round-trips Arabic text and rejects garbage', () => {
   assert.deepEqual(decodeShare('#' + enc), { ...p, t: undefined, g: undefined })
   assert.equal(decodeShare('#not-valid!!'), null)
   assert.equal(decodeShare(''), null)
+})
+
+test('treemap fills the rectangle exactly, in proportion, without overlap', async () => {
+  const { treemap } = await import('../treemap.ts')
+  const items = [50, 25, 12, 8, 5]
+  const rects = treemap(items, (n) => n, 200, 100)
+  assert.equal(rects.length, 5)
+  for (const [i, r] of rects.entries()) assert.ok(Math.abs(r.w * r.h - items[i] * 200) < 1e-6)     // area = weight share of 20,000
+  for (const r of rects) assert.ok(r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 200 + 1e-6 && r.y + r.h <= 100 + 1e-6)
+  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+    const a = rects[i], b = rects[j]
+    assert.ok(a.x + a.w <= b.x + 1e-6 || b.x + b.w <= a.x + 1e-6 || a.y + a.h <= b.y + 1e-6 || b.y + b.h <= a.y + 1e-6)
+  }
+  assert.ok(Math.max(...rects.map((r) => Math.max(r.w / r.h, r.h / r.w))) < 4)                    // no slivers
+  assert.deepEqual(treemap([], (n: number) => n, 10, 10), [])
+})
+
+test('sync: pushes, pulls, and never resolves a two-sided change by itself', async () => {
+  const { syncDecision } = await import('./sync.ts')
+  const f = (localHasContent: boolean, localChanged: boolean, remoteExists: boolean, remoteChanged: boolean) => syncDecision({ localHasContent, localChanged, remoteExists, remoteChanged })
+  assert.equal(f(true, true, false, false), 'push')       // first upload
+  assert.equal(f(false, false, false, false), 'none')     // nothing anywhere
+  assert.equal(f(false, false, true, true), 'pull')       // new device
+  assert.equal(f(false, true, true, true), 'pull')        // an empty device never overwrites the cloud
+  assert.equal(f(true, true, true, false), 'push')
+  assert.equal(f(true, false, true, true), 'pull')
+  assert.equal(f(true, true, true, true), 'conflict')
+  assert.equal(f(true, false, true, false), 'none')
 })

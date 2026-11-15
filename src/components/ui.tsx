@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { Children, useEffect, useId, useRef, useState } from 'react'
+import { AnimatePresence, animate, motion, useDragControls, useReducedMotion } from 'motion/react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CircleCheck, Info, X } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { num, parseNumber, pct, unit } from '@/lib/format'
@@ -34,35 +35,61 @@ export function Delta({ value, percent, className }: { value?: number; percent?:
   )
 }
 
+// Open sheets register their close handler here so the Android back button closes the top one first.
+const sheetStack: (() => void)[] = []
+export function closeTopSheet(): boolean {
+  const close = sheetStack[sheetStack.length - 1]
+  if (close) close()
+  return !!close
+}
+
+/** Bottom sheet: springs up, can be dragged down by its handle to dismiss, closes on Escape or backdrop tap. */
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
   const { L } = useStore()
   const titleId = useId()
+  const drag = useDragControls()
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const close = () => closeRef.current()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    sheetStack.push(close)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
     return () => {
-      document.body.style.overflow = prev
+      sheetStack.splice(sheetStack.lastIndexOf(close), 1)
+      document.body.style.overflow = sheetStack.length ? 'hidden' : prev
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, onClose])
-  if (!open) return null
+  }, [open])
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <button className="absolute inset-0 bg-black/45" onClick={onClose} aria-label={L('إغلاق', 'Close')} tabIndex={-1} />
-      <div className="sheet-panel relative flex max-h-[92dvh] w-full max-w-xl flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
-          <h2 id={titleId} className="text-base font-bold">{title}</h2>
-          <button onClick={onClose} className="-me-2 flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface" aria-label={L('إغلاق', 'Close')}>
-            <X className="h-5 w-5" />
-          </button>
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+          <motion.button className="absolute inset-0 cursor-default bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} aria-label={L('إغلاق', 'Close')} tabIndex={-1} />
+          <motion.div
+            className="relative flex max-h-[92dvh] w-full max-w-xl flex-col rounded-t-3xl bg-card shadow-float sm:rounded-3xl"
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 34, stiffness: 360 }}
+            drag="y" dragControls={drag} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
+            onDragEnd={(_, info) => { if (info.offset.y > 110 || info.velocity.y > 700) onClose() }}
+          >
+            <div className="flex cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)} aria-hidden>
+              <span className="h-1.5 w-10 rounded-full bg-line" />
+            </div>
+            <div className="flex items-center justify-between gap-3 border-b border-line px-5 pb-3 pt-1">
+              <h2 id={titleId} className="text-base font-bold">{title}</h2>
+              <button onClick={onClose} className="-me-2 flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface" aria-label={L('إغلاق', 'Close')}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+            {footer && <div className="border-t border-line px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>}
+          </motion.div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="border-t border-line px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>}
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -128,13 +155,51 @@ export function NumberInput({ value, onChange, suffix, placeholder, autoFocus }:
   )
 }
 
+/** Choice chips. The active pill slides between options instead of jumping. */
 export function Chips<T extends string | number>({ value, options, onChange, wrap = false }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; wrap?: boolean }) {
+  const id = useId()
   return (
     <div className={cx('flex gap-2', wrap ? 'flex-wrap' : 'no-scrollbar -mx-4 overflow-x-auto px-4')} role="tablist">
-      {options.map((o) => (
-        <button key={String(o.value)} role="tab" aria-selected={o.value === value} onClick={() => onChange(o.value)} className={cx('chip', o.value === value && 'chip-on')}>
-          {o.label}
-        </button>
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <button key={String(o.value)} role="tab" aria-selected={on} onClick={() => onChange(o.value)} className={cx('chip relative', on && 'border-transparent text-white')}>
+            {on && <motion.span layoutId={`chip-${id}`} className="absolute inset-0 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 400 }} />}
+            <span className="relative">{o.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** A number that rolls to its new value. Use it for the one or two headline figures of a screen, not every amount. */
+export function CountUp({ value, format, className }: { value: number; format: (n: number) => string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const from = useRef(value)
+  const reduce = useReducedMotion()
+  const fmt = useRef(format)
+  fmt.current = format
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (reduce || from.current === value) { el.textContent = fmt.current(value); from.current = value; return }
+    const controls = animate(from.current, value, { duration: 0.7, ease: [0.16, 1, 0.3, 1], onUpdate: (v) => { el.textContent = fmt.current(v) } })
+    from.current = value
+    return () => controls.stop()
+  }, [value, reduce])
+  return <span ref={ref} className={cx('num', className)}>{format(value)}</span>
+}
+
+/** Children fade and rise in, one after another. For the cards of a screen, once on entry. */
+export function Stagger({ children, className }: { children: React.ReactNode; className?: string }) {
+  const items = Children.toArray(children)
+  return (
+    <div className={className}>
+      {items.map((child, i) => (
+        <motion.div key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, delay: Math.min(i, 6) * 0.05, ease: [0.16, 1, 0.3, 1] }}>
+          {child}
+        </motion.div>
       ))}
     </div>
   )
@@ -142,8 +207,8 @@ export function Chips<T extends string | number>({ value, options, onChange, wra
 
 export function Notice({ tone, title, children, action }: { tone: 'warn' | 'info' | 'good'; title: string; children?: React.ReactNode; action?: React.ReactNode }) {
   const Icon = tone === 'warn' ? AlertTriangle : tone === 'good' ? CircleCheck : Info
-  const style = tone === 'warn' ? 'border-amber-200 bg-warn-50' : tone === 'good' ? 'border-emerald-200 bg-emerald-50' : 'border-line bg-white'
-  const iconStyle = tone === 'warn' ? 'text-warn-600' : tone === 'good' ? 'text-gain' : 'text-brand-600'
+  const style = tone === 'warn' ? 'border-warn-line bg-warn-tint' : tone === 'good' ? 'border-good-line bg-good-tint' : 'border-line bg-card'
+  const iconStyle = tone === 'warn' ? 'text-warn-600' : tone === 'good' ? 'text-gain' : 'text-link'
   return (
     <div className={cx('flex gap-3 rounded-2xl border p-3.5', style)}>
       <Icon className={cx('mt-0.5 h-5 w-5 shrink-0', iconStyle)} aria-hidden />
@@ -159,7 +224,7 @@ export function Notice({ tone, title, children, action }: { tone: 'warn' | 'info
 export function Empty({ icon, title, body, action }: { icon: React.ReactNode; title: string; body: string; action?: React.ReactNode }) {
   return (
     <div className="card flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">{icon}</div>
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-tint text-link">{icon}</div>
       <h2 className="text-base font-bold">{title}</h2>
       <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-ink-soft">{body}</p>
       {action && <div className="mt-5">{action}</div>}

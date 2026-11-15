@@ -1,20 +1,30 @@
 import type { Config } from 'tailwindcss'
 
+// Colours are CSS variables (see globals.css) so the light and dark themes share one set of class names.
+const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`
+
 const config: Config = {
   content: ['./src/components/**/*.{ts,tsx}', './src/app/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'Inter', 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ['"IBM Plex Sans Arabic"', '"IBM Plex Sans"', 'system-ui', 'sans-serif'] },
       colors: {
-        surface: '#f5f5f2',
-        ink: { DEFAULT: '#0b0b0b', soft: '#52514e', faint: '#8a897f' },
-        line: '#e6e5e0',
-        brand: { 50: '#eef7f5', 100: '#d5ebe6', 500: '#14806f', 600: '#0f6b5d', 700: '#0c574c', 900: '#083a33' },
-        gain: '#12733a',
-        loss: '#b3261e',
-        warn: { 50: '#fff7e6', 600: '#9a5b00' },
+        surface: v('surface'),
+        card: v('card'),
+        raised: v('raised'),
+        ink: { DEFAULT: v('ink'), soft: v('ink-soft'), faint: v('ink-faint') },
+        line: v('line'),
+        track: v('track'),
+        hero: { DEFAULT: v('hero'), ink: v('hero-ink') },
+        accent: { DEFAULT: v('accent'), strong: v('accent-strong') },
+        tint: { DEFAULT: v('tint'), 2: v('tint-2'), ink: v('tint-ink') },
+        link: v('link'),
+        gain: v('gain'),
+        loss: { DEFAULT: v('loss'), tint: v('loss-tint'), 'tint-2': v('loss-tint-2') },
+        good: { tint: v('good-tint'), line: v('good-line') },
+        warn: { 600: v('warn'), tint: v('warn-tint'), line: v('warn-line') },
       },
-      boxShadow: { card: '0 1px 2px rgba(11,11,11,0.04), 0 1px 1px rgba(11,11,11,0.03)' },
+      boxShadow: { card: '0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03)', float: '0 10px 30px rgb(0 0 0 / 0.18)' },
     },
   },
   plugins: [require('@tailwindcss/forms')],

@@ -6,6 +6,9 @@ import { DEFAULT_ZAKAT_PERCENT, defaultSettings, defaultZakatMode, emptyData, ge
 import { applyTransaction, computeView, fxSymbolsNeeded, revertTransaction, type PortfolioView, type TxInput } from './engine/valuation'
 import { GOLD_SYMBOL } from './engine/zakat'
 import { fetchQuotes, loadQuoteCache } from './market-client'
+import { syncDecision } from './engine/sync'
+import * as remote from './cloud'
+import type { AssetProfile } from './types'
 
 const STORE_KEY = 'investtrack_v3'
 
@@ -39,6 +42,8 @@ export function normalizeData(raw: unknown): AppData | null {
     transactions: Array.isArray(r.transactions) ? r.transactions : [],
     snapshots: Array.isArray(r.snapshots) ? r.snapshots : [],
     reviews: Array.isArray(r.reviews) ? r.reviews : [],
+    profiles: r.profiles && typeof r.profiles === 'object' ? r.profiles : {},
+    updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : '',
   }
 }
 
@@ -121,6 +126,12 @@ function loadData(): AppData {
 // ---------- context ----------
 
 type QuoteStatus = 'idle' | 'loading' | 'ok' | 'partial' | 'failed'
+export type SyncStatus = 'off' | 'syncing' | 'synced' | 'error' | 'conflict'
+const SYNC_KEY = 'investtrack_sync'
+interface SyncMeta { remoteAt: string; localAt: string }
+const loadSyncMeta = (): SyncMeta => { try { return { remoteAt: '', localAt: '', ...JSON.parse(localStorage.getItem(SYNC_KEY) ?? '{}') } } catch { return { remoteAt: '', localAt: '' } } }
+const saveSyncMeta = (m: SyncMeta) => { try { localStorage.setItem(SYNC_KEY, JSON.stringify(m)) } catch { /* ignore */ } }
+const hasContent = (d: AppData) => d.assets.length > 0 || d.settings.onboarded
 export type NewAsset = Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'accountId'>
 
 interface Store {
@@ -143,6 +154,17 @@ interface Store {
   deleteTransaction: (id: string) => void
   completeReview: (note: string) => void
   refreshQuotes: (force?: boolean) => Promise<void>
+  /** Signed-in email, or null. */
+  cloudUser: string | null
+  syncStatus: SyncStatus
+  syncError: string
+  signIn: (email: string, password: string) => Promise<string | null>
+  signOut: () => Promise<void>
+  syncNow: () => Promise<void>
+  /** Settle a sync conflict by keeping this device's copy or the cloud's. */
+  resolveConflict: (keep: 'local' | 'remote') => Promise<void>
+  /** Save a hand-edited look-through for an asset (locked against refreshes); null removes it. */
+  setProfile: (assetId: string, profile: AssetProfile | null) => Promise<void>
   exportData: () => string
   importData: (json: string) => boolean
   resetData: () => void
@@ -164,9 +186,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setReady(true)
   }, [])
 
-  const commit = useCallback((fn: (draft: AppData) => void) => {
+  const [cloudUser, setCloudUser] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('off')
+  const [syncError, setSyncError] = useState('')
+  const pendingRemote = useRef<remote.RemotePortfolio | null>(null)
+
+  /** `touch: false` is for changes that came from the cloud, so they are not sent straight back. */
+  const commit = useCallback((fn: (draft: AppData) => void, touch = true) => {
     const draft = structuredClone(dataRef.current)
     fn(draft)
+    if (touch) draft.updatedAt = new Date().toISOString()
     dataRef.current = draft
     setData(draft)
     try {
@@ -182,6 +211,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = locale
     document.documentElement.dir = dir
   }, [locale, dir])
+  const theme = data.settings.theme
+  useEffect(() => {
+    if (theme === 'system') document.documentElement.removeAttribute('data-theme')
+    else document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
   const L = useCallback<Pick2>((ar, en) => (locale === 'ar' ? ar : en), [locale])
 
   const symbolKey = useMemo(() => {
@@ -210,6 +244,61 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (ready) void refreshQuotes()
   }, [ready, refreshQuotes])
+
+  // ---------- cloud sync ----------
+  const device = typeof navigator === 'undefined' ? '' : /Android/i.test(navigator.userAgent) ? 'android' : 'web'
+
+  const adoptRemote = useCallback((r: remote.RemotePortfolio) => {
+    const next = normalizeData(r.data)
+    if (!next) throw new Error('remote data is not a portfolio')
+    // language, theme and privacy toggle are per device
+    const keep = dataRef.current.settings
+    next.settings = { ...next.settings, locale: keep.locale, theme: keep.theme, hideAmounts: keep.hideAmounts }
+    commit((d) => { Object.assign(d, next) }, false)
+    saveSyncMeta({ remoteAt: r.updatedAt, localAt: dataRef.current.updatedAt })
+  }, [commit])
+
+  const pushLocal = useCallback(async () => {
+    const at = await remote.pushPortfolio(dataRef.current, device)
+    saveSyncMeta({ remoteAt: at, localAt: dataRef.current.updatedAt })
+  }, [device])
+
+  const pullProfiles = useCallback(async () => {
+    const list = await remote.fetchProfiles()
+    const map: Record<string, AssetProfile> = Object.fromEntries(list.map((p) => [p.assetId, p]))
+    if (JSON.stringify(map) !== JSON.stringify(dataRef.current.profiles)) commit((d) => { d.profiles = map }, false)
+  }, [commit])
+
+  const syncNow = useCallback(async () => {
+    const email = await remote.sessionEmail()
+    setCloudUser(email)
+    if (!email) { setSyncStatus('off'); return }
+    setSyncStatus('syncing')
+    setSyncError('')
+    try {
+      const r = await remote.pullPortfolio()
+      const meta = loadSyncMeta()
+      const local = dataRef.current
+      const action = syncDecision({ localHasContent: hasContent(local), localChanged: local.updatedAt !== meta.localAt, remoteExists: !!r, remoteChanged: !!r && r.updatedAt !== meta.remoteAt })
+      if (action === 'conflict') { pendingRemote.current = r; setSyncStatus('conflict'); return }
+      if (action === 'pull' && r) adoptRemote(r)
+      if (action === 'push') await pushLocal()
+      await pullProfiles()
+      setSyncStatus('synced')
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : String(e))
+      setSyncStatus('error')
+    }
+  }, [adoptRemote, pushLocal, pullProfiles])
+
+  useEffect(() => { if (ready) void syncNow() }, [ready, syncNow])
+
+  // upload local changes shortly after they stop
+  useEffect(() => {
+    if (!ready || !cloudUser || syncStatus !== 'synced' || data.updatedAt === loadSyncMeta().localAt || !hasContent(data)) return
+    const t = setTimeout(() => { pushLocal().catch((e) => { setSyncError(e instanceof Error ? e.message : String(e)); setSyncStatus('error') }) }, 2500)
+    return () => clearTimeout(t)
+  }, [ready, cloudUser, syncStatus, data, pushLocal])
 
   const view = useMemo(() => computeView(data, quotes), [data, quotes])
 
@@ -263,6 +352,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteAsset: (id) => commit((d) => {
         d.assets = d.assets.filter((a) => a.id !== id)
         d.transactions = d.transactions.filter((t) => t.assetId !== id)
+        delete d.profiles[id]
       }),
       addTransaction: (assetId, input) => commit((d) => {
         const i = d.assets.findIndex((a) => a.id === assetId)
@@ -283,6 +373,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         d.settings.review = { ...d.settings.review, lastReviewAt: now() }
       }),
       refreshQuotes,
+      cloudUser, syncStatus, syncError, syncNow,
+      signIn: async (email, password) => {
+        const err = await remote.signIn(email, password)
+        if (!err) await syncNow()
+        return err
+      },
+      signOut: async () => { await remote.signOut(); setCloudUser(null); setSyncStatus('off') },
+      resolveConflict: async (keep) => {
+        setSyncStatus('syncing')
+        try {
+          if (keep === 'remote' && pendingRemote.current) adoptRemote(pendingRemote.current)
+          else await pushLocal()
+          pendingRemote.current = null
+          await pullProfiles()
+          setSyncStatus('synced')
+        } catch (e) { setSyncError(e instanceof Error ? e.message : String(e)); setSyncStatus('error') }
+      },
+      setProfile: async (assetId, profile) => {
+        commit((d) => { if (profile) d.profiles[assetId] = profile; else delete d.profiles[assetId] }, false)
+        if (!cloudUser) return
+        const a = dataRef.current.assets.find((x) => x.id === assetId)
+        if (profile) await remote.saveProfile(profile, a?.name ?? '', a?.symbol ?? null)
+        else await remote.deleteProfile(assetId)
+      },
       exportData: () => JSON.stringify({ ...dataRef.current, exportedAt: now() }, null, 2),
       importData: (json) => {
         try {
@@ -296,7 +410,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       resetData: () => commit((d) => { Object.assign(d, emptyData(), { settings: { ...defaultSettings(), locale: d.settings.locale } }) }),
     }
-  }, [ready, data, view, quotes, quoteStatus, L, dir, commit, refreshQuotes])
+  }, [ready, data, view, quotes, quoteStatus, L, dir, commit, refreshQuotes, cloudUser, syncStatus, syncError, syncNow, adoptRemote, pushLocal, pullProfiles])
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
 }

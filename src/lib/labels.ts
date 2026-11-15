@@ -18,14 +18,16 @@ export const CLASS_LABEL: Record<AssetClass, Bi> = {
 }
 
 // Validated categorical palette (dataviz reference palette, slots 1-7).
+// Validated categorical palette (dataviz reference palette, slots 1-7). The values are CSS variables
+// so each theme gets the steps validated against its own surface (see globals.css).
 export const CLASS_COLOR: Record<AssetClass, string> = {
-  EQUITY: '#2a78d6',
-  FIXED_INCOME: '#eb6834',
-  CASH: '#1baf7a',
-  GOLD: '#eda100',
-  REAL_ESTATE: '#e87ba4',
-  CRYPTO: '#008300',
-  OTHER: '#6250d6',
+  EQUITY: 'var(--c1)',
+  FIXED_INCOME: 'var(--c2)',
+  CASH: 'var(--c3)',
+  GOLD: 'var(--c4)',
+  REAL_ESTATE: 'var(--c5)',
+  CRYPTO: 'var(--c6)',
+  OTHER: 'var(--c7)',
 }
 
 export const REGION_LABEL: Record<Region, Bi> = {
@@ -53,6 +55,7 @@ export const SECTORS: Record<string, Bi> = {
   REAL_ESTATE: { ar: 'العقار', en: 'Real estate' },
   INDUSTRIALS: { ar: 'الصناعة والنقل', en: 'Industrials & transport' },
   FINANCIALS: { ar: 'خدمات مالية', en: 'Financial services' },
+  OTHER: { ar: 'قطاعات أخرى', en: 'Other sectors' },
   NA: { ar: 'غير قطاعي', en: 'Not sector-based' },
 }
 
@@ -139,6 +142,7 @@ export function defaultSettings(): Settings {
   const y = new Date().getFullYear()
   return {
     locale: 'ar',
+    theme: 'system',
     hideAmounts: false,
     onboarded: false,
     monthlyExpenses: 0,
@@ -160,9 +164,21 @@ export function defaultSettings(): Settings {
 }
 
 export function emptyData(): AppData {
-  return { version: 3, settings: defaultSettings(), accounts: [], assets: [], transactions: [], snapshots: [], reviews: [] }
+  return { version: 3, settings: defaultSettings(), accounts: [], assets: [], transactions: [], snapshots: [], reviews: [], profiles: {}, updatedAt: '' }
 }
 
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
+const GCC = new Set(['AE', 'KW', 'QA', 'BH', 'OM'])
+const DEVELOPED = new Set(['CA', 'GB', 'FR', 'DE', 'CH', 'NL', 'SE', 'DK', 'NO', 'FI', 'IE', 'IT', 'ES', 'BE', 'AT', 'PT', 'LU', 'JP', 'AU', 'NZ', 'SG', 'HK', 'IL'])
+
+/** Groups a country code into the app's regions (index-provider style developed/emerging split). */
+export function regionOfCountry(code: string): Region {
+  if (code === 'SA') return 'SA'
+  if (code === 'US') return 'US'
+  if (GCC.has(code)) return 'GCC'
+  if (DEVELOPED.has(code)) return 'DEV'
+  return 'EM'
 }
