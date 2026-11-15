@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { Briefcase, ChevronLeft, ChevronRight, Coins, Gem, Globe, Home, Landmark, Package, Search, TrendingUp } from 'lucide-react'
 import { useStore, type NewAsset } from '@/lib/store'
 import type { AccountKind, AssetClass, Region } from '@/lib/types'
-import { ASSET_KINDS, KARATS, searchCatalog, type AssetKind, type CatalogItem } from '@/lib/catalog'
+import { ASSET_KINDS, KARATS, SAUDI_GROUPS, isMutualFund, searchCatalog, type AssetKind, type CatalogItem, type SaudiGroup } from '@/lib/catalog'
+import { genId } from '@/lib/labels'
 import { ASSET_CLASSES, CLASS_LABEL, KIND_LABEL, REGION_LABEL, SECTORS, ZAKAT_LABEL, DEFAULT_ZAKAT_PERCENT, defaultZakatMode } from '@/lib/labels'
 import { fxRate } from '@/lib/engine/valuation'
 import type { ZakatFields } from '@/lib/engine/zakat'
@@ -34,6 +35,8 @@ interface Draft {
   isEmergencyFund: boolean
   accountId: string
   newAccount: string
+  /** Mutual funds: today's unit price if the user knows it, used until Claude's first daily update. */
+  navNow: number
   zakat: ZakatFields
   /** Once the user picks a treatment it no longer follows the asset class. */
   zakatTouched: boolean
@@ -48,10 +51,11 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
   const [showClass, setShowClass] = useState(false)
   const [showZakat, setShowZakat] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [group, setGroup] = useState<SaudiGroup>('stock')
   const Back = settings.locale === 'ar' ? ChevronRight : ChevronLeft
   const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d))
 
-  const reset = () => { setStep(1); setKind(null); setQuery(''); setDraft(null); setShowClass(false); setShowZakat(false) }
+  const reset = () => { setStep(1); setKind(null); setQuery(''); setDraft(null); setShowClass(false); setShowZakat(false); setGroup('stock') }
   const close = () => { reset(); onClose() }
 
   const efIncomplete = settings.monthlyExpenses > 0 && !emergencyStatus(view, settings).ready
@@ -72,7 +76,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
       domicile: item?.domicile ?? '',
       bullion,
       karat: 24,
-      quantity: 0, unitCost: 0, value: 0, invested: 0,
+      quantity: 0, unitCost: 0, value: 0, invested: 0, navNow: 0,
       isEmergencyFund: k.id === 'CASH' && efIncomplete,
       accountId: sameKind?.id ?? data.accounts[0]?.id ?? '',
       newAccount: sameKind || data.accounts[0] ? '' : L(KIND_LABEL[k.accountKind].ar, KIND_LABEL[k.accountKind].en),
@@ -96,7 +100,16 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
     startDraft(kind, undefined, { symbol, name: q?.name ?? symbol, currency: q?.currency })
   }
 
-  const results = useMemo(() => (kind ? searchCatalog(kind.id, query, settings.shariahFirst) : []), [kind, query, settings.shariahFirst])
+  const saudi = kind?.id === 'SA_STOCK'
+  const results = useMemo(() => (kind ? searchCatalog(kind.id, query, settings.shariahFirst, kind.id === 'SA_STOCK' ? group : undefined) : []), [kind, query, settings.shariahFirst, group])
+
+  // A Saudi mutual fund that is not in the list: a private key; Claude finds its valuation source on the next daily update.
+  const useOtherFund = () => {
+    if (!kind) return
+    const name = query.trim()
+    startDraft(kind, undefined, { symbol: `MF:X-${genId().toUpperCase().slice(0, 12)}`, name })
+  }
+  const mutual = !!draft && isMutualFund(draft.symbol)
 
   const live = !!draft && kind?.pricing === 'live'
   // Until the user picks a treatment, it follows the class chosen in the classification fields.
@@ -113,6 +126,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
       sector: draft.sector,
       currency: draft.currency,
       priceFactor: draft.bullion ? draft.karat / 24 / TROY_OUNCE_GRAMS : 1,
+      ...(mutual && draft.navNow > 0 ? { lastPrice: draft.navNow } : {}),
       quantity: live ? draft.quantity : 0,
       costBasis: live ? draft.quantity * draft.unitCost : draft.invested || draft.value,
       manualValue: live ? 0 : draft.value,
@@ -161,6 +175,10 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
             <input className="input ps-9" placeholder={L('ابحث بالاسم أو الرمز', 'Search by name or symbol')} value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
+          {saudi && <Chips value={group} onChange={setGroup} options={SAUDI_GROUPS.map((g) => ({ value: g.id, label: L(g.ar, g.en) }))} />}
+          {saudi && group === 'mutual' && (
+            <p className="hint">{L('الصناديق الاستثمارية تُسعَّر بسعر الوحدة المنشور من مدير الصندوق. يحدّثه كلود يوميًا مساء أيام التداول.', 'Mutual funds are priced at the unit price published by the manager. Claude updates it every trading-day evening.')}</p>
+          )}
           {kind.id === 'GOLD' && !query && (
             <button onClick={() => startDraft(kind, undefined, undefined, true)} className="flex w-full items-center justify-between rounded-2xl border border-accent bg-tint p-3.5 text-start">
               <span>
@@ -176,7 +194,7 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
                 <button onClick={() => startDraft(kind, c)} className="flex min-h-[56px] w-full items-center justify-between gap-3 bg-card px-3.5 py-2 text-start hover:bg-surface">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{L(c.ar, c.en)}</span>
-                    <span className="num text-xs text-ink-soft">{c.symbol}</span>
+                    <span className="text-xs text-ink-soft">{isMutualFund(c.symbol) ? c.manager : <span className="num">{c.symbol}</span>}</span>
                   </span>
                   <span className="flex shrink-0 gap-1">
                     {c.shariah && <span className="rounded-full bg-good-tint px-2 py-0.5 text-[10px] font-semibold text-gain">{L('متوافق شرعيًا', 'Shariah')}</span>}
@@ -187,12 +205,16 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
             ))}
             {results.length === 0 && <li className="bg-card px-3.5 py-4 text-sm text-ink-soft">{L('غير موجود في القائمة.', 'Not in the list.')}</li>}
           </ul>
-          {query.trim() && (
+          {saudi && group === 'mutual' ? (
+            <button className="btn-soft w-full" disabled={!query.trim()} onClick={useOtherFund}>
+              {query.trim() ? L(`صندوق آخر: «${query.trim()}»`, `Another fund: “${query.trim()}”`) : L('صندوقك غير موجود؟ اكتب اسمه في البحث', 'Fund not listed? Type its name in the search')}
+            </button>
+          ) : query.trim() && (
             <button className="btn-soft w-full" disabled={checking} onClick={useCustomSymbol}>
               {checking ? L('جاري التحقق من الرمز…', 'Checking symbol…') : L(`استخدم الرمز «${query.trim().toUpperCase()}»`, `Use symbol “${query.trim().toUpperCase()}”`)}
             </button>
           )}
-          <p className="hint">{L('رموز تداول تنتهي بـ ‎.SR (مثل 2222.SR)، ولندن بـ ‎.L (مثل CSPX.L).', 'Tadawul symbols end in .SR (e.g. 2222.SR), London in .L (e.g. CSPX.L).')}</p>
+          {!(saudi && group === 'mutual') && <p className="hint">{L('رموز تداول تنتهي بـ ‎.SR (مثل 2222.SR)، ولندن بـ ‎.L (مثل CSPX.L).', 'Tadawul symbols end in .SR (e.g. 2222.SR), London in .L (e.g. CSPX.L).')}</p>}
         </div>
       )}
 
@@ -211,14 +233,21 @@ export default function AssetWizard({ open, onClose }: { open: boolean; onClose:
                 </Field>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <Field label={draft.bullion ? L('الوزن', 'Weight') : L('الكمية', 'Quantity')}>
+                <Field label={draft.bullion ? L('الوزن', 'Weight') : mutual ? L('عدد الوحدات', 'Units') : L('الكمية', 'Quantity')}>
                   <NumberInput value={draft.quantity} onChange={(quantity) => set({ quantity })} suffix={unitLabel} />
                 </Field>
-                <Field label={draft.bullion ? L('متوسط سعر الشراء للجرام', 'Avg. cost per gram') : L('متوسط سعر الشراء', 'Average cost')}>
+                <Field label={draft.bullion ? L('متوسط سعر الشراء للجرام', 'Avg. cost per gram') : mutual ? L('متوسط سعر شراء الوحدة', 'Average cost per unit') : L('متوسط سعر الشراء', 'Average cost')}>
                   <NumberInput value={draft.unitCost} onChange={(unitCost) => set({ unitCost })} suffix={draft.currency} />
                 </Field>
               </div>
-              <p className="hint">{L('السعر الحالي يُجلب تلقائيًا. إن لم تعرف متوسط الشراء اتركه فارغًا وعدّله لاحقًا.', 'The current price is fetched automatically. If you do not know your average cost, leave it empty and edit later.')}</p>
+              {mutual && (
+                <Field label={L('سعر الوحدة اليوم (اختياري)', 'Unit price today (optional)')} hint={L('من كشف حسابك أو تطبيق البنك. يُستخدم حتى يسجّل كلود أول سعر منشور.', 'From your statement or bank app. Used until Claude records the first published price.')}>
+                  <NumberInput value={draft.navNow} onChange={(navNow) => set({ navNow })} suffix={draft.currency} />
+                </Field>
+              )}
+              <p className="hint">{mutual
+                ? L('عدد الوحدات ومتوسط سعرها في كشف حساب الصندوق. القيمة تتحدث تلقائيًا مع سعر الوحدة المنشور.', 'Units and average unit cost are on your fund statement. The value updates with each published unit price.')
+                : L('السعر الحالي يُجلب تلقائيًا. إن لم تعرف متوسط الشراء اتركه فارغًا وعدّله لاحقًا.', 'The current price is fetched automatically. If you do not know your average cost, leave it empty and edit later.')}</p>
             </>
           ) : (
             <>

@@ -1,17 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Layers, Pencil, Plus, Search } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { ASSET_CLASSES, CLASS_COLOR, CLASS_LABEL, KIND_LABEL } from '@/lib/labels'
 import { dividendStats, type AssetView } from '@/lib/engine/valuation'
 import { daysAgo, num, pct } from '@/lib/format'
+import { fetchHistory } from '@/lib/market-client'
+import { performance, since } from '@/lib/engine/performance'
 import { useActions } from '@/components/AppShell'
 import { BarList } from '@/components/charts'
 import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat } from '@/components/ui'
 
-type Sort = 'value' | 'gain' | 'day' | 'name'
+type Sort = 'value' | 'gain' | 'day' | 'year' | 'name'
 type Group = 'account' | 'class'
 
 export default function AssetsPage() {
@@ -24,19 +26,31 @@ export default function AssetsPage() {
   const [editAccount, setEditAccount] = useState<Account | null>(null)
   const [name, setName] = useState('')
   const [confirm, setConfirm] = useState(false)
+  const [yearReturn, setYearReturn] = useState<Record<string, number | null>>({})
+
+  // One-year return per priced asset, loaded only when that sort is chosen (histories are cached on the device).
+  useEffect(() => {
+    if (sort !== 'year') return
+    let gone = false
+    const live = data.assets.filter((a) => a.pricing === 'live' && a.symbol)
+    Promise.all(live.map(async (a) => [a.id, performance((await fetchHistory(a.symbol!, '1y')).filter((p) => p.day >= (since('1y') ?? '')))?.returnPct ?? null] as const))
+      .then((pairs) => { if (!gone) setYearReturn(Object.fromEntries(pairs)) })
+    return () => { gone = true }
+  }, [sort, data.assets])
 
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const rows = view.rows.filter((r) => !needle || r.asset.name.toLowerCase().includes(needle) || (r.asset.symbol ?? '').toLowerCase().includes(needle))
     const order: Record<Sort, (a: AssetView, b: AssetView) => number> = {
-      value: (a, b) => b.value - a.value, gain: (a, b) => b.gainPct - a.gainPct, day: (a, b) => b.dayChange - a.dayChange, name: (a, b) => a.asset.name.localeCompare(b.asset.name, 'ar'),
+      value: (a, b) => b.value - a.value, gain: (a, b) => b.gainPct - a.gainPct, day: (a, b) => b.dayChange - a.dayChange,
+      year: (a, b) => (yearReturn[b.asset.id] ?? -Infinity) - (yearReturn[a.asset.id] ?? -Infinity), name: (a, b) => a.asset.name.localeCompare(b.asset.name, 'ar'),
     }
     const sorted = [...rows].sort(order[sort])
     const buckets = group === 'account'
       ? data.accounts.map((account) => ({ key: account.id, title: account.name, sub: L(KIND_LABEL[account.kind].ar, KIND_LABEL[account.kind].en), account: account as Account | null, rows: sorted.filter((r) => r.asset.accountId === account.id) }))
       : ASSET_CLASSES.map((c) => ({ key: c as string, title: L(CLASS_LABEL[c].ar, CLASS_LABEL[c].en), sub: '', account: null as Account | null, rows: sorted.filter((r) => r.asset.assetClass === c) }))
     return buckets.map((b) => ({ ...b, total: b.rows.reduce((s, r) => s + r.value, 0) })).filter((b) => b.rows.length > 0 || (group === 'account' && !needle)).sort((a, b) => b.total - a.total)
-  }, [data.accounts, view.rows, q, sort, group, L])
+  }, [data.accounts, view.rows, q, sort, group, L, yearReturn])
   const divs = useMemo(() => dividendStats(data, view.cost), [data, view.cost])
   const divTotal = divs.byYear.reduce((s, y) => s + y.amount, 0)
 
@@ -69,6 +83,7 @@ export default function AssetsPage() {
               <option value="value">{L('الأعلى قيمة', 'Value')}</option>
               <option value="gain">{L('الأعلى ربحًا', 'Gain')}</option>
               <option value="day">{L('تغيّر اليوم', 'Today')}</option>
+              <option value="year">{L('أداء السنة', '1-year return')}</option>
               <option value="name">{L('الاسم', 'Name')}</option>
             </select>
           </div>
@@ -110,7 +125,8 @@ export default function AssetsPage() {
                         </span>
                         <span className="shrink-0 text-end">
                           <Money value={r.value} className="block text-sm font-semibold" />
-                          {sort === 'day' && r.dayChange !== 0 ? <Delta value={r.dayChange} className="text-xs" /> : r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
+                          {sort === 'year' ? (yearReturn[a.id] != null ? <span className="text-xs text-ink-soft">{L('سنة', '1Y')} <Delta percent={yearReturn[a.id]!} className="text-xs" /></span> : <span className="text-xs text-ink-faint">—</span>)
+                            : sort === 'day' && r.dayChange !== 0 ? <Delta value={r.dayChange} className="text-xs" /> : r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
                         </span>
                       </button>
                     </li>

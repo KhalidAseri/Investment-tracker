@@ -7,6 +7,8 @@ import type { Asset, TxType } from '@/lib/types'
 import { fxRate } from '@/lib/engine/valuation'
 import { zakatDue, zakatRate } from '@/lib/engine/zakat'
 import { ZakatSheet } from './ZakatControl'
+import AssetPerformance from './AssetPerformance'
+import { isMutualFund } from '@/lib/catalog'
 import { CLASS_LABEL, REGION_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
 import { dateLabel, daysAgo, num, pct, unit } from '@/lib/format'
 import { ClassFields } from './AssetWizard'
@@ -15,7 +17,7 @@ import { Confirm, Delta, Field, Money, NumberInput, Sheet, Stat } from './ui'
 type Mode = null | TxType | 'EDIT' | 'PRICE'
 
 export default function AssetSheet({ assetId, initialMode, onClose }: { assetId: string | null; initialMode?: TxType; onClose: () => void }) {
-  const { L, data, view, settings, addTransaction, deleteTransaction, updateAsset, deleteAsset } = useStore()
+  const { L, data, view, settings, quotes, addTransaction, deleteTransaction, updateAsset, deleteAsset } = useStore()
   const row = view.rows.find((r) => r.asset.id === assetId) ?? null
   const [mode, setMode] = useState<Mode>(null)
   const [qty, setQty] = useState(0)
@@ -41,6 +43,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
   const a = row.asset
   const live = a.pricing === 'live'
   const weight = view.netWorth > 0 ? (row.value / view.netWorth) * 100 : 0
+  const quote = a.symbol ? quotes[a.symbol] : undefined
   const txs = data.transactions.filter((t) => t.assetId === a.id).sort((x, y) => y.date.localeCompare(x.date) || y.createdAt.localeCompare(x.createdAt))
   const age = daysAgo(a.valueUpdatedAt)
   const zakatNow = zakatDue(a, row.value, a.quantity, fxRate(a.currency, settings.fx), zakatRate(settings)).due
@@ -113,11 +116,15 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
             {live && (
               <p className="text-xs text-ink-soft">
                 {row.price !== null
-                  ? <>{L('السعر', 'Price')} <span className="num font-semibold text-ink">{num(row.price, 2)}</span> · <span className="num">{a.symbol}</span> · {row.source === 'live' ? L('سعر مباشر', 'live') : row.source === 'manual' ? L('سعر أدخلتَه يدويًا', 'price you entered') : L('آخر سعر محفوظ', 'last saved price')}</>
-                  : L(`لم يتوفر سعر للرمز ${a.symbol} بعد؛ تُعرض قيمة التكلفة مؤقتًا.`, `No price for ${a.symbol} yet; showing cost for now.`)}
+                  ? <>{L('السعر', 'Price')} <span className="num font-semibold text-ink">{num(row.price, 2)}</span>{!isMutualFund(a.symbol) && <> · <span className="num">{a.symbol}</span></>} · {row.source === 'manual' ? L('سعر أدخلتَه يدويًا', 'price you entered') : quote?.origin === 'claude' ? L('آخر تقييم منشور سجّله كلود', 'last published valuation, recorded by Claude') : row.source === 'live' ? L('سعر مباشر', 'live') : L('آخر سعر محفوظ', 'last saved price')}{quote?.asOf && <> · {L('بتاريخ', 'as of')} {dateLabel(quote.asOf, settings.locale)}</>}{quote?.sourceUrl && <> · <a className="font-semibold text-link" href={quote.sourceUrl} target="_blank" rel="noreferrer">{L('المصدر', 'source')}</a></>}</>
+                  : isMutualFund(a.symbol)
+                    ? L('لم يُسجَّل سعر وحدة لهذا الصندوق بعد؛ يسجّله كلود في التحديث اليومي القادم. تُعرض قيمة التكلفة مؤقتًا.', 'No unit price recorded for this fund yet; Claude records it in the next daily update. Showing cost for now.')
+                    : L(`لم يتوفر سعر للرمز ${a.symbol} بعد؛ تُعرض قيمة التكلفة مؤقتًا.`, `No price for ${a.symbol} yet; showing cost for now.`)}
                 {row.source !== 'live' && <button className="ms-2 font-semibold text-link underline-offset-2 hover:underline" onClick={() => open('PRICE')}>{L('أدخل السعر يدويًا', 'Enter price by hand')}</button>}
               </p>
             )}
+
+            <AssetPerformance asset={a} txs={txs} gainPct={row.gainPct} />
 
             <div className="grid grid-cols-3 gap-2">
               {live ? (

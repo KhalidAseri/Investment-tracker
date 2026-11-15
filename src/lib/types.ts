@@ -204,7 +204,13 @@ export interface Quote {
   changePercent: number
   currency: string
   name: string
+  /** When the app received it. */
   updatedAt: string
+  /** Date the price refers to (a fund NAV can lag by days). */
+  asOf?: string
+  /** 'provider' = market data feed; 'claude' = recorded by Claude's daily update from the fund's published valuation. */
+  origin?: 'provider' | 'claude'
+  sourceUrl?: string | null
 }
 
 export type Quotes = Record<string, Quote>

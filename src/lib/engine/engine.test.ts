@@ -497,3 +497,37 @@ test('sync: pushes, pulls, and never resolves a two-sided change by itself', asy
   assert.equal(f(true, true, true, true), 'conflict')
   assert.equal(f(true, false, true, false), 'none')
 })
+
+test('performance: return, annualised rate, high/low, max drawdown', async () => {
+  const { performance, window, since } = await import('./performance.ts')
+  const pts = [
+    { day: '2024-01-01', close: 100 }, { day: '2024-06-01', close: 120 }, { day: '2024-09-01', close: 90 },
+    { day: '2025-01-01', close: 110 }, { day: '2025-01-01', close: 110 }, { day: '2025-06-01', close: 0 },
+    { day: '2026-01-01', close: 121 },
+  ]
+  const p = performance(pts)!
+  assert.equal(window(pts).length, 5)                                    // duplicate day and zero close dropped
+  assert.ok(Math.abs(p.returnPct - 21) < 1e-9)
+  assert.ok(Math.abs(p.cagrPct! - (Math.pow(1.21, 1 / ((Date.UTC(2026, 0, 1) - Date.UTC(2024, 0, 1)) / (365.25 * 86400000))) - 1) * 100) < 1e-9)
+  assert.deepEqual([p.high.close, p.low.close], [121, 90])
+  assert.ok(Math.abs(p.maxDrawdownPct - -25) < 1e-9)                    // 120 -> 90
+  assert.deepEqual([p.drawdownPeak!.day, p.drawdownTrough!.day], ['2024-06-01', '2024-09-01'])
+  assert.equal(p.fromHighPct, 0)
+  assert.equal(performance([{ day: '2026-01-01', close: 5 }]), null)
+  assert.equal(performance([{ day: '2026-01-01', close: 10 }, { day: '2026-03-01', close: 11 }])!.cagrPct, null)   // under a year: no annualising
+  assert.equal(since('1y', new Date('2026-11-15T12:00:00Z')), '2025-11-15')
+  assert.equal(since('max'), undefined)
+})
+
+test('manual asset index ignores deposits and withdrawals', async () => {
+  const { manualIndex } = await import('./performance.ts')
+  const idx = manualIndex([
+    { day: '2026-01-01', type: 'DEPOSIT', amount: 1000, valueAfter: 1000 },
+    { day: '2026-02-01', type: 'VALUE_UPDATE', amount: 1100, valueAfter: 1100 },   // +10%
+    { day: '2026-03-01', type: 'DEPOSIT', amount: 900, valueAfter: 2000 },         // money in, not growth
+    { day: '2026-04-01', type: 'VALUE_UPDATE', amount: 2100, valueAfter: 2100 },   // +5%
+  ])
+  assert.deepEqual(idx.map((p) => p.day), ['2026-01-01', '2026-02-01', '2026-03-01', '2026-04-01'])
+  assert.ok(Math.abs(idx[3].close - 115.5) < 1e-9)
+  assert.equal(idx[2].close, idx[1].close)
+})
