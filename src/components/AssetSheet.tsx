@@ -82,7 +82,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
 
   const TX_LABEL: Record<TxType, string> = {
     BUY: L('شراء', 'Buy'), SELL: L('بيع', 'Sell'), DIVIDEND: L('توزيعة / عائد', 'Dividend / income'),
-    DEPOSIT: L('إيداع', 'Deposit'), WITHDRAW: L('سحب', 'Withdraw'), VALUE_UPDATE: L('تحديث القيمة', 'Update value'),
+    DEPOSIT: L('إيداع', 'Deposit'), WITHDRAW: L('سحب', 'Withdraw'), VALUE_UPDATE: L('تحديث القيمة', 'Value update'),
   }
   const isTrade = mode === 'BUY' || mode === 'SELL'
   const txValid = mode === 'REBASE' ? amount > 0 && (why === 'fix' || (why === 'in' && rebaseDiff > 0.005) || (why === 'out' && rebaseDiff < -0.005)) : mode === 'LINK' ? units > 0 : mode === 'PRICE' ? price > 0 : isTrade ? qty > 0 && price > 0 && (mode === 'BUY' || qty <= a.quantity) : amount > 0 || mode === 'VALUE_UPDATE'
@@ -103,7 +103,11 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     if (mode === 'REBASE') {
       if (why === 'in' && unitNow > 0) addTransaction(a.id, { type: 'BUY', date: todayISO(), quantity: unitsFromValue(rebaseDiff, unitNow), price: unitNow, amount: rebaseDiff })
       else if (why === 'out' && unitNow > 0) addTransaction(a.id, { type: 'SELL', date: todayISO(), quantity: Math.min(a.quantity, unitsFromValue(-rebaseDiff, unitNow)), price: unitNow, amount: -rebaseDiff })
-      else updateAsset(a.id, rebaseToValue(a, amount, unitNow / (a.priceFactor || 1)))
+      else if (unitNow > 0) {
+        // the difference is gain or loss: the value changes, the money invested does not
+        addTransaction(a.id, { type: 'VALUE_UPDATE', date: todayISO(), quantity: 0, price: unitNow / (a.priceFactor || 1), amount })
+        updateAsset(a.id, { unitsEstimated: true, valueAnchor: undefined })
+      } else updateAsset(a.id, rebaseToValue(a, amount, 0))
       setMode(null)
       return
     }
@@ -276,17 +280,22 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
         {mode === 'REBASE' && (
           <div className="space-y-4">
             <Field label={L('قيمته عندي الآن', 'What it is worth now')} hint={L('من كشف حسابك أو تطبيق البنك.', 'From your statement or bank app.')}>
-              <NumberInput value={amount} onChange={setAmount} suffix={a.currency} autoFocus />
+              <NumberInput value={amount} onChange={(n) => { setAmount(n); setWhy('fix') }} suffix={a.currency} autoFocus />
             </Field>
             <p className="text-sm text-ink-soft">{L('القيمة المحسوبة الآن', 'Value calculated now')} <span className="num font-semibold text-ink">{num(valueNow, 2)}</span>
               {Math.abs(rebaseDiff) >= 0.01 && amount > 0 && <> · {L('الفرق', 'difference')} <span className={`num font-semibold ${rebaseDiff > 0 ? 'text-gain' : 'text-loss'}`}>{rebaseDiff > 0 ? '+' : ''}{num(rebaseDiff, 2)}</span></>}</p>
             {unitNow > 0 && Math.abs(rebaseDiff) >= 0.01 && amount > 0 && (
-              <Field group label={L('سبب الفرق', 'Why it differs')}
-                hint={why === 'fix' ? L('يُعدَّل عدد الوحدات ليطابق القيمة، ويبقى المبلغ المستثمَر كما هو.', 'The unit count is adjusted to match the value; the amount invested stays as it is.')
-                  : why === 'in' ? L('يُسجَّل الفرق شراءً جديدًا بسعر اليوم، فيزيد المبلغ المستثمَر.', 'The difference is recorded as a new purchase at today’s price, so the amount invested goes up.')
+              <Field group label={L('الفرق هو', 'The difference is')}
+                hint={why === 'fix' ? (rebaseDiff > 0
+                    ? L('يُحسب الفرق ربحًا: ترتفع القيمة ويبقى المبلغ المستثمَر كما هو، ويُسجَّل في سجل الأصل.', 'The difference counts as gain: the value rises, the amount invested stays as it is, and it is recorded in the asset’s history.')
+                    : L('يُحسب الفرق خسارة: تنخفض القيمة ويبقى المبلغ المستثمَر كما هو، ويُسجَّل في سجل الأصل.', 'The difference counts as loss: the value falls, the amount invested stays as it is, and it is recorded in the asset’s history.'))
+                  : why === 'in' ? L('يُسجَّل الفرق شراءً جديدًا بسعر اليوم، فيزيد المبلغ المستثمَر ولا يُحسب ربحًا.', 'The difference is recorded as a new purchase at today’s price: the amount invested goes up and it is not counted as gain.')
                   : L('يُسجَّل الفرق بيعًا بسعر اليوم.', 'The difference is recorded as a sale at today’s price.')}>
-                <Chips wrap value={why} onChange={setWhy} options={[{ value: 'fix' as const, label: L('تصحيح الرصيد', 'Correct the balance') }, ...(rebaseDiff > 0 ? [{ value: 'in' as const, label: L('أضفت مبلغًا', 'I added money') }] : [{ value: 'out' as const, label: L('سحبت مبلغًا', 'I took money out') }])]} />
+                <Chips wrap value={why} onChange={setWhy} options={[{ value: 'fix' as const, label: rebaseDiff > 0 ? L('ربح', 'Gain') : L('خسارة', 'Loss') }, ...(rebaseDiff > 0 ? [{ value: 'in' as const, label: L('أضفت مبلغًا', 'I added money') }] : [{ value: 'out' as const, label: L('سحبت مبلغًا', 'I took money out') }])]} />
               </Field>
+            )}
+            {why === 'fix' && amount > 0 && a.costBasis > 0 && Math.abs(rebaseDiff) >= 0.01 && (
+              <p className="text-sm text-ink-soft">{L('إجمالي ربحك بعد التحديث', 'Your total gain after the update')} <span className={`num font-semibold ${amount >= a.costBasis ? 'text-gain' : 'text-loss'}`}>{amount >= a.costBasis ? '+' : ''}{num(amount - a.costBasis, 2)} ({pct((amount / a.costBasis - 1) * 100, 1, true)})</span></p>
             )}
             {!(unitNow > 0) && <p className="hint">{L('لا سعر منشور لهذا الصندوق بعد: تُحفظ القيمة كما هي إلى أن يُسجَّل أول سعر.', 'No published price for this fund yet: the value is kept as entered until the first price is recorded.')}</p>}
           </div>

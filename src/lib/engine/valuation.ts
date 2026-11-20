@@ -144,7 +144,14 @@ export function applyTransaction(asset: Asset, input: TxInput): { asset: Asset; 
       break
     }
     case 'VALUE_UPDATE':
-      dValue = amount - asset.manualValue
+      if (asset.pricing === 'live') {
+        // A priced holding re-stated at `amount`: its units change, the money invested does not,
+        // so the difference shows as gain or loss. Recorded so it appears in the history and can be undone.
+        const unit = price * (asset.priceFactor || 1)
+        dQty = unit > 0 ? unitsFromValue(amount, unit) - asset.quantity : 0
+      } else {
+        dValue = amount - asset.manualValue
+      }
       break
     case 'DIVIDEND':
       break

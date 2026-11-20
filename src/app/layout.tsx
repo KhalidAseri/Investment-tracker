@@ -19,6 +19,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // the keyboard shrinks the page instead of covering it, so bottom sheets stay above it
+  interactiveWidget: 'resizes-content',
   themeColor: [{ media: '(prefers-color-scheme: light)', color: '#fafafa' }, { media: '(prefers-color-scheme: dark)', color: '#09090b' }],
 }
 

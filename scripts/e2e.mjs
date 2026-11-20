@@ -64,10 +64,12 @@ await step('a fund entered by its value follows the unit price; the value can be
   let a = (await store()).assets.find((x) => x.symbol === 'MF:RAJHI-SA-EQ')
   if (!a || !near(a.quantity * 1177.756, 20000, 0.1) || a.costBasis !== 18000 || !a.unitsEstimated) throw new Error('by value ' + JSON.stringify([a?.quantity, a?.costBasis, a?.unitsEstimated]))
   await page.goto(B + '/assets/'); await page.getByRole('button', { name: /صندوق الراجحي للأسهم السعودية/ }).click()
-  await page.getByRole('button', { name: 'حدّث القيمة', exact: true }).click(); await fill('قيمته عندي الآن', 21000); await page.getByText('سبب الفرق').waitFor(); await shot('06g-update-value')
+  await page.getByRole('button', { name: 'حدّث القيمة', exact: true }).click(); await fill('قيمته عندي الآن', 21000); await page.getByText('الفرق هو').waitFor(); await page.getByRole('tab', { name: 'ربح', exact: true }).waitFor(); await page.getByText('إجمالي ربحك بعد التحديث').waitFor(); await shot('06g-update-value')
   await page.getByRole('button', { name: 'حفظ القيمة' }).click(); await page.waitForTimeout(500)
   a = (await store()).assets.find((x) => x.symbol === 'MF:RAJHI-SA-EQ')
-  if (!near(a.quantity * 1177.756, 21000, 0.1) || a.costBasis !== 18000) throw new Error('correction ' + JSON.stringify([a.quantity, a.costBasis]))
+  const upd = (await store()).transactions.find((t) => t.assetId === a.id && t.type === 'VALUE_UPDATE')
+  if (!near(a.quantity * 1177.756, 21000, 0.1) || a.costBasis !== 18000 || upd?.amount !== 21000) throw new Error('gain ' + JSON.stringify([a.quantity, a.costBasis, upd?.amount]))
+  await page.getByText('تحديث القيمة', { exact: true }).first().waitFor()                    // listed in the asset's history
   await page.getByRole('button', { name: 'حدّث القيمة', exact: true }).click(); await fill('قيمته عندي الآن', 22000); await page.getByRole('tab', { name: 'أضفت مبلغًا' }).click()
   await page.getByRole('button', { name: 'حفظ القيمة' }).click(); await page.waitForTimeout(500)
   a = (await store()).assets.find((x) => x.symbol === 'MF:RAJHI-SA-EQ')
@@ -174,6 +176,22 @@ await step('milestone: completing the emergency fund is announced once', async (
   if (!(await store()).settings.milestones.includes('ef')) throw new Error('milestone not recorded')
   await page.reload(); await page.getByText('رحلتك إلى الهدف').waitFor(); await page.waitForTimeout(1200)
   if (await page.getByText('اكتمل صندوق الطوارئ').count()) throw new Error('milestone shown twice')
+})
+await step('keyboard: a sheet and its field stay visible when the keyboard takes the lower part of the screen', async () => {
+  const inView = async (loc, h) => { const b = await loc.boundingBox(); return b && b.y >= 0 && b.y + b.height <= h + 0.5 }
+  await page.goto(B + '/assets/'); await page.getByRole('button', { name: /صندوق الراجحي للأسهم السعودية/ }).click()
+  await page.getByRole('button', { name: 'حدّث القيمة', exact: true }).click()
+  // 1) the page itself shrinks (the Android app and Chrome): 844 -> 470
+  await page.setViewportSize({ width: 390, height: 470 }); await page.waitForTimeout(700)
+  const field = page.getByLabel('قيمته عندي الآن'); const saveBtn = page.getByRole('button', { name: 'حفظ القيمة' })
+  if (!(await inView(field, 470)) || !(await inView(saveBtn, 470))) throw new Error('field or save button outside the shrunken page')
+  await shot('16-keyboard-shrunk')
+  // 2) the keyboard overlays the page (iOS Safari): the sheet moves up by the covered height
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(400)
+  await page.evaluate(() => document.documentElement.style.setProperty('--kb', '330px')); await page.waitForTimeout(500)
+  if (!(await inView(field, 844 - 330)) || !(await inView(saveBtn, 844 - 330))) throw new Error('field or save button behind an overlaying keyboard')
+  await page.evaluate(() => document.documentElement.style.setProperty('--kb', '0px'))
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.waitForTimeout(400)
 })
 await step('portfolio: search, sort, group by class, dividends tab', async () => {
   await nav('المحفظة'); await page.getByLabel('بحث').fill('راجحي'); await page.waitForTimeout(250)

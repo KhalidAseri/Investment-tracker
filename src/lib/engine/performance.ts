@@ -100,8 +100,8 @@ export function priceOn(points: Point[], day: string): { price: number; day: str
 export interface Holding { symbol: string | null; /** Units × price factor × FX to the base currency. */ unitsInBase: number; /** Value today in the base currency. */ value: number }
 
 /**
- * What today's holdings were worth on each of `days`: priced holdings at that day's close (the last
- * close on or before it), everything else at its value today. The last day is today's actual value.
+ * What today's holdings were worth on each of `days`: priced holdings at that day's close (on a
+ * line between closes where the series has gaps), everything else at its value today. The last day is today's actual value.
  * It answers «how did what I own now move», not «what did I own then».
  */
 export function holdingsSeries(holdings: Holding[], histories: Record<string, Point[]>, days: string[]): Point[] {
@@ -112,11 +112,27 @@ export function holdingsSeries(holdings: Holding[], histories: Record<string, Po
     for (const h of holdings) {
       const series = h.symbol ? sorted[h.symbol] : undefined
       if (i === days.length - 1 || !series || series.length < 2) { total += h.value; continue }
-      const p = priceOn(series, day)
-      total += p ? p.price * h.unitsInBase : h.value
+      total += between(series, day) * h.unitsInBase
     }
     return { day, close: total }
   })
+}
+
+/**
+ * A price for a day inside a series that may be sparse (a fund valued monthly): on a straight line
+ * between the closes either side of it, so the curve does not move in steps. Outside the series,
+ * the nearest close.
+ */
+export function between(series: Point[], day: string): number {
+  if (day <= series[0].day) return series[0].close
+  for (let i = 1; i < series.length; i++) {
+    const a = series[i - 1], b = series[i]
+    if (day <= b.day) {
+      const span = t(b.day) - t(a.day)
+      return span > 0 ? a.close + ((b.close - a.close) * (t(day) - t(a.day))) / span : b.close
+    }
+  }
+  return series[series.length - 1].close
 }
 
 /** The last `n` calendar days ending today, oldest first. */

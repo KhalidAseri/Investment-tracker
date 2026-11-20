@@ -44,6 +44,32 @@ export function closeTopSheet(): boolean {
 }
 
 /** Bottom sheet: springs up, can be dragged down by its handle to dismiss, closes on Escape or backdrop tap. */
+/**
+ * Where the keyboard overlays the page instead of shrinking it (iOS Safari, older browsers), this
+ * keeps `--kb` equal to the part of the layout the keyboard covers; sheets sit above that. Where the
+ * page itself shrinks (Android app, Chrome) the difference is zero and nothing moves twice.
+ */
+function trackKeyboard(): () => void {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) return () => {}
+  const update = () => {
+    const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+    document.documentElement.style.setProperty('--kb', covered > 60 ? `${covered}px` : '0px')
+  }
+  update()
+  vv.addEventListener('resize', update)
+  vv.addEventListener('scroll', update)
+  return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); document.documentElement.style.setProperty('--kb', '0px') }
+}
+
+/** Brings the field being typed in to the middle of the sheet once the keyboard has opened. */
+function revealField(e: React.FocusEvent<HTMLElement>): void {
+  const el = e.target as HTMLElement
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return
+  if (el instanceof HTMLInputElement && ['checkbox', 'radio', 'range'].includes(el.type)) return
+  window.setTimeout(() => { if (document.activeElement === el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, 320)
+}
+
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
   const { L } = useStore()
   const titleId = useId()
@@ -55,10 +81,12 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
     const close = () => closeRef.current()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
     sheetStack.push(close)
+    const stopKb = trackKeyboard()
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
     return () => {
+      stopKb()
       sheetStack.splice(sheetStack.lastIndexOf(close), 1)
       document.body.style.overflow = sheetStack.length ? 'hidden' : prev
       window.removeEventListener('keydown', onKey)
@@ -67,10 +95,10 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div className="fixed inset-x-0 top-0 z-50 flex items-end justify-center sm:items-center" style={{ bottom: 'var(--kb, 0px)' }} role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <motion.button className="absolute inset-0 cursor-default bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} aria-label={L('إغلاق', 'Close')} tabIndex={-1} />
           <motion.div
-            className="relative flex max-h-[92dvh] w-full max-w-xl flex-col rounded-t-3xl bg-card shadow-float sm:rounded-3xl"
+            className="relative flex max-h-[92%] w-full max-w-xl flex-col rounded-t-3xl bg-card shadow-float sm:rounded-3xl"
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 34, stiffness: 360 }}
             drag="y" dragControls={drag} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
             onDragEnd={(_, info) => { if (info.offset.y > 110 || info.velocity.y > 700) onClose() }}
@@ -84,7 +112,7 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4" onFocus={revealField}>{children}</div>
             {footer && <div className="border-t border-line px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>}
           </motion.div>
         </div>
@@ -142,6 +170,8 @@ export function NumberInput({ value, onChange, suffix, placeholder, autoFocus }:
       <input
         className={cx('input text-start tabular-nums', suffix && 'pe-14')}
         inputMode="decimal"
+        enterKeyHint="done"
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         autoFocus={autoFocus}
         placeholder={placeholder ?? '0'}
         value={text}

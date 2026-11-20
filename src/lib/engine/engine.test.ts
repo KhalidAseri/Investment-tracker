@@ -643,6 +643,17 @@ test('holdings series: priced assets follow their closes, the rest stay flat, to
   const series = holdingsSeries(
     [{ symbol: 'A', unitsInBase: 10, value: 1300 }, { symbol: null, unitsInBase: 0, value: 5000 }, { symbol: 'NOHIST', unitsInBase: 3, value: 90 }],
     { A: [{ day: '2026-11-16', close: 100 }, { day: '2026-11-18', close: 110 }, { day: '2026-11-19', close: 120 }] }, days)
-  assert.deepEqual(series.map((p) => p.close), [1000 + 5090, 1100 + 5090, 1200 + 5090, 1300 + 5090])
+  assert.deepEqual(series.map((p) => p.close), [1050 + 5090, 1100 + 5090, 1200 + 5090, 1300 + 5090])   // the 17th sits between the closes of the 16th and 18th
   assert.deepEqual(lastDays(3, new Date('2026-11-20T10:00:00Z')), ['2026-11-18', '2026-11-19', '2026-11-20'])
+})
+
+test('re-stating a priced fund records the difference as gain, in the history, and can be undone', async () => {
+  const { applyTransaction, revertTransaction, valueAsset } = await import('./valuation.ts')
+  const q = { F: { symbol: 'F', price: 200, change: 0, changePercent: 0, currency: 'SAR', name: '', updatedAt: new Date().toISOString() } }
+  const fund = asset({ id: 'f', symbol: 'F', pricing: 'live', quantity: 75, costBasis: 15000, manualValue: 0 })      // worth 15,000 at 200
+  const { asset: after, tx } = applyTransaction(fund, { type: 'VALUE_UPDATE', date: '2026-11-20', quantity: 0, price: 200, amount: 15600 })
+  const v = valueAsset(after, q, {})
+  assert.deepEqual([after.quantity, after.costBasis, v.value, v.gain], [78, 15000, 15600, 600])                    // +600 is gain; nothing was invested
+  assert.deepEqual([tx.type, tx.amount, tx.dQty, tx.dCost], ['VALUE_UPDATE', 15600, 3, 0])
+  assert.equal(revertTransaction(after, tx).quantity, 75)
 })
