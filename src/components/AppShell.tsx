@@ -161,7 +161,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </ul>
         )}
       </Sheet>
-      <AssetWizard open={wizard} onClose={() => setWizard(false)} />
+      <AssetWizard open={wizard} onClose={() => setWizard(false)} onExisting={(id) => setAsset({ id, mode: 'BUY' })} />
       <AssetSheet assetId={asset?.id ?? null} initialMode={asset?.mode} onClose={() => setAsset(null)} />
     </ActionsCtx.Provider>
   )

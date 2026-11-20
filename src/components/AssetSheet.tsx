@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Asset, TxType } from '@/lib/types'
-import { fxRate, linkToSymbol, unitsFromValue } from '@/lib/engine/valuation'
+import { fxRate, linkToSymbol, rebaseToValue, unitsFromValue } from '@/lib/engine/valuation'
 import { fetchQuotes } from '@/lib/market-client'
 import { zakatDue, zakatRate } from '@/lib/engine/zakat'
 import { ZakatSheet } from './ZakatControl'
@@ -13,9 +13,9 @@ import { findCatalogFund, isMutualFund } from '@/lib/catalog'
 import { CLASS_LABEL, REGION_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
 import { dateLabel, daysAgo, num, pct, unit } from '@/lib/format'
 import { ClassFields } from './AssetWizard'
-import { Confirm, Delta, Field, Money, Notice, NumberInput, Sheet, Stat } from './ui'
+import { Chips, Confirm, Delta, Field, Money, Notice, NumberInput, Sheet, Stat } from './ui'
 
-type Mode = null | TxType | 'EDIT' | 'PRICE' | 'LINK'
+type Mode = null | TxType | 'EDIT' | 'PRICE' | 'LINK' | 'REBASE'
 
 export default function AssetSheet({ assetId, initialMode, onClose }: { assetId: string | null; initialMode?: TxType | 'LINK'; onClose: () => void }) {
   const { L, data, view, settings, quotes, addTransaction, deleteTransaction, updateAsset, deleteAsset, refreshQuotes } = useStore()
@@ -30,6 +30,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
   const [zakatOpen, setZakatOpen] = useState(false)
   const [units, setUnits] = useState(0)
   const [estimated, setEstimated] = useState(false)
+  const [why, setWhy] = useState<'fix' | 'in' | 'out'>('fix')
   const [nav, setNav] = useState<{ price: number; asOf?: string } | null>(null)
 
   // Opened from the quick-add button, the sheet goes straight to the chosen action.
@@ -61,6 +62,10 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
   const quote = a.symbol ? quotes[a.symbol] : undefined
   const txs = data.transactions.filter((t) => t.assetId === a.id).sort((x, y) => y.date.localeCompare(x.date) || y.createdAt.localeCompare(x.createdAt))
   const age = daysAgo(a.valueUpdatedAt)
+  // In the asset's own currency: what the holding is worth and what one unit costs right now.
+  const valueNow = row.value / fxRate(a.currency, settings.fx)
+  const unitNow = row.price ?? 0
+  const rebaseDiff = amount - valueNow
   const zakatNow = zakatDue(a, row.value, a.quantity, fxRate(a.currency, settings.fx), zakatRate(settings)).due
 
   const open = (m: Mode) => {
@@ -70,6 +75,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     setDate(todayISO())
     if (m === 'PRICE') setPrice(a.lastPrice ?? 0)
     if (m === 'LINK') { setUnits(0); setEstimated(false) }
+    if (m === 'REBASE') { setAmount(Math.round(valueNow * 100) / 100); setWhy('fix') }
     setEdit(m === 'EDIT' ? { ...a } : null)
     setMode(m)
   }
@@ -79,7 +85,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     DEPOSIT: L('إيداع', 'Deposit'), WITHDRAW: L('سحب', 'Withdraw'), VALUE_UPDATE: L('تحديث القيمة', 'Update value'),
   }
   const isTrade = mode === 'BUY' || mode === 'SELL'
-  const txValid = mode === 'LINK' ? units > 0 : mode === 'PRICE' ? price > 0 : isTrade ? qty > 0 && price > 0 && (mode === 'BUY' || qty <= a.quantity) : amount > 0 || mode === 'VALUE_UPDATE'
+  const txValid = mode === 'REBASE' ? amount > 0 && (why === 'fix' || (why === 'in' && rebaseDiff > 0.005) || (why === 'out' && rebaseDiff < -0.005)) : mode === 'LINK' ? units > 0 : mode === 'PRICE' ? price > 0 : isTrade ? qty > 0 && price > 0 && (mode === 'BUY' || qty <= a.quantity) : amount > 0 || mode === 'VALUE_UPDATE'
 
   const submitTx = () => {
     if (mode === 'PRICE') {
@@ -94,12 +100,19 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
       void refreshQuotes(true)
       return
     }
+    if (mode === 'REBASE') {
+      if (why === 'in' && unitNow > 0) addTransaction(a.id, { type: 'BUY', date: todayISO(), quantity: unitsFromValue(rebaseDiff, unitNow), price: unitNow, amount: rebaseDiff })
+      else if (why === 'out' && unitNow > 0) addTransaction(a.id, { type: 'SELL', date: todayISO(), quantity: Math.min(a.quantity, unitsFromValue(-rebaseDiff, unitNow)), price: unitNow, amount: -rebaseDiff })
+      else updateAsset(a.id, rebaseToValue(a, amount, unitNow / (a.priceFactor || 1)))
+      setMode(null)
+      return
+    }
     if (!mode || mode === 'EDIT') return
     addTransaction(a.id, { type: mode as TxType, date, quantity: qty, price, amount })
     setMode(null)
   }
 
-  const title = mode === 'LINK' ? L('ربط بالسعر المنشور', 'Link to the published price') : mode === 'EDIT' ? L('تعديل الأصل', 'Edit asset') : mode === 'PRICE' ? L('السعر يدويًا', 'Manual price') : mode ? `${TX_LABEL[mode as TxType]} — ${a.name}` : a.name
+  const title = mode === 'REBASE' ? L('تحديث القيمة', 'Update the value') : mode === 'LINK' ? L('ربط بالسعر المنشور', 'Link to the published price') : mode === 'EDIT' ? L('تعديل الأصل', 'Edit asset') : mode === 'PRICE' ? L('السعر يدويًا', 'Manual price') : mode ? `${TX_LABEL[mode as TxType]} — ${a.name}` : a.name
 
   return (
     <>
@@ -111,7 +124,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
           </div>
         ) : mode ? (
           <div className="flex gap-2">
-            <button className="btn-primary flex-1" disabled={!txValid} onClick={submitTx}>{mode === 'LINK' ? L('اربط الصندوق', 'Link the fund') : mode === 'PRICE' ? L('حفظ السعر', 'Save price') : L('تسجيل', 'Record')}</button>
+            <button className="btn-primary flex-1" disabled={!txValid} onClick={submitTx}>{mode === 'REBASE' ? L('حفظ القيمة', 'Save the value') : mode === 'LINK' ? L('اربط الصندوق', 'Link the fund') : mode === 'PRICE' ? L('حفظ السعر', 'Save price') : L('تسجيل', 'Record')}</button>
             <button className="btn-ghost flex-1" onClick={() => setMode(null)}>{L('إلغاء', 'Cancel')}</button>
           </div>
         ) : undefined
@@ -154,9 +167,14 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
               </Notice>
             )}
             {live && a.unitsEstimated && (
-              <Notice tone="warn" title={L('عدد الوحدات تقديري', 'The unit count is an estimate')}
-                action={<button className="btn-soft min-h-[40px] px-4" onClick={() => open('EDIT')}>{L('أدخل العدد من كشف حسابك', 'Enter the count from your statement')}</button>}>
-                {L('حُسب من القيمة التي أدخلتها. العدد الدقيق في كشف حساب الصندوق.', 'It was derived from the value you entered. The exact count is on your fund statement.')}
+              <Notice tone="info" title={(a.valueAnchor ?? 0) > 0 ? L('بانتظار أول سعر منشور', 'Waiting for the first published price') : L('القيمة تتحرك مع سعر الوحدة', 'The value moves with the unit price')}
+                action={<div className="flex flex-wrap gap-2">
+                  <button className="btn-soft min-h-[40px] px-4" onClick={() => open('REBASE')}>{L('حدّث القيمة', 'Update the value')}</button>
+                  {!((a.valueAnchor ?? 0) > 0) && <button className="btn-ghost min-h-[40px] px-4" onClick={() => open('EDIT')}>{L('أدخل عدد الوحدات', 'Enter the unit count')}</button>}
+                </div>}>
+                {(a.valueAnchor ?? 0) > 0
+                  ? L('تُعرض القيمة كما أدخلتها، وتبدأ تتحرك عند تسجيل أول سعر لهذا الصندوق.', 'The value shows as you entered it and starts moving once a price is recorded for this fund.')
+                  : L('عدد الوحدات محسوب من القيمة التي أدخلتها. إن اختلفت عن كشف حسابك حدّثها بأي وقت.', 'The unit count was derived from the value you entered. If it differs from your statement, update it at any time.')}
               </Notice>
             )}
 
@@ -177,6 +195,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
                 </>
               )}
             </div>
+            {live && a.isFund && (a.priceFactor || 1) === 1 && !a.unitsEstimated && <button className="btn-soft w-full" onClick={() => open('REBASE')}>{L('حدّث القيمة من كشف حسابك', 'Update the value from your statement')}</button>}
             {!live && <button className="btn-ghost w-full" onClick={() => open('DIVIDEND')}>{L('سجّل عائدًا أو توزيعة', 'Record income / dividend')}</button>}
 
             <dl className="divide-y divide-line rounded-2xl border border-line text-sm">
@@ -243,18 +262,38 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
             </Field>
             {nav && nav.price > 0 && (
               <button className="btn-soft w-full" onClick={() => { setUnits(unitsFromValue(a.manualValue, nav.price)); setEstimated(true) }}>
-                {L(`لا أعرف العدد — احسبه من قيمتي الحالية (${num(a.manualValue, 0)})`, `I do not know it — derive it from my current value (${num(a.manualValue, 0)})`)}
+                {L(`استخدم قيمتي الحالية (${num(a.manualValue, 0)})`, `Use my current value (${num(a.manualValue, 0)})`)}
               </button>
             )}
             {units > 0 && nav && nav.price > 0 && (
-              <p className="text-sm text-ink-soft">{L('القيمة بعد الربط', 'Value after linking')} <span className="num font-semibold text-ink">{num(units * nav.price, 2)} {fund.currency}</span>{estimated && <> · {L('تقديري إلى أن تدخل العدد من كشفك', 'an estimate until you enter the count from your statement')}</>}</p>
+              <p className="text-sm text-ink-soft">{L('القيمة بعد الربط', 'Value after linking')} <span className="num font-semibold text-ink">{num(units * nav.price, 2)} {fund.currency}</span>{estimated && <> · {L('ثم تتحرك يوميًا مع سعر الوحدة', 'then it moves daily with the unit price')}</>}</p>
             )}
             <p className="hint">{L('يبقى المبلغ المستثمَر ودور الأصل (استثماري أو طوارئ) كما هما. تقدر ترجع للقيمة اليدوية من «تعديل الأصل».', 'The amount invested and the asset’s role stay as they are.')}</p>
           </div>
         )}
 
+        {/* Re-state what a priced fund is worth: its units follow, and the value keeps moving with the price */}
+        {mode === 'REBASE' && (
+          <div className="space-y-4">
+            <Field label={L('قيمته عندي الآن', 'What it is worth now')} hint={L('من كشف حسابك أو تطبيق البنك.', 'From your statement or bank app.')}>
+              <NumberInput value={amount} onChange={setAmount} suffix={a.currency} autoFocus />
+            </Field>
+            <p className="text-sm text-ink-soft">{L('القيمة المحسوبة الآن', 'Value calculated now')} <span className="num font-semibold text-ink">{num(valueNow, 2)}</span>
+              {Math.abs(rebaseDiff) >= 0.01 && amount > 0 && <> · {L('الفرق', 'difference')} <span className={`num font-semibold ${rebaseDiff > 0 ? 'text-gain' : 'text-loss'}`}>{rebaseDiff > 0 ? '+' : ''}{num(rebaseDiff, 2)}</span></>}</p>
+            {unitNow > 0 && Math.abs(rebaseDiff) >= 0.01 && amount > 0 && (
+              <Field group label={L('سبب الفرق', 'Why it differs')}
+                hint={why === 'fix' ? L('يُعدَّل عدد الوحدات ليطابق القيمة، ويبقى المبلغ المستثمَر كما هو.', 'The unit count is adjusted to match the value; the amount invested stays as it is.')
+                  : why === 'in' ? L('يُسجَّل الفرق شراءً جديدًا بسعر اليوم، فيزيد المبلغ المستثمَر.', 'The difference is recorded as a new purchase at today’s price, so the amount invested goes up.')
+                  : L('يُسجَّل الفرق بيعًا بسعر اليوم.', 'The difference is recorded as a sale at today’s price.')}>
+                <Chips wrap value={why} onChange={setWhy} options={[{ value: 'fix' as const, label: L('تصحيح الرصيد', 'Correct the balance') }, ...(rebaseDiff > 0 ? [{ value: 'in' as const, label: L('أضفت مبلغًا', 'I added money') }] : [{ value: 'out' as const, label: L('سحبت مبلغًا', 'I took money out') }])]} />
+              </Field>
+            )}
+            {!(unitNow > 0) && <p className="hint">{L('لا سعر منشور لهذا الصندوق بعد: تُحفظ القيمة كما هي إلى أن يُسجَّل أول سعر.', 'No published price for this fund yet: the value is kept as entered until the first price is recorded.')}</p>}
+          </div>
+        )}
+
         {/* Transaction form */}
-        {mode && mode !== 'EDIT' && mode !== 'PRICE' && mode !== 'LINK' && (
+        {mode && mode !== 'EDIT' && mode !== 'PRICE' && mode !== 'LINK' && mode !== 'REBASE' && (
           <div className="space-y-4">
             {isTrade ? (
               <div className="grid grid-cols-2 gap-3">

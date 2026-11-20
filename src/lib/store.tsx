@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountKind, AppData, Asset, Pick2, Quotes, Settings } from './types'
 import { DEFAULT_ZAKAT_PERCENT, defaultSettings, defaultZakatMode, emptyData, genId, todayISO } from './labels'
-import { applyTransaction, computeView, fxSymbolsNeeded, revertTransaction, type PortfolioView, type TxInput } from './engine/valuation'
+import { applyTransaction, computeView, fxSymbolsNeeded, revertTransaction, type PortfolioView, type TxInput, settleAnchors } from './engine/valuation'
 import { GOLD_SYMBOL } from './engine/zakat'
 import { fetchQuotes, loadQuoteCache } from './market-client'
 import { syncDecision } from './engine/sync'
@@ -232,6 +232,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const { quotes: merged, failed } = await fetchQuotes(symbols, known, force)
     setQuotes(merged)
     setQuoteStatus(failed.length === 0 ? 'ok' : failed.length < symbols.length ? 'partial' : 'failed')
+    // A fund entered by its value before it had a price becomes units at the first price.
+    const settled = settleAnchors(dataRef.current.assets, merged)
+    if (settled.length > 0) commit((d) => { for (const { id, patch } of settled) { const i = d.assets.findIndex((a) => a.id === id); if (i >= 0) d.assets[i] = { ...d.assets[i], ...patch } } })
     // Live FX for currencies other than the pegged USD.
     const fxPatch: Record<string, number> = {}
     for (const s of symbols) {

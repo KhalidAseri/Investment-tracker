@@ -2,6 +2,7 @@
 //
 //   GET ?symbols=2222.SR,VOO,CSPX.L      latest price per symbol
 //   GET ?history=2222.SR&range=1y        closing prices (1m | 3m | 1y | 5y | max)
+//   GET ?search=vanguard                 listed shares, funds and crypto matching a name or symbol
 //
 // Prices come from Yahoo Finance, fetched server-side (no browser CORS limits) and cached in
 // invest_quotes / invest_price_history. Symbols no provider carries (Saudi mutual funds) are written
@@ -115,11 +116,37 @@ async function history(symbol: string, key: string) {
   return { symbol, range: key, source, points: rows.map((r) => [r.day, Number(r.close)]) }
 }
 
+const SEARCHABLE = new Set(['EQUITY', 'ETF', 'MUTUALFUND', 'CRYPTOCURRENCY'])
+
+/** Name or symbol lookup across the provider's listed securities. Nothing is stored. */
+async function search(q: string) {
+  for (const host of ['query2', 'query1']) {
+    try {
+      const res = await fetch(`https://${host}.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=14&newsCount=0&listsCount=0`, {
+        headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) continue
+      const rows = ((await res.json())?.quotes ?? []) as Record<string, unknown>[]
+      const results = rows
+        .filter((r) => SEARCHABLE.has(String(r.quoteType)) && SYMBOL.test(String(r.symbol)))
+        .slice(0, 10)
+        .map((r) => ({ symbol: String(r.symbol), name: String(r.longname ?? r.shortname ?? r.symbol), type: String(r.quoteType), exchange: String(r.exchDisp ?? r.exchange ?? '') }))
+      return { query: q, results }
+    } catch { /* try the other host */ }
+  }
+  return { query: q, results: [], failed: true }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   if (req.method !== 'GET') return json({ error: 'GET only' }, 405)
   const url = new URL(req.url)
   try {
+    const q = (url.searchParams.get('search') ?? '').trim()
+    if (q) {
+      if (q.length < 2 || q.length > 40) return json({ error: 'search: 2-40 characters' }, 400)
+      return json(await search(q))
+    }
     const h = url.searchParams.get('history')
     if (h) {
       if (!SYMBOL.test(h)) return json({ error: 'bad symbol' }, 400)

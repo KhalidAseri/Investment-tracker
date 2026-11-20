@@ -198,3 +198,24 @@ export async function fetchQuotes(symbols: string[], known: Quotes, force = fals
   if (todo.length > failed.length) saveQuoteCache(merged)
   return { quotes: merged, failed }
 }
+
+export interface MarketHit { symbol: string; name: string; type: 'EQUITY' | 'ETF' | 'MUTUALFUND' | 'CRYPTOCURRENCY'; exchange: string }
+
+/** Listed shares, funds and coins matching a name or symbol, from the price service. Empty on any failure. */
+export async function searchMarket(query: string): Promise<MarketHit[]> {
+  const q = query.trim()
+  if (q.length < 2 || q.length > 40) return []
+  try {
+    const res = await fetch(`${PRICE_SERVICE}?search=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(12000) })
+    if (!res.ok) return []
+    return ((await res.json()) as { results?: MarketHit[] }).results ?? []
+  } catch {
+    return []
+  }
+}
+
+/** The history range wide enough to contain a past day. */
+export function rangeFor(day: string, now = Date.now()): HistoryRange {
+  const years = (now - new Date(day + 'T00:00:00Z').getTime()) / (365.25 * 86400000)
+  return years <= 0.95 ? '1y' : years <= 4.9 ? '5y' : 'max'
+}

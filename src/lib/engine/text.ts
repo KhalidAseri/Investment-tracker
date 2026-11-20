@@ -34,7 +34,10 @@ export function matches(query: string, text: string): boolean {
   const q = tokens(query)
   if (q.length === 0) return true
   const hay = tokens(text)
-  return q.every((t) => hay.some((h) => h.includes(t)))
+  if (q.every((t) => hay.some((h) => h.includes(t)))) return true
+  // «sp500» against «S&P 500»: compare with the spaces taken out
+  const joined = q.join('')
+  return joined.length >= 3 && normalize(text).replace(/ /g, '').includes(joined)
 }
 
 /** 0–1: how much two names share. 1 only when one name's words are all inside the other's. */

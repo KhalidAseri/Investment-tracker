@@ -566,3 +566,35 @@ test('linking a manual asset to a published price keeps the money invested', asy
   assert.ok(Math.abs(valueAsset(linked, q, {}).value - 78.9165 * 200) < 0.01)
   assert.equal(unitsFromValue(100, 0), 0)
 })
+
+test('price on a purchase date: last close on or before it, flagged when far', async () => {
+  const { priceOn } = await import('./performance.ts')
+  const { matches } = await import('./text.ts')
+  const pts = [{ day: '2026-01-05', close: 10 }, { day: '2026-01-12', close: 11 }, { day: '2026-03-02', close: 12 }]
+  assert.deepEqual(priceOn(pts, '2026-01-12'), { price: 11, day: '2026-01-12', exact: true })
+  assert.deepEqual(priceOn(pts, '2026-01-15'), { price: 11, day: '2026-01-12', exact: true })     // weekend or holiday
+  assert.deepEqual(priceOn(pts, '2026-02-20'), { price: 11, day: '2026-01-12', exact: false })    // more than a week away
+  assert.deepEqual(priceOn(pts, '2025-06-01'), { price: 10, day: '2026-01-05', exact: false })    // before the series starts
+  assert.equal(priceOn([], '2026-01-01'), null)
+  assert.ok(matches('sp500', 'Vanguard S&P 500 ETF'))
+})
+
+test('a fund entered by its value follows the unit price, and can be re-stated at any time', async () => {
+  const { rebaseToValue, settleAnchors, valueAsset } = await import('./valuation.ts')
+  const q = (price: number) => ({ F: { symbol: 'F', price, change: 0, changePercent: 0, currency: 'SAR', name: '', updatedAt: new Date().toISOString() } })
+  let fund = asset({ id: 'f', symbol: 'F', pricing: 'live', quantity: 0, costBasis: 15000, manualValue: 0 })
+  fund = { ...fund, ...rebaseToValue(fund, 15511, 196.5496) }
+  assert.equal(fund.quantity, 78.9165); assert.equal(fund.unitsEstimated, true)
+  assert.ok(Math.abs(valueAsset(fund, q(196.5496), {}).value - 15511) < 0.02)
+  assert.ok(Math.abs(valueAsset(fund, q(198), {}).value - 78.9165 * 198) < 0.01)        // moves with the price
+  fund = { ...fund, ...rebaseToValue(fund, 16000, 198) }                                 // holder re-states it
+  assert.ok(Math.abs(valueAsset(fund, q(198), {}).value - 16000) < 0.02); assert.equal(fund.costBasis, 15000)
+  // no price yet: the stated value is kept, then becomes units at the first price
+  let other = asset({ id: 'o', symbol: 'F', pricing: 'live', quantity: 0, costBasis: 5000, manualValue: 0 })
+  other = { ...other, ...rebaseToValue(other, 5200, 0) }
+  assert.equal(valueAsset(other, {}, {}).value, 5200)
+  const [settled] = settleAnchors([other], q(10.4))
+  other = { ...other, ...settled.patch }
+  assert.equal(other.quantity, 500); assert.equal(other.valueAnchor, undefined)
+  assert.equal(settleAnchors([other], q(10.4)).length, 0)
+})

@@ -43,7 +43,11 @@ export function valueAsset(asset: Asset, quotes: Quotes, fx: Record<string, numb
   let source: AssetView['source']
 
   const quote = asset.pricing === 'live' && asset.symbol ? quotes[asset.symbol] : undefined
-  if (quote && quote.price > 0) {
+  if (asset.pricing === 'live' && (asset.valueAnchor ?? 0) > 0) {
+    // stated by the holder and not yet turned into units: it is worth what they said
+    value = (asset.valueAnchor as number) * rate
+    source = 'manual'
+  } else if (quote && quote.price > 0) {
     const factor = asset.priceFactor || 1
     const qRate = fxRate(quote.currency || asset.currency, fx)
     price = quote.price * factor
@@ -178,6 +182,26 @@ export function linkToSymbol(asset: Asset, target: { symbol: string; currency: s
     unitsEstimated: estimated,
     valueUpdatedAt: new Date().toISOString(),
   }
+}
+
+/**
+ * Sets a priced holding to be worth `value` now: its units become value ÷ price, and from then on
+ * the value follows the price. With no price yet, the value is kept as an anchor until one arrives.
+ */
+export function rebaseToValue(asset: Asset, value: number, unitPrice: number): Partial<Asset> {
+  const price = unitPrice * (asset.priceFactor || 1)
+  if (!(price > 0)) return { valueAnchor: value, unitsEstimated: true, valueUpdatedAt: new Date().toISOString() }
+  return { quantity: unitsFromValue(value, price), lastPrice: unitPrice, valueAnchor: undefined, unitsEstimated: true, valueUpdatedAt: new Date().toISOString() }
+}
+
+/** Anchored values whose asset now has a price: the patches that turn them into units. */
+export function settleAnchors(assets: Asset[], quotes: Quotes): { id: string; patch: Partial<Asset> }[] {
+  const out: { id: string; patch: Partial<Asset> }[] = []
+  for (const a of assets) {
+    const q = a.symbol ? quotes[a.symbol] : undefined
+    if (a.pricing === 'live' && (a.valueAnchor ?? 0) > 0 && q && q.price > 0) out.push({ id: a.id, patch: rebaseToValue(a, a.valueAnchor as number, q.price) })
+  }
+  return out
 }
 
 /** Units that a value buys at a unit price, to 4 decimals (how fund statements print them). */

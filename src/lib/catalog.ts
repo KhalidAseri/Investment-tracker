@@ -1,5 +1,5 @@
 import type { AccountKind, AssetClass, Pricing, Region } from './types.ts'
-import { similarity, tokens } from './engine/text.ts'
+import { matches, similarity, tokens } from './engine/text.ts'
 
 /** What the user picks first in the add-asset wizard. */
 export type AssetKindId = 'SA_STOCK' | 'GLOBAL' | 'FUND' | 'CASH' | 'GOLD' | 'REAL_ESTATE' | 'CRYPTO' | 'OTHER'
@@ -205,6 +205,28 @@ export const CATALOG: CatalogItem[] = [
   gl('VUAA.L', 'Vanguard S&P 500 تراكمي (أيرلندي)', 'Vanguard S&P 500 UCITS Acc', { domicile: 'IE' }),
   gl('VWRA.L', 'Vanguard كل العالم تراكمي (أيرلندي)', 'Vanguard FTSE All-World UCITS Acc', { domicile: 'IE', region: 'GLOBAL' }),
   gl('IWDA.L', 'iShares العالم المتقدم تراكمي (أيرلندي)', 'iShares Core MSCI World UCITS Acc', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('ISUS.L', 'iShares أمريكا الإسلامي بالجنيه (أيرلندي)', 'iShares MSCI USA Islamic UCITS (GBP)', { domicile: 'IE', shariah: true, currency: 'GBP' }),
+  gl('ISWD.L', 'iShares العالم الإسلامي بالجنيه (أيرلندي)', 'iShares MSCI World Islamic UCITS (GBP)', { domicile: 'IE', shariah: true, region: 'GLOBAL', currency: 'GBP' }),
+  gl('HIWO.L', 'HSBC العالم الإسلامي (أيرلندي)', 'HSBC MSCI World Islamic ESG UCITS', { domicile: 'IE', shariah: true, region: 'GLOBAL' }),
+  gl('IGDA.L', 'Invesco داو جونز الإسلامي للأسواق المتقدمة (أيرلندي)', 'Invesco Dow Jones Islamic Global Developed Markets UCITS', { domicile: 'IE', shariah: true, region: 'GLOBAL' }),
+  gl('VUSD.L', 'Vanguard S&P 500 موزِّع (أيرلندي)', 'Vanguard S&P 500 UCITS Dist (USD)', { domicile: 'IE' }),
+  gl('IDUS.L', 'iShares S&P 500 موزِّع (أيرلندي)', 'iShares Core S&P 500 UCITS Dist', { domicile: 'IE' }),
+  gl('CNDX.L', 'iShares ناسداك 100 تراكمي (أيرلندي)', 'iShares Nasdaq 100 UCITS Acc', { domicile: 'IE', sector: 'TECH' }),
+  gl('IUIT.L', 'iShares تقنية S&P 500 (أيرلندي)', 'iShares S&P 500 Information Technology UCITS', { domicile: 'IE', sector: 'TECH' }),
+  gl('ISAC.L', 'iShares كل العالم ACWI تراكمي (أيرلندي)', 'iShares MSCI ACWI UCITS Acc', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('XDWD.L', 'Xtrackers العالم المتقدم (أيرلندي)', 'Xtrackers MSCI World UCITS', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('EIMI.L', 'iShares الأسواق الناشئة تراكمي (أيرلندي)', 'iShares Core MSCI EM IMI UCITS Acc', { domicile: 'IE', region: 'EM' }),
+  gl('WSML.L', 'iShares الشركات الصغيرة العالمية (أيرلندي)', 'iShares MSCI World Small Cap UCITS', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('IWMO.L', 'iShares العالم بعامل الزخم (أيرلندي)', 'iShares Edge MSCI World Momentum UCITS', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('IWQU.L', 'iShares العالم بعامل الجودة (أيرلندي)', 'iShares Edge MSCI World Quality UCITS', { domicile: 'IE', region: 'GLOBAL' }),
+  gl('AGGU.L', 'iShares السندات العالمية المجمّعة (أيرلندي)', 'iShares Core Global Aggregate Bond UCITS', { domicile: 'IE', assetClass: 'FIXED_INCOME', region: 'GLOBAL', sector: 'NA' }),
+  gl('IB01.L', 'iShares سندات الخزانة الأمريكية حتى سنة (أيرلندي)', 'iShares $ Treasury Bond 0-1yr UCITS', { domicile: 'IE', assetClass: 'FIXED_INCOME', sector: 'NA' }),
+  gl('VWRL.L', 'Vanguard كل العالم موزِّع بالجنيه (أيرلندي)', 'Vanguard FTSE All-World UCITS Dist (GBP)', { domicile: 'IE', region: 'GLOBAL', currency: 'GBP' }),
+  gl('VWRP.L', 'Vanguard كل العالم تراكمي بالجنيه (أيرلندي)', 'Vanguard FTSE All-World UCITS Acc (GBP)', { domicile: 'IE', region: 'GLOBAL', currency: 'GBP' }),
+  gl('VUSA.L', 'Vanguard S&P 500 موزِّع بالجنيه (أيرلندي)', 'Vanguard S&P 500 UCITS Dist (GBP)', { domicile: 'IE', currency: 'GBP' }),
+  gl('SWDA.L', 'iShares العالم المتقدم بالجنيه (أيرلندي)', 'iShares Core MSCI World UCITS (GBP)', { domicile: 'IE', region: 'GLOBAL', currency: 'GBP' }),
+  gl('VHYL.L', 'Vanguard التوزيعات العالية العالمي بالجنيه (أيرلندي)', 'Vanguard FTSE All-World High Dividend UCITS (GBP)', { domicile: 'IE', region: 'GLOBAL', currency: 'GBP' }),
+  gl('VFEM.L', 'Vanguard الأسواق الناشئة بالجنيه (أيرلندي)', 'Vanguard FTSE Emerging Markets UCITS (GBP)', { domicile: 'IE', region: 'EM', currency: 'GBP' }),
 
   // US-listed funds
   gl('SPUS', 'SP Funds S&P 500 الشرعي', 'SP Funds S&P 500 Sharia ETF', { shariah: true }),
@@ -219,6 +241,57 @@ export const CATALOG: CatalogItem[] = [
   gl('ACWI', 'iShares MSCI ACWI العالمي', 'iShares MSCI ACWI ETF', { region: 'GLOBAL' }),
   gl('VXUS', 'Vanguard العالم عدا أمريكا', 'Vanguard Total International ETF', { region: 'DEV' }),
   gl('SCHD', 'Schwab للتوزيعات الأمريكية', 'Schwab US Dividend Equity ETF'),
+  gl('UMMA', 'Wahed داو جونز الإسلامي العالمي', 'Wahed Dow Jones Islamic World ETF', { shariah: true, region: 'DEV' }),
+  gl('SPWO', 'SP Funds العالم عدا أمريكا الشرعي', 'SP Funds S&P World (ex-US) ETF', { shariah: true, region: 'DEV' }),
+  gl('SPTE', 'SP Funds التقنية العالمية الشرعي', 'SP Funds S&P Global Technology ETF', { shariah: true, region: 'GLOBAL', sector: 'TECH' }),
+  gl('SPRE', 'SP Funds الريت العالمي الشرعي', 'SP Funds S&P Global REIT Sharia ETF', { shariah: true, region: 'GLOBAL', assetClass: 'REAL_ESTATE', sector: 'REAL_ESTATE' }),
+  gl('IVV', 'iShares S&P 500', 'iShares Core S&P 500 ETF'),
+  gl('RSP', 'Invesco S&P 500 متساوي الأوزان', 'Invesco S&P 500 Equal Weight ETF'),
+  gl('VUG', 'Vanguard أسهم النمو', 'Vanguard Growth ETF'),
+  gl('VTV', 'Vanguard أسهم القيمة', 'Vanguard Value ETF'),
+  gl('SCHG', 'Schwab أسهم النمو الكبيرة', 'Schwab US Large-Cap Growth ETF'),
+  gl('VOOG', 'Vanguard S&P 500 للنمو', 'Vanguard S&P 500 Growth ETF'),
+  gl('SCHB', 'Schwab السوق الأمريكي الواسع', 'Schwab US Broad Market ETF'),
+  gl('IWM', 'iShares راسل 2000 (شركات صغيرة)', 'iShares Russell 2000 ETF'),
+  gl('VB', 'Vanguard الشركات الصغيرة', 'Vanguard Small-Cap ETF'),
+  gl('VYM', 'Vanguard التوزيعات العالية', 'Vanguard High Dividend Yield ETF'),
+  gl('VIG', 'Vanguard نمو التوزيعات', 'Vanguard Dividend Appreciation ETF'),
+  gl('DGRO', 'iShares نمو التوزيعات', 'iShares Core Dividend Growth ETF'),
+  gl('JEPI', 'JPMorgan دخل علاوة الأسهم', 'JPMorgan Equity Premium Income ETF'),
+  gl('JEPQ', 'JPMorgan دخل علاوة ناسداك', 'JPMorgan Nasdaq Equity Premium Income ETF', { sector: 'TECH' }),
+  gl('VGT', 'Vanguard قطاع التقنية', 'Vanguard Information Technology ETF', { sector: 'TECH' }),
+  gl('XLK', 'SPDR قطاع التقنية', 'Technology Select Sector SPDR', { sector: 'TECH' }),
+  gl('SMH', 'VanEck أشباه الموصلات', 'VanEck Semiconductor ETF', { sector: 'TECH' }),
+  gl('SOXX', 'iShares أشباه الموصلات', 'iShares Semiconductor ETF', { sector: 'TECH' }),
+  gl('ARKK', 'ARK للابتكار', 'ARK Innovation ETF', { sector: 'TECH' }),
+  gl('XLE', 'SPDR قطاع الطاقة', 'Energy Select Sector SPDR', { sector: 'ENERGY' }),
+  gl('XLF', 'SPDR القطاع المالي', 'Financial Select Sector SPDR', { sector: 'FINANCIALS' }),
+  gl('VNQ', 'Vanguard العقار الأمريكي', 'Vanguard Real Estate ETF', { assetClass: 'REAL_ESTATE', sector: 'REAL_ESTATE' }),
+  gl('VEA', 'Vanguard الأسواق المتقدمة عدا أمريكا', 'Vanguard FTSE Developed Markets ETF', { region: 'DEV' }),
+  gl('IEFA', 'iShares الأسواق المتقدمة EAFE', 'iShares Core MSCI EAFE ETF', { region: 'DEV' }),
+  gl('VGK', 'Vanguard أوروبا', 'Vanguard FTSE Europe ETF', { region: 'DEV' }),
+  gl('EWJ', 'iShares اليابان', 'iShares MSCI Japan ETF', { region: 'DEV' }),
+  gl('VWO', 'Vanguard الأسواق الناشئة', 'Vanguard FTSE Emerging Markets ETF', { region: 'EM' }),
+  gl('IEMG', 'iShares الأسواق الناشئة', 'iShares Core MSCI Emerging Markets ETF', { region: 'EM' }),
+  gl('INDA', 'iShares الهند', 'iShares MSCI India ETF', { region: 'EM' }),
+  gl('KSA', 'iShares السعودية (مدرج في أمريكا)', 'iShares MSCI Saudi Arabia ETF', { region: 'SA' }),
+  gl('BND', 'Vanguard كامل سوق السندات الأمريكية', 'Vanguard Total Bond Market ETF', { assetClass: 'FIXED_INCOME', sector: 'NA' }),
+  gl('AGG', 'iShares السندات الأمريكية المجمّعة', 'iShares Core US Aggregate Bond ETF', { assetClass: 'FIXED_INCOME', sector: 'NA' }),
+  gl('TLT', 'iShares سندات الخزانة 20+ سنة', 'iShares 20+ Year Treasury Bond ETF', { assetClass: 'FIXED_INCOME', sector: 'NA' }),
+  gl('SGOV', 'iShares أذونات الخزانة 0–3 أشهر', 'iShares 0-3 Month Treasury Bond ETF', { assetClass: 'CASH', sector: 'NA' }),
+  gl('BIL', 'SPDR أذونات الخزانة 1–3 أشهر', 'SPDR Bloomberg 1-3 Month T-Bill ETF', { assetClass: 'CASH', sector: 'NA' }),
+
+  // US mutual funds (priced once a day by the provider)
+  gl('VFIAX', 'Vanguard 500 (صندوق استثماري)', 'Vanguard 500 Index Fund Admiral'),
+  gl('FXAIX', 'Fidelity 500 (صندوق استثماري)', 'Fidelity 500 Index Fund'),
+  gl('SWPPX', 'Schwab S&P 500 (صندوق استثماري)', 'Schwab S&P 500 Index Fund'),
+  gl('VTSAX', 'Vanguard كامل السوق الأمريكي (صندوق استثماري)', 'Vanguard Total Stock Market Index Admiral'),
+  gl('FZROX', 'Fidelity كامل السوق بلا رسوم (صندوق استثماري)', 'Fidelity ZERO Total Market Index Fund'),
+  gl('VIGAX', 'Vanguard أسهم النمو (صندوق استثماري)', 'Vanguard Growth Index Admiral'),
+  gl('VTIAX', 'Vanguard العالم عدا أمريكا (صندوق استثماري)', 'Vanguard Total International Stock Index Admiral', { region: 'DEV' }),
+  gl('VBTLX', 'Vanguard كامل سوق السندات (صندوق استثماري)', 'Vanguard Total Bond Market Index Admiral', { assetClass: 'FIXED_INCOME', sector: 'NA' }),
+  gl('AMANX', 'أمانة للدخل الشرعي (صندوق استثماري)', 'Amana Income Fund', { shariah: true }),
+  gl('AMAGX', 'أمانة للنمو الشرعي (صندوق استثماري)', 'Amana Growth Fund', { shariah: true }),
 
   // US stocks
   gl('AAPL', 'أبل', 'Apple', { isFund: false, sector: 'TECH' }),
@@ -227,6 +300,22 @@ export const CATALOG: CatalogItem[] = [
   gl('GOOGL', 'ألفابت (قوقل)', 'Alphabet', { isFund: false, sector: 'TECH' }),
   gl('AMZN', 'أمازون', 'Amazon', { isFund: false, sector: 'CONSUMER' }),
   gl('TSLA', 'تسلا', 'Tesla', { isFund: false, sector: 'CONSUMER' }),
+  gl('META', 'ميتا (فيسبوك)', 'Meta Platforms', { isFund: false, sector: 'TECH' }),
+  gl('AVGO', 'برودكوم', 'Broadcom', { isFund: false, sector: 'TECH' }),
+  gl('AMD', 'إيه إم دي', 'AMD', { isFund: false, sector: 'TECH' }),
+  gl('ORCL', 'أوراكل', 'Oracle', { isFund: false, sector: 'TECH' }),
+  gl('NFLX', 'نتفليكس', 'Netflix', { isFund: false, sector: 'TELECOM' }),
+  gl('BRK-B', 'بيركشاير هاثاواي', 'Berkshire Hathaway B', { isFund: false, sector: 'FINANCIALS' }),
+  gl('JPM', 'جي بي مورغان', 'JPMorgan Chase', { isFund: false, sector: 'FINANCIALS' }),
+  gl('V', 'فيزا', 'Visa', { isFund: false, sector: 'FINANCIALS' }),
+  gl('MA', 'ماستركارد', 'Mastercard', { isFund: false, sector: 'FINANCIALS' }),
+  gl('LLY', 'إيلي ليلي', 'Eli Lilly', { isFund: false, sector: 'HEALTH' }),
+  gl('UNH', 'يونايتد هيلث', 'UnitedHealth', { isFund: false, sector: 'HEALTH' }),
+  gl('XOM', 'إكسون موبيل', 'ExxonMobil', { isFund: false, sector: 'ENERGY' }),
+  gl('WMT', 'وولمارت', 'Walmart', { isFund: false, sector: 'CONSUMER' }),
+  gl('COST', 'كوستكو', 'Costco', { isFund: false, sector: 'CONSUMER' }),
+  gl('HD', 'هوم ديبو', 'Home Depot', { isFund: false, sector: 'CONSUMER' }),
+  gl('KO', 'كوكاكولا', 'Coca-Cola', { isFund: false, sector: 'CONSUMER' }),
 
   // Gold funds
   { symbol: 'GLD', ar: 'SPDR للذهب', en: 'SPDR Gold Shares', kind: 'GOLD', assetClass: 'GOLD', region: 'NONE', sector: 'NA', currency: 'USD', isFund: true, domicile: 'US' },
@@ -236,6 +325,10 @@ export const CATALOG: CatalogItem[] = [
   // Crypto
   { symbol: 'BTC-USD', ar: 'بتكوين', en: 'Bitcoin', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
   { symbol: 'ETH-USD', ar: 'إيثيريوم', en: 'Ethereum', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
+  { symbol: 'SOL-USD', ar: 'سولانا', en: 'Solana', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
+  { symbol: 'BNB-USD', ar: 'بي إن بي', en: 'BNB', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
+  { symbol: 'XRP-USD', ar: 'ريبل', en: 'XRP', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
+  { symbol: 'ADA-USD', ar: 'كاردانو', en: 'Cardano', kind: 'CRYPTO', assetClass: 'CRYPTO', region: 'NONE', sector: 'NA', currency: 'USD', isFund: false, domicile: '' },
 ]
 
 export function searchCatalog(kind: AssetKindId, query: string, shariahFirst: boolean, group?: SaudiGroup): CatalogItem[] {
@@ -272,4 +365,33 @@ export function findCatalogFund(name: string, currency = 'SAR'): CatalogItem | n
     }
   }
   return best?.item ?? null
+}
+
+/** The shelves of the add screen: what people look for first. */
+export type Shelf = 'saFunds' | 'glFunds' | 'saStocks' | 'glStocks' | 'metals'
+export const SHELVES: { id: Shelf; ar: string; en: string }[] = [
+  { id: 'saFunds', ar: 'صناديق سعودية', en: 'Saudi funds' },
+  { id: 'glFunds', ar: 'صناديق عالمية', en: 'Global funds' },
+  { id: 'saStocks', ar: 'أسهم سعودية', en: 'Saudi stocks' },
+  { id: 'glStocks', ar: 'أسهم عالمية', en: 'Global stocks' },
+  { id: 'metals', ar: 'ذهب وعملات رقمية', en: 'Gold & crypto' },
+]
+export function shelfOf(c: CatalogItem): Shelf {
+  if (c.kind === 'SA_STOCK') return c.group === 'stock' ? 'saStocks' : 'saFunds'
+  if (c.kind === 'GLOBAL') return c.isFund ? 'glFunds' : 'glStocks'
+  return 'metals'
+}
+export const kindOf = (id: AssetKindId): AssetKind => ASSET_KINDS.find((k) => k.id === id)!
+
+/** One search across everything: Arabic or English name, symbol, or the manager's name. Empty query lists a shelf. */
+export function searchAll(query: string, shelf: Shelf | null, shariahFirst: boolean): CatalogItem[] {
+  const q = query.trim()
+  const sym = q.toLowerCase().replace(/\s+/g, '')
+  const items = CATALOG.filter((c) => {
+    if (!q) return !shelf || shelfOf(c) === shelf
+    if (isMutualFund(c.symbol)) return matches(q, `${c.ar} ${c.en} ${c.manager ?? ''}`)
+    const code = c.symbol.toLowerCase()
+    return code.startsWith(sym) || code.replace(/\.(sr|l)$/, '') === sym || matches(q, `${c.ar} ${c.en} ${c.manager ?? ''}`)
+  })
+  return shariahFirst && !q ? [...items].sort((a, b) => Number(!!b.shariah) - Number(!!a.shariah)) : items
 }

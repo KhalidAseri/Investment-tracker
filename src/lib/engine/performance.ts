@@ -83,3 +83,16 @@ export function manualIndex(events: { day: string; type: 'DEPOSIT' | 'WITHDRAW' 
   }
   return window(out)
 }
+
+/**
+ * The price to use for a purchase made on `day`: the last close on or before it, or the first
+ * close after it when the series starts later. `exact` is false when that close is more than a
+ * week away from the day, so the caller can say the units are approximate.
+ */
+export function priceOn(points: Point[], day: string): { price: number; day: string; exact: boolean } | null {
+  const s = window(points)
+  if (s.length === 0) return null
+  let pick = s[0]
+  for (const p of s) { if (p.day <= day) pick = p; else break }
+  return { price: pick.close, day: pick.day, exact: Math.abs(t(pick.day) - t(day)) <= 7 * DAY }
+}
