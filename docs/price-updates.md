@@ -22,50 +22,62 @@ touch any other table in the project.
 
 ## Procedure
 
-1. **What needs a price.**
+1. **What needs a price.** Two lists:
    ```sql
+   -- funds held by units: must be priced
    select distinct a->>'symbol' as symbol, a->>'name' as name
    from invest_portfolios p, jsonb_array_elements(p.data->'assets') a
    where a->>'pricing' = 'live' and a->>'symbol' like 'MF:%';
+
+   -- assets valued by hand: check each name against the fund list in src/lib/catalog.ts
+   select a->>'name' as name, a->>'manualValue' as value, a->>'valueUpdatedAt' as updated
+   from invest_portfolios p, jsonb_array_elements(p.data->'assets') a
+   where a->>'pricing' = 'manual';
    ```
+   A hand-valued asset whose name is a catalogue fund is **not** priced by this run (it has no units):
+   report it, and say that the app offers «اربطه بسعره» on that asset. Never edit `invest_portfolios`:
+   the app owns it and a write from here would collide with the phone's next sync.
    Also check provider coverage: any other `live` symbol whose `invest_quotes.fetched_at` is more than
    3 days old, or that has no row, did not get a provider price — report it (do not invent a price).
-   If no portfolio row exists, stop: nothing has been synced yet.
-2. **Find the published valuation** for each `MF:` fund, from the manager's own publication first:
-   - **Al Rajhi Capital**: daily PDF "ARC Funds NAV report", e.g.
-     `https://www.alrajhi-capital.sa/-/media/Feature/AlRajhiCapital/Daily-NAV-Report/2026/mar/ARC-Funds-NAV-report--Mar-26-2026.pdf`.
-     The folder and file name change daily and are not predictable; find the latest one by web search
-     ("ARC Funds NAV report" + month) or from links on alrajhi-capital.sa. Plain requests from the
-     sandbox are refused by the site's firewall; fetch through the web-fetch agent, then extract the
-     saved PDF with `pdftotext -layout`. The table gives, per fund: current price date, current price,
-     previous price.
-   - **Other managers** (SNB Capital, Riyad Capital, Alinma Investment, Albilad Capital, others):
-     the fund's page on the manager's site, its latest factsheet, or the fund's profile on
-     saudiexchange.sa (Saudi Exchange refuses automated fetches from the sandbox; use it only if the
-     web reader can open it).
-   - `MF:X-…` keys are funds the user typed by name: identify the fund from the asset name, then
-     use the source above.
-   - Never invent or estimate a NAV. If no published price is found, leave the previous one and
-     report the fund.
-3. **Write** for each fund found (prices in the fund's currency):
+2. **Al Rajhi Capital: price every fund in the report, every run**, whether or not anyone holds it
+   (one PDF carries all of them, and the history it builds is what the performance chart shows).
+   - URL: `https://alrajhi-capital.sa/-/media/Feature/AlRajhiCapital/Daily-NAV-Report/<YYYY>/<MON>/ARC-Funds-NAV-report--<Mon>-<DD>-<YYYY>.pdf`
+     e.g. `…/2026/NOV/ARC-Funds-NAV-report--Nov-17-2026.pdf` (verified 2026-11-20).
+   - The report for a valuation day is published the **next working day in the evening**. Start from
+     yesterday and walk back one day at a time (skip Friday and Saturday) until a PDF is returned; at
+     most 6 tries. A missing report comes back as an HTML «خطأ 404» page with HTTP 200.
+   - The month folder's spelling is not stable: seen `NOV`, `AUG`, `JAN`, `JUN`, `OCT` (2026), `Apr`,
+     `mar`, and `DEC` with a file named `December-14-2025`. Try upper case first, then `Nov`, then `nov`.
+   - Plain requests from the sandbox are refused by the site's firewall. Fetch through the **web-fetch
+     agent** (ask it only to fetch and report PDF-or-404, not to read), then parse the saved file:
+     `python3 -I scripts/parse-nav.py <copy of the pdf>`,
+     or `pdftotext -layout`. Each row gives: current price date, current price, previous price.
+     Take the **last** date-and-two-numbers group on a line (the first can be the inception date).
+   - Sanity check before writing: the report date matches the file name, and no fund moved more than
+     15% against its stored price unless the report itself shows that daily change.
+3. **Other managers** (SNB Capital, Riyad Capital, Alinma Investment, Albilad Capital, others), only
+   for funds someone holds: the fund's page on the manager's site or its latest factsheet. Saudi
+   Exchange, Argaam and Mubasher did not return data to automated readers when tried (2026-11-20).
+   `MF:X-…` keys are funds the user typed by name: identify the fund from the asset name first.
+   Never invent or estimate a NAV. If no published price is found, leave the previous one and report it.
+4. **Write** (prices in the fund's currency). One statement for all funds of a report:
    ```sql
-   insert into invest_quotes (symbol, price, prev_close, currency, name, as_of, source, source_url, fetched_at)
-   values ('<MF:…>', <nav>, <previous nav or null>, '<SAR|USD>', '<fund name>', '<valuation date>', 'claude', '<source url>', now())
-   on conflict (symbol) do update set price = excluded.price, prev_close = excluded.prev_close,
-     currency = excluded.currency, name = excluded.name, as_of = excluded.as_of, source = 'claude',
-     source_url = excluded.source_url, fetched_at = now()
-   where invest_quotes.as_of <= excluded.as_of;
-
-   insert into invest_price_history (symbol, day, close, source)
-   values ('<MF:…>', '<valuation date>', <nav>, 'claude')
-   on conflict (symbol, day) do update set close = excluded.close, source = 'claude';
+   with v(symbol, price, prev, cur, name) as (values ('MF:…', <nav>, <previous nav>, 'SAR', '<fund name>'), …),
+   q as (insert into invest_quotes (symbol, price, prev_close, currency, name, as_of, source, source_url, fetched_at)
+     select symbol, price, prev, cur, name, date '<valuation date>', 'claude', '<report url>', now() from v
+     on conflict (symbol) do update set price = excluded.price, prev_close = excluded.prev_close,
+       currency = excluded.currency, name = excluded.name, as_of = excluded.as_of, source = 'claude',
+       source_url = excluded.source_url, fetched_at = now()
+     where invest_quotes.as_of <= excluded.as_of returning 1),
+   h as (insert into invest_price_history (symbol, day, close, source)
+     select symbol, date '<valuation date>', price, 'claude' from v
+     on conflict (symbol, day) do update set close = excluded.close, source = 'claude' returning 1)
+   select (select count(*) from q), (select count(*) from h);
    ```
-   When a report also gives the previous price with its date, write that day too. The `as_of` guard
-   keeps an older report from overwriting a newer price.
-4. **Backfill** once per fund: if a fund has fewer than ~20 history rows, add month-end or year-end
-   NAVs from its factsheets so the performance chart has a shape.
-5. **Log and report** (Arabic): how many funds were priced and their valuation dates, which funds
-   had no published price, and any provider symbol that went stale.
+   The `as_of` guard keeps an older report from overwriting a newer price.
+5. **Log and report** (Arabic, two lines): how many funds were priced and their valuation date, which
+   held funds had no published price, which hand-valued assets should be linked, and any provider
+   symbol that went stale. Log one row in `invest_profile_runs`.
 
 ## Al Rajhi report names → app keys
 
@@ -93,6 +105,11 @@ touch any other table in the project.
 | Al Rajhi Monthly Distribution Fund / 2 / 3 | `MF:RAJHI-MONTHLY`, `-2`, `-3` |
 | Al Rajhi Real Estate Monthly Distributions Fund | `MF:RAJHI-RE-MONTHLY` |
 | Al Rajhi Sukuk Fund | `MF:RAJHI-SUKUK` |
+| Al Rajhi Sukuk distribution Fund | `MF:RAJHI-SUKUK-DIV` |
+| Al Rajhi Saudi Health Care Equity Fund | `MF:RAJHI-HEALTH` |
+| Al Rajhi Namaa Fund | `MF:RAJHI-NAMA` |
+
+Not in the app (skip): the endowment funds, and the two Al Rajhi MSCI ETFs (listed: priced by the provider as 9413.SR and 9414.SR).
 
 The full list of keys and names for every manager is in `src/lib/catalog.ts` (entries made with `mf(…)`).
 

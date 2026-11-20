@@ -18,7 +18,7 @@ type Range = '3M' | '1Y' | 'ALL'
 
 export default function DashboardPage() {
   const { L, data, settings, view, quotes } = useStore()
-  const { openWizard } = useActions()
+  const { openWizard, openAsset } = useActions()
   const [sel, setSel] = useState<string | null>(null)
   const [range, setRange] = useState<Range>('ALL')
   const [card, setCard] = useState(0)
@@ -79,7 +79,9 @@ export default function DashboardPage() {
         <div ref={rail} onScroll={onRail} className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4">
           {actions.map((a) => (
             <div key={a.id} className={cx('shrink-0 snap-center', actions.length > 1 ? 'w-[88%]' : 'w-full')}>
-              <Notice tone={a.tone} title={a.title} action={<Link href={a.href} className="btn-soft min-h-[40px] px-3">{a.cta}<Arrow className="h-4 w-4" /></Link>}>{a.body}</Notice>
+              <Notice tone={a.tone} title={a.title} action={a.assetId
+                ? <button className="btn-soft min-h-[40px] px-3" onClick={() => openAsset(a.assetId!, a.assetMode)}>{a.cta}<Arrow className="h-4 w-4" /></button>
+                : <Link href={a.href} className="btn-soft min-h-[40px] px-3">{a.cta}<Arrow className="h-4 w-4" /></Link>}>{a.body}</Notice>
             </div>
           ))}
         </div>

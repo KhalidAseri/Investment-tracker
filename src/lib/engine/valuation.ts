@@ -160,6 +160,31 @@ export function applyTransaction(asset: Asset, input: TxInput): { asset: Asset; 
   }
 }
 
+/**
+ * Turns a manually valued asset into one priced by a published unit price: same money invested,
+ * same role, but its value now follows the price. `units` comes from the holder's statement, or is
+ * derived from the current value when they do not have it (then `estimated` is true).
+ */
+export function linkToSymbol(asset: Asset, target: { symbol: string; currency: string }, units: number, unitPrice: number, estimated: boolean): Partial<Asset> {
+  return {
+    pricing: 'live',
+    symbol: target.symbol,
+    currency: target.currency,
+    priceFactor: 1,
+    isFund: true,
+    quantity: units,
+    costBasis: asset.costBasis > 0 ? asset.costBasis : asset.manualValue,
+    ...(unitPrice > 0 ? { lastPrice: unitPrice } : {}),
+    unitsEstimated: estimated,
+    valueUpdatedAt: new Date().toISOString(),
+  }
+}
+
+/** Units that a value buys at a unit price, to 4 decimals (how fund statements print them). */
+export function unitsFromValue(value: number, unitPrice: number): number {
+  return unitPrice > 0 && value > 0 ? Math.round((value / unitPrice) * 10000) / 10000 : 0
+}
+
 export function revertTransaction(asset: Asset, tx: Pick<Transaction, 'dQty' | 'dCost' | 'dValue'>): Asset {
   return {
     ...asset,

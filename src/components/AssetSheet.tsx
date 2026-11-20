@@ -1,23 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Asset, TxType } from '@/lib/types'
-import { fxRate } from '@/lib/engine/valuation'
+import { fxRate, linkToSymbol, unitsFromValue } from '@/lib/engine/valuation'
+import { fetchQuotes } from '@/lib/market-client'
 import { zakatDue, zakatRate } from '@/lib/engine/zakat'
 import { ZakatSheet } from './ZakatControl'
 import AssetPerformance from './AssetPerformance'
-import { isMutualFund } from '@/lib/catalog'
+import { findCatalogFund, isMutualFund } from '@/lib/catalog'
 import { CLASS_LABEL, REGION_LABEL, ZAKAT_LABEL, todayISO } from '@/lib/labels'
 import { dateLabel, daysAgo, num, pct, unit } from '@/lib/format'
 import { ClassFields } from './AssetWizard'
-import { Confirm, Delta, Field, Money, NumberInput, Sheet, Stat } from './ui'
+import { Confirm, Delta, Field, Money, Notice, NumberInput, Sheet, Stat } from './ui'
 
-type Mode = null | TxType | 'EDIT' | 'PRICE'
+type Mode = null | TxType | 'EDIT' | 'PRICE' | 'LINK'
 
-export default function AssetSheet({ assetId, initialMode, onClose }: { assetId: string | null; initialMode?: TxType; onClose: () => void }) {
-  const { L, data, view, settings, quotes, addTransaction, deleteTransaction, updateAsset, deleteAsset } = useStore()
+export default function AssetSheet({ assetId, initialMode, onClose }: { assetId: string | null; initialMode?: TxType | 'LINK'; onClose: () => void }) {
+  const { L, data, view, settings, quotes, addTransaction, deleteTransaction, updateAsset, deleteAsset, refreshQuotes } = useStore()
   const row = view.rows.find((r) => r.asset.id === assetId) ?? null
   const [mode, setMode] = useState<Mode>(null)
   const [qty, setQty] = useState(0)
@@ -27,6 +28,9 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
   const [edit, setEdit] = useState<Asset | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [zakatOpen, setZakatOpen] = useState(false)
+  const [units, setUnits] = useState(0)
+  const [estimated, setEstimated] = useState(false)
+  const [nav, setNav] = useState<{ price: number; asOf?: string } | null>(null)
 
   // Opened from the quick-add button, the sheet goes straight to the chosen action.
   useEffect(() => {
@@ -36,9 +40,20 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     setPrice(initialMode === 'BUY' || initialMode === 'SELL' ? Number((r.price ?? 0).toFixed(4)) : 0)
     setAmount(initialMode === 'VALUE_UPDATE' ? r.asset.manualValue : 0)
     setDate(todayISO())
+    setUnits(0); setEstimated(false)
     setMode(initialMode)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a different asset or action is opened
   }, [assetId, initialMode])
+  // A manual asset whose name is a fund in the catalogue can follow that fund's published price.
+  const manualAsset = row && row.asset.pricing === 'manual' ? row.asset : null
+  const fund = useMemo(() => (manualAsset ? findCatalogFund(manualAsset.name, manualAsset.currency) : null), [manualAsset])
+  useEffect(() => {
+    if (mode !== 'LINK' || !fund) return
+    let gone = false
+    setNav(null)
+    fetchQuotes([fund.symbol], {}, true).then(({ quotes: q }) => { if (!gone) setNav(q[fund.symbol] ? { price: q[fund.symbol].price, asOf: q[fund.symbol].asOf } : { price: 0 }) })
+    return () => { gone = true }
+  }, [mode, fund])
   if (!row) return null
   const a = row.asset
   const live = a.pricing === 'live'
@@ -54,6 +69,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     setAmount(m === 'VALUE_UPDATE' ? a.manualValue : 0)
     setDate(todayISO())
     if (m === 'PRICE') setPrice(a.lastPrice ?? 0)
+    if (m === 'LINK') { setUnits(0); setEstimated(false) }
     setEdit(m === 'EDIT' ? { ...a } : null)
     setMode(m)
   }
@@ -63,7 +79,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
     DEPOSIT: L('إيداع', 'Deposit'), WITHDRAW: L('سحب', 'Withdraw'), VALUE_UPDATE: L('تحديث القيمة', 'Update value'),
   }
   const isTrade = mode === 'BUY' || mode === 'SELL'
-  const txValid = mode === 'PRICE' ? price > 0 : isTrade ? qty > 0 && price > 0 && (mode === 'BUY' || qty <= a.quantity) : amount > 0 || mode === 'VALUE_UPDATE'
+  const txValid = mode === 'LINK' ? units > 0 : mode === 'PRICE' ? price > 0 : isTrade ? qty > 0 && price > 0 && (mode === 'BUY' || qty <= a.quantity) : amount > 0 || mode === 'VALUE_UPDATE'
 
   const submitTx = () => {
     if (mode === 'PRICE') {
@@ -71,24 +87,31 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
       setMode(null)
       return
     }
+    if (mode === 'LINK') {
+      if (!fund || !(units > 0)) return
+      updateAsset(a.id, linkToSymbol(a, fund, units, nav?.price ?? 0, estimated))
+      setMode(null)
+      void refreshQuotes(true)
+      return
+    }
     if (!mode || mode === 'EDIT') return
     addTransaction(a.id, { type: mode as TxType, date, quantity: qty, price, amount })
     setMode(null)
   }
 
-  const title = mode === 'EDIT' ? L('تعديل الأصل', 'Edit asset') : mode === 'PRICE' ? L('السعر يدويًا', 'Manual price') : mode ? `${TX_LABEL[mode as TxType]} — ${a.name}` : a.name
+  const title = mode === 'LINK' ? L('ربط بالسعر المنشور', 'Link to the published price') : mode === 'EDIT' ? L('تعديل الأصل', 'Edit asset') : mode === 'PRICE' ? L('السعر يدويًا', 'Manual price') : mode ? `${TX_LABEL[mode as TxType]} — ${a.name}` : a.name
 
   return (
     <>
       <Sheet open={!!assetId} onClose={() => (mode ? setMode(null) : onClose())} title={title} footer={
         mode === 'EDIT' && edit ? (
           <div className="flex gap-2">
-            <button className="btn-primary flex-1" disabled={!edit.name.trim()} onClick={() => { updateAsset(a.id, { ...edit, name: edit.name.trim(), valueUpdatedAt: edit.manualValue !== a.manualValue ? new Date().toISOString() : a.valueUpdatedAt }); setMode(null) }}>{L('حفظ', 'Save')}</button>
+            <button className="btn-primary flex-1" disabled={!edit.name.trim()} onClick={() => { updateAsset(a.id, { ...edit, name: edit.name.trim(), unitsEstimated: edit.quantity !== a.quantity ? false : edit.unitsEstimated, valueUpdatedAt: edit.manualValue !== a.manualValue ? new Date().toISOString() : a.valueUpdatedAt }); setMode(null) }}>{L('حفظ', 'Save')}</button>
             <button className="btn-ghost flex-1" onClick={() => setMode(null)}>{L('إلغاء', 'Cancel')}</button>
           </div>
         ) : mode ? (
           <div className="flex gap-2">
-            <button className="btn-primary flex-1" disabled={!txValid} onClick={submitTx}>{mode === 'PRICE' ? L('حفظ السعر', 'Save price') : L('تسجيل', 'Record')}</button>
+            <button className="btn-primary flex-1" disabled={!txValid} onClick={submitTx}>{mode === 'LINK' ? L('اربط الصندوق', 'Link the fund') : mode === 'PRICE' ? L('حفظ السعر', 'Save price') : L('تسجيل', 'Record')}</button>
             <button className="btn-ghost flex-1" onClick={() => setMode(null)}>{L('إلغاء', 'Cancel')}</button>
           </div>
         ) : undefined
@@ -101,7 +124,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
               <p className="text-3xl font-bold"><Money value={row.value} /></p>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 <Delta value={row.gain} percent={row.gainPct} />
-                {row.dayChange !== 0 && <span className="text-xs text-ink-soft">{L('اليوم', 'Today')} <Delta value={row.dayChange} className="text-xs" /></span>}
+                {row.dayChange !== 0 && <span className="text-xs text-ink-soft">{quote?.origin === 'claude' ? L('آخر تقييم', 'Last valuation') : L('اليوم', 'Today')} <Delta value={row.dayChange} className="text-xs" /></span>}
               </div>
             </div>
 
@@ -116,12 +139,25 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
             {live && (
               <p className="text-xs text-ink-soft">
                 {row.price !== null
-                  ? <>{L('السعر', 'Price')} <span className="num font-semibold text-ink">{num(row.price, 2)}</span>{!isMutualFund(a.symbol) && <> · <span className="num">{a.symbol}</span></>} · {row.source === 'manual' ? L('سعر أدخلتَه يدويًا', 'price you entered') : quote?.origin === 'claude' ? L('آخر تقييم منشور سجّله كلود', 'last published valuation, recorded by Claude') : row.source === 'live' ? L('سعر مباشر', 'live') : L('آخر سعر محفوظ', 'last saved price')}{quote?.asOf && <> · {L('بتاريخ', 'as of')} {dateLabel(quote.asOf, settings.locale)}</>}{quote?.sourceUrl && <> · <a className="font-semibold text-link" href={quote.sourceUrl} target="_blank" rel="noreferrer">{L('المصدر', 'source')}</a></>}</>
+                  ? <>{L('السعر', 'Price')} <span className="num font-semibold text-ink">{num(row.price, isMutualFund(a.symbol) ? 4 : 2)}</span>{!isMutualFund(a.symbol) && <> · <span className="num">{a.symbol}</span></>} · {row.source === 'manual' ? L('سعر أدخلتَه يدويًا', 'price you entered') : quote?.origin === 'claude' ? L('آخر تقييم منشور سجّله كلود', 'last published valuation, recorded by Claude') : row.source === 'live' ? L('سعر مباشر', 'live') : L('آخر سعر محفوظ', 'last saved price')}{quote?.asOf && <> · {L('بتاريخ', 'as of')} {dateLabel(quote.asOf, settings.locale)}</>}{quote?.sourceUrl && <> · <a className="font-semibold text-link" href={quote.sourceUrl} target="_blank" rel="noreferrer">{L('المصدر', 'source')}</a></>}</>
                   : isMutualFund(a.symbol)
                     ? L('لم يُسجَّل سعر وحدة لهذا الصندوق بعد؛ يسجّله كلود في التحديث اليومي القادم. تُعرض قيمة التكلفة مؤقتًا.', 'No unit price recorded for this fund yet; Claude records it in the next daily update. Showing cost for now.')
                     : L(`لم يتوفر سعر للرمز ${a.symbol} بعد؛ تُعرض قيمة التكلفة مؤقتًا.`, `No price for ${a.symbol} yet; showing cost for now.`)}
                 {row.source !== 'live' && <button className="ms-2 font-semibold text-link underline-offset-2 hover:underline" onClick={() => open('PRICE')}>{L('أدخل السعر يدويًا', 'Enter price by hand')}</button>}
               </p>
+            )}
+
+            {fund && (
+              <Notice tone="info" title={L('لهذا الصندوق سعر منشور يتحدث يوميًا', 'This fund has a published price that updates daily')}
+                action={<button className="btn-primary min-h-[40px] px-4" onClick={() => open('LINK')}>{L('اربطه بسعره', 'Link it')}</button>}>
+                {L(`سجّلته بقيمة تحدّثها يدويًا. اربطه بـ«${fund.ar}» فتتحدث قيمته وحدها ويظهر أداؤه.`, `You entered it as a value you update by hand. Link it to “${fund.en}” and its value updates on its own, with its performance.`)}
+              </Notice>
+            )}
+            {live && a.unitsEstimated && (
+              <Notice tone="warn" title={L('عدد الوحدات تقديري', 'The unit count is an estimate')}
+                action={<button className="btn-soft min-h-[40px] px-4" onClick={() => open('EDIT')}>{L('أدخل العدد من كشف حسابك', 'Enter the count from your statement')}</button>}>
+                {L('حُسب من القيمة التي أدخلتها. العدد الدقيق في كشف حساب الصندوق.', 'It was derived from the value you entered. The exact count is on your fund statement.')}
+              </Notice>
             )}
 
             <AssetPerformance asset={a} txs={txs} gainPct={row.gainPct} />
@@ -191,8 +227,34 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
           </Field>
         )}
 
+        {/* Link a manually valued fund to its published unit price */}
+        {mode === 'LINK' && fund && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-surface p-4">
+              <p className="text-sm font-semibold">{L(fund.ar, fund.en)}</p>
+              <p className="mt-1 text-xs text-ink-soft">
+                {nav === null ? L('جاري جلب آخر سعر منشور…', 'Fetching the last published price…')
+                  : nav.price > 0 ? <>{L('آخر سعر منشور للوحدة', 'Last published unit price')} <span className="num font-semibold text-ink">{num(nav.price, 4)}</span> {fund.currency}{nav.asOf && <> · {dateLabel(nav.asOf, settings.locale)}</>}</>
+                  : L('لم يُسجَّل لهذا الصندوق سعر بعد. أدخل عدد الوحدات، ويظهر السعر مع التحديث اليومي القادم.', 'No price recorded for this fund yet. Enter your units; the price arrives with the next daily update.')}
+              </p>
+            </div>
+            <Field label={L('عدد الوحدات التي تملكها', 'Units you hold')} hint={L('من كشف حساب الصندوق أو تطبيق البنك.', 'From your fund statement or bank app.')}>
+              <NumberInput value={units} onChange={(n) => { setUnits(n); setEstimated(false) }} autoFocus />
+            </Field>
+            {nav && nav.price > 0 && (
+              <button className="btn-soft w-full" onClick={() => { setUnits(unitsFromValue(a.manualValue, nav.price)); setEstimated(true) }}>
+                {L(`لا أعرف العدد — احسبه من قيمتي الحالية (${num(a.manualValue, 0)})`, `I do not know it — derive it from my current value (${num(a.manualValue, 0)})`)}
+              </button>
+            )}
+            {units > 0 && nav && nav.price > 0 && (
+              <p className="text-sm text-ink-soft">{L('القيمة بعد الربط', 'Value after linking')} <span className="num font-semibold text-ink">{num(units * nav.price, 2)} {fund.currency}</span>{estimated && <> · {L('تقديري إلى أن تدخل العدد من كشفك', 'an estimate until you enter the count from your statement')}</>}</p>
+            )}
+            <p className="hint">{L('يبقى المبلغ المستثمَر ودور الأصل (استثماري أو طوارئ) كما هما. تقدر ترجع للقيمة اليدوية من «تعديل الأصل».', 'The amount invested and the asset’s role stay as they are.')}</p>
+          </div>
+        )}
+
         {/* Transaction form */}
-        {mode && mode !== 'EDIT' && mode !== 'PRICE' && (
+        {mode && mode !== 'EDIT' && mode !== 'PRICE' && mode !== 'LINK' && (
           <div className="space-y-4">
             {isTrade ? (
               <div className="grid grid-cols-2 gap-3">

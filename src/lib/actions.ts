@@ -7,6 +7,7 @@ import { reviewStatus } from './engine/review.ts'
 import { zakatStatus } from './engine/zakat.ts'
 import { annualTransfer, balanceEquation, guardrail, layers } from './engine/income.ts'
 import { num } from './format.ts'
+import { findCatalogFund } from './catalog.ts'
 
 export interface NextAction {
   id: string
@@ -15,6 +16,9 @@ export interface NextAction {
   body: string
   href: string
   cta: string
+  /** When set, the action opens this asset (in this mode) instead of following href. */
+  assetId?: string
+  assetMode?: 'LINK'
 }
 
 /** The short, prioritised list on the home screen: what deserves attention right now. */
@@ -23,6 +27,17 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
   const out: NextAction[] = []
   if (data.assets.length === 0) return out
   const investRows = view.rows.filter((r) => !r.asset.isEmergencyFund)
+
+  // A fund typed in by hand that has a published price: linking it removes a value the user must keep updating.
+  const linkable = data.assets.find((a) => a.pricing === 'manual' && findCatalogFund(a.name, a.currency))
+  if (linkable) {
+    out.push({
+      id: 'link-' + linkable.id, tone: 'info',
+      title: L(`اربط «${linkable.name}» بسعره المنشور`, `Link “${linkable.name}” to its published price`),
+      body: L('له سعر يتحدث يوميًا. بعد الربط تتحدث قيمته وحدها ويظهر أداؤه.', 'It has a price that updates daily. Once linked, its value updates on its own and its performance shows.'),
+      href: '/assets/', cta: L('اربطه', 'Link it'), assetId: linkable.id, assetMode: 'LINK',
+    })
+  }
 
   if (s.monthlyExpenses <= 0) {
     out.push({ id: 'numbers', tone: 'info', title: L('أدخل مصاريفك الشهرية', 'Enter your monthly expenses'), body: L('لنحسب حجم صندوق الطوارئ المناسب لك.', 'So we can size the right emergency fund for you.'), href: '/plan/#emergency', cta: L('إدخال', 'Enter') })

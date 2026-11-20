@@ -39,6 +39,8 @@ export interface Asset {
   manualValue: number
   /** Unit price typed in by the user for a live asset; used only while no quote is available. */
   lastPrice?: number
+  /** Units were derived from a value, not read from a statement; shown as approximate until corrected. */
+  unitsEstimated?: boolean
   valueUpdatedAt: string
   isFund: boolean
   isEmergencyFund: boolean

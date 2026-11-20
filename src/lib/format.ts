@@ -4,10 +4,11 @@ const nf0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** Latin digits in both languages: they are what Saudi banking apps show and they align in columns. */
-export function num(n: number, decimals: 0 | 2 | 'auto' = 'auto'): string {
+const nf4 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+export function num(n: number, decimals: 0 | 2 | 4 | 'auto' = 'auto'): string {
   if (!Number.isFinite(n)) return '—'
   const d = decimals === 'auto' ? (Math.abs(n) >= 1000 || Number.isInteger(n) ? 0 : 2) : decimals
-  return (d === 0 ? nf0 : nf2).format(n)
+  return (d === 0 ? nf0 : d === 4 ? nf4 : nf2).format(n)
 }
 
 export function compact(n: number): string {

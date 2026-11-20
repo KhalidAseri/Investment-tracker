@@ -531,3 +531,38 @@ test('manual asset index ignores deposits and withdrawals', async () => {
   assert.ok(Math.abs(idx[3].close - 115.5) < 1e-9)
   assert.equal(idx[2].close, idx[1].close)
 })
+
+test('arabic text: normalising, search and fund recognition', async () => {
+  const { normalize, tokens, matches, similarity } = await import('./text.ts')
+  const { findCatalogFund } = await import('../catalog.ts')
+  assert.equal(normalize('صُندوق الأَسهُم العالميّة'), 'صندوق الاسهم العالميه')
+  assert.deepEqual(tokens('صندوق الراجحي للادخار والسيولة بالريال السعودي'), ['راجحي', 'ادخار', 'سيوله', 'ريال', 'سعودي'])
+  assert.ok(matches('الراجحي للادخار', 'صندوق الراجحي للادخار والسيولة بالريال السعودي'))
+  assert.ok(matches('راجحي سيولة', 'صندوق الراجحي للادخار والسيولة بالريال السعودي'))
+  assert.ok(matches('vanguard 500', 'Vanguard S&P 500 ETF'))
+  assert.ok(!matches('الأهلي', 'صندوق الراجحي للأسهم السعودية'))
+  assert.equal(similarity('الراجحي للسيولة', 'صندوق الراجحي للادخار والسيولة بالريال السعودي').contained, true)
+  // the exact name the user typed by hand, and a shortened one: both resolve to the SAR liquidity fund
+  assert.equal(findCatalogFund('صندوق الراجحي للادخار والسيولة بالريال السعودي')?.symbol, 'MF:RAJHI-SAR-LIQ')
+  assert.equal(findCatalogFund('الراجحي للسيولة', 'SAR')?.symbol, 'MF:RAJHI-SAR-LIQ')
+  assert.equal(findCatalogFund('الراجحي للسيولة', 'USD')?.symbol, 'MF:RAJHI-USD-LIQ')
+  assert.equal(findCatalogFund('برنامج ادخار الشركة'), null)
+  assert.equal(findCatalogFund('صندوق الأسهم العالمية'), null)            // generic: no manager named
+  assert.equal(findCatalogFund('صندوق الأهلي للأسهم العالمية')?.symbol, 'MF:SNB-GLOBAL')
+  assert.equal(findCatalogFund('الرياض ريت')?.symbol ?? null, null)       // two words, no manager: not enough to be sure
+  assert.equal(findCatalogFund('شقة الرياض'), null)
+})
+
+test('linking a manual asset to a published price keeps the money invested', async () => {
+  const { linkToSymbol, unitsFromValue, valueAsset } = await import('./valuation.ts')
+  const manual = { ...asset({ pricing: 'manual', symbol: null, manualValue: 15511, costBasis: 15000, quantity: 0, assetClass: 'CASH', isEmergencyFund: true }) }
+  const units = unitsFromValue(15511, 196.5496)
+  assert.equal(units, 78.9165)
+  const linked = { ...manual, ...linkToSymbol(manual, { symbol: 'MF:RAJHI-SAR-LIQ', currency: 'SAR' }, units, 196.5496, true) }
+  assert.equal(linked.pricing, 'live'); assert.equal(linked.costBasis, 15000); assert.equal(linked.isEmergencyFund, true); assert.equal(linked.unitsEstimated, true)
+  // before any quote arrives it is valued at the price it was linked at; afterwards at the quote
+  assert.ok(Math.abs(valueAsset(linked, {}, {}).value - 15511) < 0.02)
+  const q = { 'MF:RAJHI-SAR-LIQ': { symbol: 'MF:RAJHI-SAR-LIQ', price: 200, change: 0, changePercent: 0, currency: 'SAR', name: '', updatedAt: new Date().toISOString() } }
+  assert.ok(Math.abs(valueAsset(linked, q, {}).value - 78.9165 * 200) < 0.01)
+  assert.equal(unitsFromValue(100, 0), 0)
+})

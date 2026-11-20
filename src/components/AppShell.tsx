@@ -21,7 +21,7 @@ const TABS = [
 interface Actions {
   openWizard: () => void
   /** Opens an asset, optionally straight into one of its actions. */
-  openAsset: (id: string, mode?: TxType) => void
+  openAsset: (id: string, mode?: TxType | 'LINK') => void
 }
 const ActionsCtx = createContext<Actions>({ openWizard: () => {}, openAsset: () => {} })
 export const useActions = () => useContext(ActionsCtx)
@@ -30,7 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname() ?? ''
   const { L, settings, updateSettings, refreshQuotes, quoteStatus, ready, data, view, syncStatus } = useStore()
   const [wizard, setWizard] = useState(false)
-  const [asset, setAsset] = useState<{ id: string; mode?: TxType } | null>(null)
+  const [asset, setAsset] = useState<{ id: string; mode?: TxType | 'LINK' } | null>(null)
   const [quick, setQuick] = useState(false)
   const [pick, setPick] = useState<TxType | null>(null)
 
@@ -72,6 +72,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ]
   const candidates = view.rows.filter((r) => (pick === 'BUY' ? r.asset.pricing === 'live' : pick === 'VALUE_UPDATE' ? r.asset.pricing === 'manual' : true))
 
+  const tab = (t: (typeof TABS)[number]) => {
+    const active = current?.href === t.href
+    return (
+      <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors', active ? 'text-link' : 'text-ink-soft')}>
+        {active && <motion.span layoutId="nav-pill" className="absolute top-0 h-0.5 w-10 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
+        <t.icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
+        {L(t.ar, t.en)}
+      </Link>
+    )
+  }
+
   return (
     <ActionsCtx.Provider value={actions}>
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
@@ -109,20 +120,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
 
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label={L('التنقل الرئيسي', 'Main navigation')}>
-          <div className="relative mx-auto flex max-w-xl">
-            {TABS.map((t, i) => {
-              const active = current?.href === t.href
-              return (
-                <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('relative flex min-h-[60px] flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors', active ? 'text-link' : 'text-ink-soft', i === 1 && 'me-8', i === 2 && 'ms-8')}>
-                  {active && <motion.span layoutId="nav-pill" className="absolute top-0 h-0.5 w-10 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
-                  <t.icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.3 : 1.8} aria-hidden />
-                  {L(t.ar, t.en)}
-                </Link>
-              )
-            })}
-            <motion.button onClick={() => setQuick(true)} whileTap={{ scale: 0.92 }} className="absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-1/3 items-center justify-center rounded-full bg-accent text-white shadow-float" aria-label={L('إضافة أو تسجيل', 'Add or record')}>
-              <Plus className="h-7 w-7" />
-            </motion.button>
+          {/* Five equal slots; the add button sits in the middle one. It is placed with a margin, not a
+              transform: the motion library owns the element's transform and would overwrite a CSS translate. */}
+          <div className="mx-auto grid max-w-xl grid-cols-5">
+            {TABS.slice(0, 2).map(tab)}
+            <div className="flex justify-center">
+              <motion.button onClick={() => setQuick(true)} whileTap={{ scale: 0.92 }} className="-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-float" aria-label={L('إضافة أو تسجيل', 'Add or record')}>
+                <Plus className="h-7 w-7" />
+              </motion.button>
+            </div>
+            {TABS.slice(2).map(tab)}
           </div>
         </nav>
       </div>

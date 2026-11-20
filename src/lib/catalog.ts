@@ -1,4 +1,5 @@
 import type { AccountKind, AssetClass, Pricing, Region } from './types.ts'
+import { similarity, tokens } from './engine/text.ts'
 
 /** What the user picks first in the add-asset wizard. */
 export type AssetKindId = 'SA_STOCK' | 'GLOBAL' | 'FUND' | 'CASH' | 'GOLD' | 'REAL_ESTATE' | 'CRYPTO' | 'OTHER'
@@ -247,3 +248,28 @@ export function searchCatalog(kind: AssetKindId, query: string, shariahFirst: bo
 }
 
 export const KARATS = [24, 22, 21, 18]
+
+/**
+ * The catalogue fund a hand-typed name most likely refers to, or null. Used to offer linking a
+ * manually valued asset to its published price. A generic name («صندوق الأسهم العالمية») must not
+ * match: the name has to carry the manager's own name plus one more word, or share three words;
+ * in both cases every word of the shorter name is inside the longer one. Ties go to the fund in
+ * the asset's own currency.
+ */
+export function findCatalogFund(name: string, currency = 'SAR'): CatalogItem | null {
+  const words = tokens(name)
+  let best: { item: CatalogItem; score: number } | null = null
+  for (const item of CATALOG) {
+    if (!item.isFund) continue
+    const brand = item.manager ? tokens(item.manager)[0] : null
+    for (const label of [item.ar, item.en]) {
+      const m = similarity(name, label)
+      if (!m.contained) continue
+      const branded = !!brand && words.includes(brand) && m.shared >= 2
+      if (!branded && !(m.shared >= 3 && m.jaccard >= 0.6)) continue
+      const score = m.jaccard + (item.currency === currency ? 0.05 : 0)
+      if (!best || score > best.score) best = { item, score }
+    }
+  }
+  return best?.item ?? null
+}
