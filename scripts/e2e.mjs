@@ -177,6 +177,41 @@ await step('milestone: completing the emergency fund is announced once', async (
   await page.reload(); await page.getByText('رحلتك إلى الهدف').waitFor(); await page.waitForTimeout(1200)
   if (await page.getByText('اكتمل صندوق الطوارئ').count()) throw new Error('milestone shown twice')
 })
+await step('weighted portfolio: components and weights, my share, re-stated as gain, then re-weighted', async () => {
+  const basket = () => page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('investtrack_v3')); const q = JSON.parse(localStorage.getItem('investtrack_quotes_v3') || '{}')
+    const acc = d.accounts.find((a) => a.basket); const fx = (c) => (c === 'SAR' ? 1 : d.settings.fx[c] ?? 1)
+    const parts = d.assets.filter((a) => a.accountId === acc?.id).map((a) => ({ name: a.name, symbol: a.symbol, weight: a.basketWeight,
+      value: a.pricing === 'live' ? a.quantity * (q[a.symbol]?.price ?? a.lastPrice ?? 0) * fx(q[a.symbol]?.currency ?? a.currency) : a.manualValue * fx(a.currency), cost: a.costBasis * fx(a.currency) }))
+    return { acc, parts, total: parts.reduce((s, p) => s + p.value, 0), cost: parts.reduce((s, p) => s + p.cost, 0) }
+  })
+  const near = (x, y, tol) => Math.abs(x - y) <= tol
+  const part = async (q, nameRe) => { await page.getByRole('searchbox', { name: 'أضف مكوّنًا' }).fill(q); await page.getByRole('dialog').last().getByRole('button', { name: nameRe }).first().click() }
+  await openAdd(); await page.getByRole('button', { name: /محفظة بنِسب/ }).click()
+  await fill('اسم المحفظة', 'محفظتي المُدارة'); await fill('قيمة حصتي الآن', 100000); await fill('المبلغ المستثمَر', 90000)
+  await part('VOO', /Vanguard S&P 500/); await page.getByLabel('نسبة Vanguard S&P 500').fill('50')
+  await part('سابك', /سابك/); await page.getByLabel('نسبة سابك').fill('30')
+  await page.getByRole('button', { name: '+ نقد' }).click()                                   // takes what is left: 20
+  if ((await page.getByLabel('نسبة نقد').inputValue()) !== '20') throw new Error('cash did not take the remainder')
+  await page.getByText('المجموع 100%').waitFor(); await shot('17-basket-new')
+  await page.getByRole('button', { name: 'إنشاء المحفظة' }).click(); await page.waitForTimeout(2500)
+  let b = await basket()
+  if (!b.acc || b.parts.length !== 3 || !near(b.total, 100000, 2) || !near(b.cost, 90000, 0.5)) throw new Error('created ' + JSON.stringify([b.parts.length, b.total, b.cost]))
+  const voo = b.parts.find((p) => p.symbol === 'VOO'); if (!near(voo.value, 50000, 1) || voo.weight !== 50) throw new Error('VOO share ' + JSON.stringify(voo))
+  // re-state my share: +10,000 counted as gain, weights untouched
+  await page.goto(B + '/assets/'); await page.getByText('محفظة بنِسب').first().waitFor()
+  await page.getByRole('button', { name: 'النِّسب والقيمة' }).click(); await page.getByText(/الآن\s*50/).first().waitFor()
+  await fill('قيمة حصتي الآن', 110000); await page.getByRole('tab', { name: /ربح \+10,000/ }).waitFor(); await shot('18-basket-restate')
+  await page.getByRole('button', { name: 'حفظ التغييرات' }).click(); await page.waitForTimeout(2500)
+  b = await basket(); if (!near(b.total, 110000, 2) || !near(b.cost, 90000, 0.5) || b.parts.length !== 3) throw new Error('re-stated ' + JSON.stringify([b.total, b.cost]))
+  // new weights: drop one component, 70 / 30
+  await page.getByRole('button', { name: 'النِّسب والقيمة' }).click(); await page.getByRole('button', { name: 'إزالة سابك' }).click()
+  await page.getByLabel('نسبة Vanguard S&P 500').fill('70'); await page.getByLabel('نسبة نقد').fill('30')
+  await page.getByRole('button', { name: 'حفظ التغييرات' }).click(); await page.waitForTimeout(2500)
+  b = await basket(); const v2 = b.parts.find((p) => p.symbol === 'VOO'); const cash = b.parts.find((p) => !p.symbol)
+  if (b.parts.length !== 2 || !near(v2.value, 77000, 2) || !near(cash.value, 33000, 0.5) || v2.weight !== 70 || !near(b.cost, 90000, 0.5)) throw new Error('re-weighted ' + JSON.stringify(b.parts))
+  await shot('19-basket-in-portfolio', true)
+})
 await step('keyboard: a sheet and its field stay visible when the keyboard takes the lower part of the screen', async () => {
   const inView = async (loc, h) => { const b = await loc.boundingBox(); return b && b.y >= 0 && b.y + b.height <= h + 0.5 }
   await page.goto(B + '/assets/'); await page.getByRole('button', { name: /صندوق الراجحي للأسهم السعودية/ }).click()

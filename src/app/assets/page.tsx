@@ -20,7 +20,7 @@ type Group = 'account' | 'class'
 
 export default function AssetsPage() {
   const { L, data, view, quotes, settings, renameAccount, deleteAccount } = useStore()
-  const { openWizard, openAsset } = useActions()
+  const { openWizard, openAsset, openBasket } = useActions()
   const [tab, setTab] = useState<'assets' | 'income'>('assets')
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<Sort>('value')
@@ -49,7 +49,7 @@ export default function AssetsPage() {
     }
     const sorted = [...rows].sort(order[sort])
     const buckets = group === 'account'
-      ? data.accounts.map((account) => ({ key: account.id, title: account.name, sub: L(KIND_LABEL[account.kind].ar, KIND_LABEL[account.kind].en), account: account as Account | null, rows: sorted.filter((r) => r.asset.accountId === account.id) }))
+      ? data.accounts.map((account) => ({ key: account.id, title: account.name, sub: account.basket ? L('محفظة بنِسب', 'Weighted portfolio') : L(KIND_LABEL[account.kind].ar, KIND_LABEL[account.kind].en), account: account as Account | null, rows: sorted.filter((r) => r.asset.accountId === account.id) }))
       : ASSET_CLASSES.map((c) => ({ key: c as string, title: L(CLASS_LABEL[c].ar, CLASS_LABEL[c].en), sub: '', account: null as Account | null, rows: sorted.filter((r) => r.asset.assetClass === c) }))
     return buckets.map((b) => ({ ...b, total: b.rows.reduce((s, r) => s + r.value, 0) })).filter((b) => b.rows.length > 0 || (group === 'account' && !needle)).sort((a, b) => b.total - a.total)
   }, [data.accounts, view.rows, q, sort, group, L, yearReturn])
@@ -100,7 +100,9 @@ export default function AssetsPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <Money value={g.total} className="text-sm font-semibold" />
-                  {g.account && <button onClick={() => { setEditAccount(g.account); setName(g.account!.name) }} className="flex h-11 w-9 items-center justify-center text-ink-faint hover:text-ink" aria-label={L('تعديل الجهة', 'Edit provider')}><Pencil className="h-4 w-4" /></button>}
+                  {g.account?.basket
+                    ? <button onClick={() => openBasket(g.account!.id)} className="ms-1 flex min-h-[36px] items-center rounded-full bg-tint px-3 text-xs font-semibold text-link hover:bg-tint-2">{L('النِّسب والقيمة', 'Weights & value')}</button>
+                    : g.account && <button onClick={() => { setEditAccount(g.account); setName(g.account!.name) }} className="flex h-11 w-9 items-center justify-center text-ink-faint hover:text-ink" aria-label={L('تعديل الجهة', 'Edit provider')}><Pencil className="h-4 w-4" /></button>}
                 </div>
               </div>
               {g.rows.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">{L('لا أصول في هذه الجهة.', 'No assets here.')}</p>}
@@ -117,8 +119,8 @@ export default function AssetsPage() {
                     : a.pricing === 'manual' || f.needsUser ? L(`لم تُحدَّث منذ ${f.ageDays} يوم`, `not updated for ${f.ageDays}d`) : L(`آخر سعر ${when}`, `last price ${when}`)
                   // Symbol and quantity are isolated so Latin tickers do not reorder inside Arabic text.
                   const sub = a.pricing === 'live' && !isMutualFund(a.symbol)
-                    ? <><span className="num">{a.symbol}</span> · <span className="num">{num(a.quantity, 'auto')}</span> · {status}</>
-                    : status
+                    ? <><span className="num">{a.symbol}</span> · {a.basketWeight != null ? <>{L('النسبة', 'weight')} <span className="num">{pct(a.basketWeight, a.basketWeight % 1 === 0 ? 0 : 1)}</span></> : <span className="num">{num(a.quantity, 'auto')}</span>} · {status}</>
+                    : a.basketWeight != null ? <>{L('النسبة', 'weight')} <span className="num">{pct(a.basketWeight, a.basketWeight % 1 === 0 ? 0 : 1)}</span> · {status}</> : status
                   return (
                     <li key={a.id}>
                       <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-start hover:bg-surface">

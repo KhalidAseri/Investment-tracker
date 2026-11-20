@@ -10,6 +10,7 @@ import type { TxType } from '@/lib/types'
 import AssetWizard from './AssetWizard'
 import AssetSheet from './AssetSheet'
 import QuickUpdate from './QuickUpdate'
+import BasketSheet from './BasketSheet'
 import { Money, Sheet, closeTopSheet, cx } from './ui'
 
 const TABS = [
@@ -25,8 +26,10 @@ interface Actions {
   openAsset: (id: string, mode?: TxType | 'LINK') => void
   /** Walks through every hand-valued asset to bring its value up to date. */
   openQuickUpdate: () => void
+  /** Opens a weighted portfolio: empty to create one, or an existing one by its account id. */
+  openBasket: (accountId?: string) => void
 }
-const ActionsCtx = createContext<Actions>({ openWizard: () => {}, openAsset: () => {}, openQuickUpdate: () => {} })
+const ActionsCtx = createContext<Actions>({ openWizard: () => {}, openAsset: () => {}, openQuickUpdate: () => {}, openBasket: () => {} })
 export const useActions = () => useContext(ActionsCtx)
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -37,8 +40,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [quick, setQuick] = useState(false)
   const [pick, setPick] = useState<TxType | null>(null)
   const [update, setUpdate] = useState(false)
+  const [basket, setBasket] = useState<{ accountId: string | null } | null>(null)
 
-  const actions = useMemo<Actions>(() => ({ openWizard: () => setWizard(true), openAsset: (id, mode) => setAsset({ id, mode }), openQuickUpdate: () => setUpdate(true) }), [])
+  const actions = useMemo<Actions>(() => ({ openWizard: () => setWizard(true), openAsset: (id, mode) => setAsset({ id, mode }), openQuickUpdate: () => setUpdate(true), openBasket: (accountId) => setBasket({ accountId: accountId ?? null }) }), [])
   const closeQuick = useCallback(() => { setQuick(false); setPick(null) }, [])
 
   // Android back button: close the top sheet first, then go back, then leave the app.
@@ -165,7 +169,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </ul>
         )}
       </Sheet>
-      <AssetWizard open={wizard} onClose={() => setWizard(false)} onExisting={(id) => setAsset({ id, mode: 'BUY' })} />
+      <AssetWizard open={wizard} onClose={() => setWizard(false)} onExisting={(id) => setAsset({ id, mode: 'BUY' })} onBasket={() => { setWizard(false); setBasket({ accountId: null }) }} />
+      <BasketSheet open={!!basket} accountId={basket?.accountId ?? null} onClose={() => setBasket(null)} />
       <QuickUpdate open={update} onClose={() => setUpdate(false)} />
       <AssetSheet assetId={asset?.id ?? null} initialMode={asset?.mode} onClose={() => setAsset(null)} />
     </ActionsCtx.Provider>

@@ -657,3 +657,46 @@ test('re-stating a priced fund records the difference as gain, in the history, a
   assert.deepEqual([tx.type, tx.amount, tx.dQty, tx.dCost], ['VALUE_UPDATE', 15600, 3, 0])
   assert.equal(revertTransaction(after, tx).quantity, 75)
 })
+
+test('weighted portfolio: sized from the share and weights, re-stated, re-weighted', async () => {
+  const { planBasket, scaleBasket, normalizeWeights, shareValues, costAfter } = await import('./basket.ts')
+  const { valueAsset } = await import('./valuation.ts')
+  const quote = (symbol: string, price: number, currency = 'SAR') => ({ symbol, price, change: 0, changePercent: 0, currency, name: '', updatedAt: new Date().toISOString() })
+  const quotes = { VOO: quote('VOO', 500, 'USD'), '2222.SR': quote('2222.SR', 25) }
+  const fx = { USD: 3.75 }
+  const part = (name: string, symbol: string | null, weight: number, currency = 'SAR', id?: string) => ({ id, name, symbol, weight, assetClass: symbol ? 'EQUITY' as const : 'CASH' as const, region: 'SA' as const, sector: 'NA', currency, isFund: !!symbol, domicile: '' })
+  assert.deepEqual(shareValues(1000, [50, 30, 20]), [500, 300, 200])
+  assert.deepEqual(normalizeWeights([50, 30]), [62.5, 37.5])
+  assert.deepEqual(normalizeWeights([1, 1, 1]), [33.33, 33.33, 33.34])
+
+  // 100,000 split 50% VOO (USD), 30% Aramco, 20% cash; 90,000 invested
+  const plan = planBasket([], [part('VOO', 'VOO', 50, 'USD'), part('Aramco', '2222.SR', 30), part('Cash', null, 20), part('Unpriced fund', 'MF:X-1', 0)], 100000, 90000, quotes, fx)
+  const made = plan.create.map((a, i) => ({ ...a, id: 'a' + i, accountId: 'acc', createdAt: '', updatedAt: '' }))
+  const view = (list: typeof made) => list.map((a) => ({ ...valueAsset(a, quotes, fx), account: null }))
+  const v = view(made)
+  assert.ok(Math.abs(v[0].value - 50000) < 0.2 && Math.abs(v[1].value - 30000) < 0.01 && v[2].value === 20000)
+  assert.equal(made[0].quantity, 26.6667)                                     // 50,000 SAR ÷ (500 USD × 3.75)
+  assert.equal(made[0].costBasis, 45000 / 3.75)                               // cost is kept in the asset's currency
+  assert.deepEqual([made[2].pricing, made[2].manualValue, made[1].basketWeight], ['manual', 20000, 30])
+  assert.ok(Math.abs(v.reduce((s, r) => s + r.cost, 0) - 90000) < 0.01)
+
+  // re-stated at 110,000 as gain: every holding scales, the money invested does not move
+  const scaled = scaleBasket(v.slice(0, 3), 110000, costAfter('gain', 90000, 100000, 110000), quotes, fx)
+  const after = made.slice(0, 3).map((a) => ({ ...a, ...scaled.update.find((u) => u.id === a.id)!.patch }))
+  const va = view(after)
+  assert.ok(Math.abs(va.reduce((s, r) => s + r.value, 0) - 110000) < 0.3 && Math.abs(va[2].value - 22000) < 0.05)
+  assert.ok(Math.abs(va.reduce((s, r) => s + r.cost, 0) - 90000) < 0.01)
+  assert.equal(costAfter('in', 90000, 100000, 110000), 100000)                // a deposit is money invested, not gain
+  assert.equal(costAfter('out', 90000, 100000, 50000), 45000)
+
+  // new weights: Aramco out, cash up; holdings are re-sized at today's prices and the removed one is listed
+  const re = planBasket(after, [part('VOO', 'VOO', 60, 'USD', 'a0'), part('Cash', null, 40, 'SAR', 'a2')], 110000, 90000, quotes, fx)
+  assert.deepEqual([re.remove, re.create.length, re.update.length], [['a1'], 0, 2])
+  const final = after.filter((a) => !re.remove.includes(a.id)).map((a) => ({ ...a, ...re.update.find((u) => u.id === a.id)!.patch }))
+  const vf = view(final)
+  assert.ok(Math.abs(vf[0].value - 66000) < 0.3 && vf[1].value === 44000 && final[0].basketWeight === 60)
+
+  // a component with no price yet keeps its stated value until one arrives
+  const waiting = planBasket([], [part('Unpriced', 'MF:X-1', 100)], 5000, 5000, quotes, fx).create[0]
+  assert.deepEqual([waiting.quantity, waiting.valueAnchor], [0, 5000])
+})

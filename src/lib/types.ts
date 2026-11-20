@@ -16,6 +16,8 @@ export interface Account {
   id: string
   name: string
   kind: AccountKind
+  /** A portfolio defined by weights: its holdings are derived from the holder's share and each component's weight. */
+  basket?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -41,6 +43,8 @@ export interface Asset {
   lastPrice?: number
   /** Units were derived from a value the holder stated, not read from a statement. */
   unitsEstimated?: boolean
+  /** Component of a weighted portfolio: its target share of that portfolio, percent. */
+  basketWeight?: number
   /** A value stated for a priced asset before any price exists for it; turned into units at the first price. */
   valueAnchor?: number
   valueUpdatedAt: string

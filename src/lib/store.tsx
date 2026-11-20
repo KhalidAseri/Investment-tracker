@@ -5,6 +5,7 @@ import type { Account, AccountKind, AppData, Asset, Pick2, Quotes, Settings } fr
 import { DEFAULT_ZAKAT_PERCENT, defaultSettings, defaultZakatMode, emptyData, genId, todayISO } from './labels'
 import { applyTransaction, computeView, fxSymbolsNeeded, revertTransaction, type PortfolioView, type TxInput, settleAnchors } from './engine/valuation'
 import { GOLD_SYMBOL } from './engine/zakat'
+import type { BasketPlan } from './engine/basket'
 import { fetchQuotes, loadQuoteCache } from './market-client'
 import { syncDecision } from './engine/sync'
 import * as remote from './cloud'
@@ -148,6 +149,8 @@ interface Store {
   addAccount: (name: string, kind: AccountKind) => Account
   renameAccount: (id: string, name: string) => void
   deleteAccount: (id: string) => void
+  /** Creates or updates a portfolio defined by weights, with the holdings a plan from the basket engine sets. Returns its id. */
+  saveBasket: (input: { accountId?: string; name: string; plan: BasketPlan }) => string
   addAsset: (asset: NewAsset, account: { id?: string; name: string; kind: AccountKind }) => Asset
   updateAsset: (id: string, patch: Partial<Asset>) => void
   deleteAsset: (id: string) => void
@@ -382,6 +385,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         d.assets = d.assets.filter((a) => a.accountId !== id)
         d.transactions = d.transactions.filter((t) => !gone.has(t.assetId))
       }),
+      saveBasket: ({ accountId, name, plan }) => {
+        const id = accountId ?? genId()
+        commit((d) => {
+          const acc = d.accounts.find((a) => a.id === id)
+          if (acc) { acc.name = name.trim(); acc.basket = true; acc.updatedAt = now() }
+          else d.accounts.push({ id, name: name.trim(), kind: 'ROBO', basket: true, createdAt: now(), updatedAt: now() })
+          for (const u of plan.update) {
+            const i = d.assets.findIndex((a) => a.id === u.id)
+            if (i >= 0) d.assets[i] = { ...d.assets[i], ...u.patch, updatedAt: now() }
+          }
+          for (const c of plan.create) d.assets.push({ ...c, id: genId(), accountId: id, createdAt: now(), updatedAt: now() })
+          if (plan.remove.length > 0) {
+            const gone = new Set(plan.remove)
+            d.assets = d.assets.filter((a) => !gone.has(a.id))
+            d.transactions = d.transactions.filter((t) => !gone.has(t.assetId))
+            for (const g of gone) delete d.profiles[g]
+          }
+        })
+        return id
+      },
       addAsset: (asset, account) => {
         const created: Asset = { ...asset, id: genId(), accountId: account.id ?? genId(), createdAt: now(), updatedAt: now() }
         commit((d) => {

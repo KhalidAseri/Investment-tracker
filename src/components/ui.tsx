@@ -160,7 +160,7 @@ export function Field({ label, hint, group = false, children }: { label: string;
 }
 
 /** Numeric text input: decimal keypad on phones, accepts Arabic digits, never fights the caret. */
-export function NumberInput({ value, onChange, suffix, placeholder, autoFocus }: { value: number; onChange: (n: number) => void; suffix?: string; placeholder?: string; autoFocus?: boolean }) {
+export function NumberInput({ value, onChange, suffix, placeholder, autoFocus, ariaLabel }: { value: number; onChange: (n: number) => void; suffix?: string; placeholder?: string; autoFocus?: boolean; /** For a field with no visible label of its own (a cell in a list). */ ariaLabel?: string }) {
   const [text, setText] = useState(value ? String(value) : '')
   useEffect(() => {
     setText((t) => (parseNumber(t) === value ? t : value ? String(value) : ''))
@@ -170,6 +170,7 @@ export function NumberInput({ value, onChange, suffix, placeholder, autoFocus }:
       <input
         className={cx('input text-start tabular-nums', suffix && 'pe-14')}
         inputMode="decimal"
+        aria-label={ariaLabel}
         enterKeyHint="done"
         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         autoFocus={autoFocus}

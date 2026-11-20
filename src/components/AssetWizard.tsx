@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Briefcase, ChevronLeft, ChevronRight, Gem, Home, Landmark, Package, Search, X } from 'lucide-react'
+import { Briefcase, ChartPie, ChevronLeft, ChevronRight, Gem, Home, Landmark, Package, Search, X } from 'lucide-react'
 import { useStore, type NewAsset } from '@/lib/store'
 import type { AccountKind, AssetClass, Quotes, Region } from '@/lib/types'
 import { CATALOG, KARATS, SHELVES, findCatalogFund, isMutualFund, kindOf, searchAll, type AssetKind, type AssetKindId, type CatalogItem, type SaudiGroup, type Shelf } from '@/lib/catalog'
@@ -57,7 +57,7 @@ interface Draft {
   zakatTouched: boolean
 }
 
-export default function AssetWizard({ open, onClose, onExisting }: { open: boolean; onClose: () => void; onExisting?: (assetId: string) => void }) {
+export default function AssetWizard({ open, onClose, onExisting, onBasket }: { open: boolean; onClose: () => void; onExisting?: (assetId: string) => void; onBasket?: () => void }) {
   const { L, data, settings, view, addAsset, addTransaction } = useStore()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [query, setQuery] = useState('')
@@ -339,6 +339,16 @@ export default function AssetWizard({ open, onClose, onExisting }: { open: boole
                 <button className="btn-ghost w-full" onClick={() => { startDraft(kindOf('OTHER')); setDraft((d) => (d ? { ...d, name: q } : d)) }}>{L('أضِفه بقيمة تحدّثها أنت', 'Add it with a value you update')}</button>
               </div>
             </section>
+          )}
+
+          {!q && onBasket && (
+            <button onClick={() => { reset(); onBasket() }} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-card p-4 text-start hover:border-accent">
+              <span>
+                <span className="block text-sm font-semibold">{L('محفظة بنِسب', 'Weighted portfolio')}</span>
+                <span className="text-xs leading-relaxed text-ink-soft">{L('أسهم وصناديق تحدّد نسبة كل منها، ثم قيمة حصتك فيها', 'Stocks and funds with a weight each, then what your share is worth')}</span>
+              </span>
+              <ChartPie className="h-5 w-5 shrink-0 text-link" aria-hidden />
+            </button>
           )}
 
           {!q && (
