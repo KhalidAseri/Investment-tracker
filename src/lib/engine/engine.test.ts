@@ -700,3 +700,25 @@ test('weighted portfolio: sized from the share and weights, re-stated, re-weight
   const waiting = planBasket([], [part('Unpriced', 'MF:X-1', 100)], 5000, 5000, quotes, fx).create[0]
   assert.deepEqual([waiting.quantity, waiting.valueAnchor], [0, 5000])
 })
+
+test('catalogue: the database adds, corrects and withdraws entries of the built-in list', async () => {
+  const { catalog, inCatalog, searchAll, setRemoteCatalog } = await import('../catalog.ts')
+  const builtIn = catalog().length
+  assert.ok(inCatalog('MF:SNB-GLOBAL') && !inCatalog('MF:SNB-GLOBAL-SUKUK'))
+  const fund = { kind: 'SA_STOCK' as const, assetClass: 'FIXED_INCOME' as const, region: 'GLOBAL' as const, sector: 'NA', currency: 'USD', isFund: true, domicile: 'SA', group: 'mutual' as const, manager: 'الأهلي المالية' }
+  setRemoteCatalog([
+    { ...fund, symbol: 'MF:SNB-GLOBAL-SUKUK', ar: 'صندوق الأهلي للصكوك العالمية', en: 'SNB Capital Global Sukuk Fund', aliases: 'AlAhli Sukuk Fund' },
+    { ...fund, symbol: 'MF:SNB-GLOBAL', ar: 'صندوق الأهلي للأسهم العالمية', en: 'SNB Capital Global Equity Fund', assetClass: 'EQUITY', aliases: 'صندوق الأهلي للمتاجرة بالأسهم العالمية' },
+    { ...fund, symbol: 'MF:SNB-ATAA', ar: '', en: '', hidden: true },
+  ])
+  assert.equal(catalog().length, builtIn)                                                   // one added, one withdrawn
+  assert.ok(inCatalog('MF:SNB-GLOBAL-SUKUK') && !inCatalog('MF:SNB-ATAA'))
+  assert.deepEqual(searchAll('الأهلي للصكوك', null, false).map((c) => c.symbol), ['MF:SNB-GLOBAL-SUKUK'])
+  assert.deepEqual(searchAll('الأهلي للمتاجرة بالأسهم العالمية', null, false).map((c) => c.symbol), ['MF:SNB-GLOBAL'])   // found by its former name
+  assert.equal(searchAll('AlAhli Sukuk', null, false)[0]?.symbol, 'MF:SNB-GLOBAL-SUKUK')
+  // the added fund sits with its manager's other funds, not at the end of the list
+  const mutual = catalog().filter((c) => c.group === 'mutual').map((c) => c.manager)
+  assert.equal(mutual.lastIndexOf('الأهلي المالية') - mutual.indexOf('الأهلي المالية') + 1, mutual.filter((m) => m === 'الأهلي المالية').length)
+  setRemoteCatalog([])
+  assert.equal(catalog().length, builtIn)
+})

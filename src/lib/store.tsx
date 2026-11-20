@@ -6,12 +6,14 @@ import { DEFAULT_ZAKAT_PERCENT, defaultSettings, defaultZakatMode, emptyData, ge
 import { applyTransaction, computeView, fxSymbolsNeeded, revertTransaction, type PortfolioView, type TxInput, settleAnchors } from './engine/valuation'
 import { GOLD_SYMBOL } from './engine/zakat'
 import type { BasketPlan } from './engine/basket'
+import { setRemoteCatalog } from './catalog'
 import { fetchQuotes, loadQuoteCache } from './market-client'
 import { syncDecision } from './engine/sync'
 import * as remote from './cloud'
 import type { AssetProfile } from './types'
 
 const SYMBOL_PROFILES_KEY = 'investtrack_symprofiles_v1'
+const CATALOG_KEY = 'investtrack_catalog_v1'
 const STORE_KEY = 'investtrack_v3'
 
 // ---------- persistence & migration ----------
@@ -151,6 +153,8 @@ interface Store {
   deleteAccount: (id: string) => void
   /** Creates or updates a portfolio defined by weights, with the holdings a plan from the basket engine sets. Returns its id. */
   saveBasket: (input: { accountId?: string; name: string; plan: BasketPlan }) => string
+  /** Changes when the list of securities is refreshed from the database; screens that list it depend on this. */
+  catalogRev: number
   addAsset: (asset: NewAsset, account: { id?: string; name: string; kind: AccountKind }) => Asset
   updateAsset: (id: string, patch: Partial<Asset>) => void
   deleteAsset: (id: string) => void
@@ -268,6 +272,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [ready, refreshQuotes])
 
+  // The list of securities: the saved copy first (works offline), then the database's current one.
+  const [catalogRev, setCatalogRev] = useState(0)
+  useEffect(() => {
+    if (!ready) return
+    try {
+      const cached = JSON.parse(localStorage.getItem(CATALOG_KEY) ?? '[]')
+      if (Array.isArray(cached) && cached.length) { setRemoteCatalog(cached); setCatalogRev((n) => n + 1) }
+    } catch { /* no saved copy */ }
+    let gone = false
+    remote.fetchCatalog().then((rows) => {
+      if (gone) return
+      setRemoteCatalog(rows)
+      setCatalogRev((n) => n + 1)
+      try { localStorage.setItem(CATALOG_KEY, JSON.stringify(rows)) } catch { /* storage full */ }
+    }).catch(() => { /* offline: the saved copy stays */ })
+    return () => { gone = true }
+  }, [ready])
+
   // Breakdowns Claude researched per symbol: shared reference data, used for any asset holding that symbol.
   const [symbolProfiles, setSymbolProfiles] = useState<Record<string, AssetProfile>>({})
   useEffect(() => {
@@ -368,7 +390,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const store = useMemo<Store>(() => {
     const now = () => new Date().toISOString()
     return {
-      ready, data: shown, settings: data.settings, view, quotes, quoteStatus, L, dir,
+      ready, data: shown, settings: data.settings, view, quotes, quoteStatus, L, dir, catalogRev,
       updateSettings: (patch) => commit((d) => { d.settings = { ...d.settings, ...patch } }),
       addAccount: (name, kind) => {
         const acc: Account = { id: genId(), name: name.trim(), kind, createdAt: now(), updatedAt: now() }
@@ -480,7 +502,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       resetData: () => commit((d) => { Object.assign(d, emptyData(), { settings: { ...defaultSettings(), locale: d.settings.locale } }) }),
     }
-  }, [ready, data, shown, view, quotes, quoteStatus, L, dir, commit, refreshQuotes, cloudUser, syncStatus, syncError, syncNow, adoptRemote, pushLocal, pullProfiles])
+  }, [ready, data, shown, view, quotes, quoteStatus, L, dir, catalogRev, commit, refreshQuotes, cloudUser, syncStatus, syncError, syncNow, adoptRemote, pushLocal, pullProfiles])
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
 }

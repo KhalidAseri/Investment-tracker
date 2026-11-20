@@ -177,6 +177,23 @@ await step('milestone: completing the emergency fund is announced once', async (
   await page.reload(); await page.getByText('رحلتك إلى الهدف').waitFor(); await page.waitForTimeout(1200)
   if (await page.getByText('اكتمل صندوق الطوارئ').count()) throw new Error('milestone shown twice')
 })
+await step('catalogue from the database: SNB Capital funds are listed with their published prices, without an app update', async () => {
+  await page.goto(B + '/dashboard/'); await page.waitForFunction(() => (JSON.parse(localStorage.getItem('investtrack_catalog_v1') || '[]')).length > 30, null, { timeout: 30000 })
+  const dialog = () => page.getByRole('dialog').last()
+  const expect = async (q, nameRe, priceRe) => {
+    await page.getByRole('searchbox', { name: 'بحث' }).fill(q)
+    const row = dialog().getByRole('button', { name: nameRe }).first(); await row.waitFor({ timeout: 20000 })
+    await dialog().locator('li button', { hasText: priceRe }).first().waitFor({ timeout: 25000 })
+  }
+  await openAdd()
+  await expect('الأهلي للمتاجرة بالأسهم السعودية', /^صندوق الأهلي للمتاجرة بالأسهم السعودية/, /14\.\d{4}\s*SAR/)
+  await expect('الأهلي للمتاجرة بالريال السعودي', /^صندوق الأهلي للمتاجرة بالريال السعودي/, /2\.37\d{2}\s*SAR/)
+  await expect('الأهلي للمتاجرة بالأسهم العالمية', /^صندوق الأهلي للأسهم العالمية/, /\d{2}\.\d{4}\s*USD/)        // found by the name it is asked for
+  await page.getByRole('searchbox', { name: 'بحث' }).fill('الأهلي للصكوك')
+  for (const n of [/صندوق الأهلي للصكوك العالمية/, /صندوق الأهلي للصكوك السيادية/, /صندوق الأهلي لصكوك الشركات \(الفئة أ\)/]) await dialog().getByRole('button', { name: n }).first().waitFor({ timeout: 20000 })
+  await shot('20-snb-sukuk-search')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+})
 await step('weighted portfolio: components and weights, my share, re-stated as gain, then re-weighted', async () => {
   const basket = () => page.evaluate(() => {
     const d = JSON.parse(localStorage.getItem('investtrack_v3')); const q = JSON.parse(localStorage.getItem('investtrack_quotes_v3') || '{}')

@@ -216,7 +216,7 @@ export default function MorePage() {
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
             <button className="btn-danger w-full" onClick={() => setConfirmReset(true)}><Trash2 className="h-4 w-4" />{L('حذف كل البيانات من هذا الجهاز', 'Delete all data from this device')}</button>
           </section>
-          <Disclaimer>{L('الأسعار من Yahoo Finance: داخل تطبيق أندرويد تُجلب مباشرة، وفي المتصفح عبر وسطاء مجانيين قد يتعذرون فيُعرض آخر سعر محفوظ. التطبيق أداة تنظيم وتثقيف وليس مستشارًا ماليًا مرخصًا. الإصدار 5.1', 'Prices come from Yahoo Finance: fetched directly inside the Android app, and through free relays in the browser, which can fail — the last saved price is shown then. The app is an organising and educational tool, not a licensed financial adviser. Version 5.1')}</Disclaimer>
+          <Disclaimer>{L('الأسعار من Yahoo Finance: داخل تطبيق أندرويد تُجلب مباشرة، وفي المتصفح عبر وسطاء مجانيين قد يتعذرون فيُعرض آخر سعر محفوظ. التطبيق أداة تنظيم وتثقيف وليس مستشارًا ماليًا مرخصًا. الإصدار 5.2', 'Prices come from Yahoo Finance: fetched directly inside the Android app, and through free relays in the browser, which can fail — the last saved price is shown then. The app is an organising and educational tool, not a licensed financial adviser. Version 5.2')}</Disclaimer>
         </>
       )}
 

@@ -47,6 +47,8 @@ export interface CatalogItem {
   /** Saudi items only: a listed share, a fund listed on Tadawul, or an unlisted mutual fund priced by NAV. */
   group?: SaudiGroup
   manager?: string
+  /** Other names people know it by (a former name, the manager's old brand); searched, never shown. */
+  aliases?: string
 }
 
 export type SaudiGroup = 'stock' | 'listed' | 'mutual'
@@ -77,7 +79,7 @@ const gl = (symbol: string, ar: string, en: string, extra: Partial<CatalogItem> 
   symbol, ar, en, kind: 'GLOBAL', assetClass: 'EQUITY', region: 'US', sector: 'DIVERSIFIED', currency: 'USD', isFund: true, domicile: 'US', ...extra,
 })
 
-export const CATALOG: CatalogItem[] = [
+const BUILT_IN: CatalogItem[] = [
   // Tadawul
   sa('2222', 'أرامكو السعودية', 'Saudi Aramco', 'ENERGY'),
   sa('1120', 'مصرف الراجحي', 'Al Rajhi Bank', 'BANKS'),
@@ -182,10 +184,8 @@ export const CATALOG: CatalogItem[] = [
   mf('SNB-SAR-TRADE', 'الأهلي المالية', 'صندوق الأهلي للمتاجرة بالريال السعودي', 'SNB Capital Saudi Riyal Trade Fund', { ...cash, shariah: true }),
   mf('SNB-SA-TRADE-EQ', 'الأهلي المالية', 'صندوق الأهلي للمتاجرة بالأسهم السعودية', 'SNB Capital Saudi Trading Equity Fund', { shariah: true }),
   mf('SNB-SMID', 'الأهلي المالية', 'صندوق الأهلي لأسهم الشركات الصغيرة والمتوسطة', 'SNB Capital Saudi Small & Mid Cap Equity Fund'),
-  mf('SNB-GLOBAL', 'الأهلي المالية', 'صندوق الأهلي للأسهم العالمية', 'SNB Capital Global Equity Fund', { region: 'GLOBAL', shariah: true }),
-  mf('SNB-RAED', 'الأهلي المالية', 'صندوق الأهلي الرائد للأسهم السعودية', 'SNB Capital Al Raed Saudi Equity Fund'),
+  mf('SNB-GLOBAL', 'الأهلي المالية', 'صندوق الأهلي للأسهم العالمية', 'SNB Capital Global Equity Fund', { region: 'GLOBAL', currency: 'USD' }),
   mf('SNB-ATAA', 'الأهلي المالية', 'صندوق الأهلي العطاء للأسهم السعودية', 'SNB Capital Al Ataa Saudi Equity Fund'),
-  mf('SNB-MATN', 'الأهلي المالية', 'صندوق الأهلي المتن للأسهم السعودية', 'SNB Capital Al Matn Saudi Equity Fund'),
   mf('RIYAD-SAR-TRADE', 'الرياض المالية', 'صندوق الرياض للمتاجرة بالريال', 'Riyad SAR Trade Fund', cash),
   mf('RIYAD-SAR-DIV-TRADE', 'الرياض المالية', 'صندوق الرياض للمتاجرة المتنوع بالريال', 'Riyad SAR Diversified Trade Fund', cash),
   mf('RIYAD-USD-DIV-TRADE', 'الرياض المالية', 'صندوق الرياض للمتاجرة المتنوع بالدولار', 'Riyad USD Diversified Trade Fund', { ...cash, currency: 'USD' }),
@@ -333,7 +333,7 @@ export const CATALOG: CatalogItem[] = [
 
 export function searchCatalog(kind: AssetKindId, query: string, shariahFirst: boolean, group?: SaudiGroup): CatalogItem[] {
   const q = query.trim().toLowerCase()
-  const items = CATALOG.filter((c) => c.kind === kind && (!group || c.group === group)).filter(
+  const items = catalog().filter((c) => c.kind === kind && (!group || c.group === group)).filter(
     (c) => !q || c.symbol.toLowerCase().includes(q) || c.ar.includes(query.trim()) || c.en.toLowerCase().includes(q) || (c.manager ?? '').includes(query.trim()),
   )
   // Stable sort keeps the hand-ordered list; Shariah-labelled funds float up when asked.
@@ -352,7 +352,7 @@ export const KARATS = [24, 22, 21, 18]
 export function findCatalogFund(name: string, currency = 'SAR'): CatalogItem | null {
   const words = tokens(name)
   let best: { item: CatalogItem; score: number } | null = null
-  for (const item of CATALOG) {
+  for (const item of catalog()) {
     if (!item.isFund) continue
     const brand = item.manager ? tokens(item.manager)[0] : null
     for (const label of [item.ar, item.en]) {
@@ -387,11 +387,52 @@ export const kindOf = (id: AssetKindId): AssetKind => ASSET_KINDS.find((k) => k.
 export function searchAll(query: string, shelf: Shelf | null, shariahFirst: boolean): CatalogItem[] {
   const q = query.trim()
   const sym = q.toLowerCase().replace(/\s+/g, '')
-  const items = CATALOG.filter((c) => {
+  const items = catalog().filter((c) => {
     if (!q) return !shelf || shelfOf(c) === shelf
-    if (isMutualFund(c.symbol)) return matches(q, `${c.ar} ${c.en} ${c.manager ?? ''}`)
+    const text = `${c.ar} ${c.en} ${c.manager ?? ''} ${c.aliases ?? ''}`
+    if (isMutualFund(c.symbol)) return matches(q, text)
     const code = c.symbol.toLowerCase()
-    return code.startsWith(sym) || code.replace(/\.(sr|l)$/, '') === sym || matches(q, `${c.ar} ${c.en} ${c.manager ?? ''}`)
+    return code.startsWith(sym) || code.replace(/\.(sr|l)$/, '') === sym || matches(q, text)
   })
   return shariahFirst && !q ? [...items].sort((a, b) => Number(!!b.shariah) - Number(!!a.shariah)) : items
+}
+
+// ---- The list the app actually offers ----
+// The built-in list above works offline. The database (invest_catalog) adds to it and corrects it
+// by symbol, so a fund can be added, renamed or withdrawn without releasing a new app version.
+
+export type RemoteItem = CatalogItem & { hidden?: boolean }
+let remote: RemoteItem[] = []
+let merged: CatalogItem[] | null = null
+let symbols: Set<string> | null = null
+
+export function setRemoteCatalog(rows: RemoteItem[]): void {
+  remote = rows
+  merged = null
+  symbols = null
+}
+
+export function catalog(): CatalogItem[] {
+  if (merged) return merged
+  const over = new Map(remote.map((r) => [r.symbol, r]))
+  const builtIn = new Set(BUILT_IN.map((c) => c.symbol))
+  const list: CatalogItem[] = []
+  for (const c of BUILT_IN) {
+    const r = over.get(c.symbol)
+    if (r?.hidden) continue
+    list.push(r ? { ...c, ...r } : c)
+  }
+  for (const r of remote) if (!r.hidden && !builtIn.has(r.symbol)) list.push(r)
+  // mutual funds stay grouped by manager, in the order managers first appear
+  const order = new Map<string, number>()
+  for (const c of list) if (c.manager && !order.has(c.manager)) order.set(c.manager, order.size)
+  const funds = list.filter((c) => c.group === 'mutual').sort((a, b) => (order.get(a.manager ?? '') ?? 99) - (order.get(b.manager ?? '') ?? 99))
+  let i = 0
+  merged = list.map((c) => (c.group === 'mutual' ? funds[i++] : c))
+  return merged
+}
+
+export function inCatalog(symbol: string): boolean {
+  if (!symbols) symbols = new Set(catalog().map((c) => c.symbol))
+  return symbols.has(symbol)
 }

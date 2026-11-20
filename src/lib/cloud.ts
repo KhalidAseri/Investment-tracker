@@ -4,6 +4,7 @@
 // every signed-in user to their own rows.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { RemoteItem } from './catalog'
 import type { AppData, AssetProfile } from './types'
 
 const URL = 'https://ivicgwjratcfcbmyrnld.supabase.co'
@@ -85,4 +86,16 @@ export async function fetchSymbolProfiles(symbols: string[]): Promise<Record<str
     out[r.symbol] = { confidence: 'estimated', ...r.profile, assetId: '', source: 'claude', locked: false, asOf: r.as_of ?? '', updatedAt: r.updated_at }
   }
   return out
+}
+
+/** Securities the database adds to, or corrects in, the app's built-in list. Public reference data. */
+export async function fetchCatalog(): Promise<RemoteItem[]> {
+  const { data, error } = await cloud().from('invest_catalog').select('symbol, ar, en, kind, asset_class, region, sector, currency, is_fund, domicile, shariah, grp, manager, aliases, hidden')
+  if (error) throw new Error(error.message)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rows are shaped by the table's own constraints
+  return ((data ?? []) as any[]).map((r) => ({
+    symbol: r.symbol, ar: r.ar, en: r.en, kind: r.kind, assetClass: r.asset_class, region: r.region, sector: r.sector, currency: r.currency,
+    isFund: r.is_fund, domicile: r.domicile ?? '', ...(r.shariah === null ? {} : { shariah: r.shariah }), ...(r.grp ? { group: r.grp } : {}),
+    ...(r.manager ? { manager: r.manager } : {}), ...(r.aliases ? { aliases: r.aliases } : {}), hidden: !!r.hidden,
+  }))
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Briefcase, ChartPie, ChevronLeft, ChevronRight, Gem, Home, Landmark, Package, Search, X } from 'lucide-react'
 import { useStore, type NewAsset } from '@/lib/store'
 import type { AccountKind, AssetClass, Quotes, Region } from '@/lib/types'
-import { CATALOG, KARATS, SHELVES, findCatalogFund, isMutualFund, kindOf, searchAll, type AssetKind, type AssetKindId, type CatalogItem, type SaudiGroup, type Shelf } from '@/lib/catalog'
+import { KARATS, inCatalog, SHELVES, findCatalogFund, isMutualFund, kindOf, searchAll, type AssetKind, type AssetKindId, type CatalogItem, type SaudiGroup, type Shelf } from '@/lib/catalog'
 import { ASSET_CLASSES, CLASS_LABEL, KIND_LABEL, REGION_LABEL, SECTORS, ZAKAT_LABEL, DEFAULT_ZAKAT_PERCENT, defaultZakatMode, genId, todayISO } from '@/lib/labels'
 import { fxRate, unitsFromValue } from '@/lib/engine/valuation'
 import { priceOn } from '@/lib/engine/performance'
@@ -23,7 +23,6 @@ const MANUAL: { id: AssetKindId; ar: string; en: string; icon: React.ElementType
   { id: 'REAL_ESTATE', ar: 'عقار', en: 'Property', icon: Home },
   { id: 'OTHER', ar: 'أصل آخر', en: 'Something else', icon: Package },
 ]
-const IN_CATALOG = new Set(CATALOG.map((c) => c.symbol))
 const PAGE = 30
 
 interface Draft {
@@ -58,7 +57,7 @@ interface Draft {
 }
 
 export default function AssetWizard({ open, onClose, onExisting, onBasket }: { open: boolean; onClose: () => void; onExisting?: (assetId: string) => void; onBasket?: () => void }) {
-  const { L, data, settings, view, addAsset, addTransaction } = useStore()
+  const { L, data, settings, view, addAsset, addTransaction, catalogRev } = useStore()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [query, setQuery] = useState('')
   const [shelf, setShelf] = useState<Shelf>('saFunds')
@@ -88,7 +87,7 @@ export default function AssetWizard({ open, onClose, onExisting, onBasket }: { o
   const results = useMemo(() => {
     const all = searchAll(q, q ? null : shelf, settings.shariahFirst)
     return !q && shelf === 'saFunds' ? all.filter((c) => c.group === sub) : all
-  }, [q, shelf, sub, settings.shariahFirst])
+  }, [q, shelf, sub, settings.shariahFirst, catalogRev])
   const shown = results.slice(0, limit)
   const visible = shown.slice(0, 16).map((c) => c.symbol).join(',')
   useEffect(() => { setLimit(PAGE) }, [q, shelf, sub])
@@ -107,7 +106,7 @@ export default function AssetWizard({ open, onClose, onExisting, onBasket }: { o
     const t = setTimeout(() => {
       searchMarket(q).then((h) => {
         if (gone) return
-        const fresh = h.filter((x) => !IN_CATALOG.has(x.symbol))
+        const fresh = h.filter((x) => !inCatalog(x.symbol))
         setHits(fresh); setSearching(false)
         if (fresh.length) void loadPrices(fresh.slice(0, 8).map((x) => x.symbol))
       })
@@ -165,7 +164,7 @@ export default function AssetWizard({ open, onClose, onExisting, onBasket }: { o
 
   // The provider's currency for a symbol picked from the market search arrives with its first quote.
   useEffect(() => {
-    if (draft && priced && quote && !IN_CATALOG.has(draft.symbol) && !mutual && quote.currency !== draft.currency) set({ currency: quote.currency })
+    if (draft && priced && quote && !inCatalog(draft.symbol) && !mutual && quote.currency !== draft.currency) set({ currency: quote.currency })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quote?.currency])
 

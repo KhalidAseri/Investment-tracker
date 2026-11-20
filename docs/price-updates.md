@@ -19,6 +19,7 @@ touch any other table in the project.
 | `invest_quotes` | write: latest unit price per `MF:` symbol |
 | `invest_price_history` | write: one row per symbol per valuation day |
 | `invest_profile_runs` | write: one log row per run (`kind = 'on_demand'`, summary starts with "أسعار:") |
+| `invest_catalog` | read: maps a manager's fund name to the app's key; write: funds added to the app's list |
 
 ## Procedure
 
@@ -55,12 +56,35 @@ touch any other table in the project.
      Take the **last** date-and-two-numbers group on a line (the first can be the inception date).
    - Sanity check before writing: the report date matches the file name, and no fund moved more than
      15% against its stored price unless the report itself shows that daily change.
-3. **Other managers** (SNB Capital, Riyad Capital, Alinma Investment, Albilad Capital, others), only
+3. **SNB Capital: price every fund on its daily sheet, every run.**
+   - `node scripts/snb-prices.mjs <dir>/snb.xlsx` opens https://snbcapital.com/daily-funds in a headless
+     browser and saves the price sheet the page loads (an .xlsx whose address changes; it is public
+     and the site does not refuse the request). Exit code 1 means no sheet was seen: report it.
+   - `python3 -I scripts/parse-snb.py <dir>/snb.xlsx` prints one `('<name as printed>', nav, previous nav, 'YYYY-MM-DD')`
+     row per fund, with the full precision of the sheet. Keep the file in its own empty directory.
+   - The names map to the app's keys through `invest_catalog.source_name`, so the write is a join:
+     ```sql
+     with v(name, nav, prev, day) as (values <rows from parse-snb.py>),
+     m as (select c.symbol, c.currency, c.ar, v.nav, v.prev, v.day::date as day
+           from v join invest_catalog c on c.source_name = v.name and not c.hidden),
+     q as (insert into invest_quotes (symbol, price, prev_close, currency, name, as_of, source, source_url, fetched_at)
+       select symbol, nav, prev, currency, ar, day, 'claude', 'https://snbcapital.com/daily-funds', now() from m
+       on conflict (symbol) do update set price = excluded.price, prev_close = excluded.prev_close, currency = excluded.currency,
+         name = excluded.name, as_of = excluded.as_of, source = 'claude', source_url = excluded.source_url, fetched_at = now()
+       where invest_quotes.as_of <= excluded.as_of returning 1),
+     h as (insert into invest_price_history (symbol, day, close, source) select symbol, day, nav, 'claude' from m
+       on conflict (symbol, day) do update set close = excluded.close, source = 'claude' returning 1)
+     select (select count(*) from m) as matched, (select count(*) from q), (select count(*) from h);
+     ```
+   - Each fund has its own valuation day (most daily; global funds Monday and Wednesday; the sukuk
+     funds weekly). A sheet row with no match in `invest_catalog` is a fund the app does not list:
+     if it is an ordinary public fund, add it to `invest_catalog` (see below) and say so.
+4. **Other managers** (Riyad Capital, Alinma Investment, Albilad Capital, others), only
    for funds someone holds: the fund's page on the manager's site or its latest factsheet. Saudi
    Exchange, Argaam and Mubasher did not return data to automated readers when tried (2026-11-20).
    `MF:X-…` keys are funds the user typed by name: identify the fund from the asset name first.
    Never invent or estimate a NAV. If no published price is found, leave the previous one and report it.
-4. **Write** (prices in the fund's currency). One statement for all funds of a report:
+5. **Write** (prices in the fund's currency). One statement for all funds of a report:
    ```sql
    with v(symbol, price, prev, cur, name) as (values ('MF:…', <nav>, <previous nav>, 'SAR', '<fund name>'), …),
    q as (insert into invest_quotes (symbol, price, prev_close, currency, name, as_of, source, source_url, fetched_at)
@@ -75,9 +99,26 @@ touch any other table in the project.
    select (select count(*) from q), (select count(*) from h);
    ```
    The `as_of` guard keeps an older report from overwriting a newer price.
-5. **Log and report** (Arabic, two lines): how many funds were priced and their valuation date, which
+6. **Log and report** (Arabic, two lines): how many funds were priced and their valuation date, which
    held funds had no published price, which hand-valued assets should be linked, and any provider
    symbol that went stale. Log one row in `invest_profile_runs`.
+
+## The list of securities lives in the database
+
+`invest_catalog` holds the securities the app offers in its add screen. The app ships a built-in
+list (`src/lib/catalog.ts`) so it works offline; rows in `invest_catalog` are added to it and
+override it by symbol, and `hidden = true` withdraws a built-in entry. The app reads the table on
+opening and keeps a copy on the device. So a fund is added, renamed or withdrawn here, with no app
+release:
+
+```sql
+insert into invest_catalog (symbol, ar, en, kind, asset_class, region, sector, currency, grp, manager, shariah, aliases, source_name)
+values ('MF:<KEY>', '<Arabic name>', '<English name>', 'SA_STOCK', 'EQUITY', 'SA', 'DIVERSIFIED', 'SAR', 'mutual', '<manager, Arabic>', null, '<former names>', '<name on the manager''s price sheet>')
+on conflict (symbol) do update set ar = excluded.ar, en = excluded.en, updated_at = now();
+```
+
+Only names read from the manager's own site or price sheet go in. `shariah` is set only where the
+manager's page says so; `aliases` are former or commonly used names, searched but never shown.
 
 ## Al Rajhi report names → app keys
 

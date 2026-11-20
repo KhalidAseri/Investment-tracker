@@ -4,13 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Trash2, X } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Quotes } from '@/lib/types'
-import { CATALOG, isMutualFund, searchAll, type CatalogItem } from '@/lib/catalog'
+import { inCatalog, isMutualFund, searchAll, type CatalogItem } from '@/lib/catalog'
 import { costAfter, normalizeWeights, planBasket, scaleBasket, type BasketPart } from '@/lib/engine/basket'
 import { fetchQuotes, loadQuoteCache, searchMarket, type MarketHit } from '@/lib/market-client'
 import { num, pct } from '@/lib/format'
 import { Chips, Confirm, Field, Money, NumberInput, Sheet, cx, haptic } from './ui'
 
-const IN_CATALOG = new Set(CATALOG.map((c) => c.symbol))
 type Row = BasketPart & { key: string }
 let seq = 0
 const key = () => `p${++seq}`
@@ -21,7 +20,7 @@ const key = () => `p${++seq}`
  * its prices. Opened empty to create one, or on an existing portfolio to re-state or re-weight it.
  */
 export default function BasketSheet({ open, accountId, onClose }: { open: boolean; accountId: string | null; onClose: () => void }) {
-  const { L, data, view, settings, quotes, saveBasket, deleteAccount, refreshQuotes } = useStore()
+  const { L, data, view, settings, quotes, saveBasket, deleteAccount, refreshQuotes, catalogRev } = useStore()
   const [name, setName] = useState('')
   const [total, setTotal] = useState(0)
   const [invested, setInvested] = useState(0)
@@ -60,7 +59,7 @@ export default function BasketSheet({ open, accountId, onClose }: { open: boolea
 
   const q = query.trim()
   const taken = new Set(rows.map((r) => r.symbol).filter(Boolean) as string[])
-  const results = useMemo(() => (q ? searchAll(q, null, settings.shariahFirst).filter((c) => !taken.has(c.symbol)).slice(0, 6) : []), [q, settings.shariahFirst, rows]) // eslint-disable-line react-hooks/exhaustive-deps
+  const results = useMemo(() => (q ? searchAll(q, null, settings.shariahFirst).filter((c) => !taken.has(c.symbol)).slice(0, 6) : []), [q, settings.shariahFirst, rows, catalogRev]) // eslint-disable-line react-hooks/exhaustive-deps
   const loadPrices = (symbols: string[]) => fetchQuotes(symbols, pxRef.current).then(({ quotes: got }) => { pxRef.current = got; setPx(got) })
   const visible = results.map((c) => c.symbol).join(',')
   useEffect(() => {
@@ -72,7 +71,7 @@ export default function BasketSheet({ open, accountId, onClose }: { open: boolea
   useEffect(() => {
     if (!open || q.length < 2 || !/[A-Za-z0-9]/.test(q)) { setHits([]); return }
     let gone = false
-    const t = setTimeout(() => { searchMarket(q).then((h) => { if (!gone) { const fresh = h.filter((x) => !IN_CATALOG.has(x.symbol)).slice(0, 4); setHits(fresh); if (fresh.length) void loadPrices(fresh.map((x) => x.symbol)) } }) }, 450)
+    const t = setTimeout(() => { searchMarket(q).then((h) => { if (!gone) { const fresh = h.filter((x) => !inCatalog(x.symbol)).slice(0, 4); setHits(fresh); if (fresh.length) void loadPrices(fresh.map((x) => x.symbol)) } }) }, 450)
     return () => { gone = true; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q])
