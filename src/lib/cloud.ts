@@ -74,3 +74,15 @@ export async function fetchRuns(): Promise<ProfileRun[]> {
   const { data } = await cloud().from('invest_profile_runs').select('ran_at, kind, summary').order('ran_at', { ascending: false }).limit(8)
   return (data ?? []) as ProfileRun[]
 }
+
+/** Researched breakdowns keyed by symbol: public reference data, readable without signing in. */
+export async function fetchSymbolProfiles(symbols: string[]): Promise<Record<string, AssetProfile>> {
+  if (symbols.length === 0) return {}
+  const { data, error } = await cloud().from('invest_symbol_profiles').select('symbol, profile, as_of, updated_at').in('symbol', symbols)
+  if (error) throw new Error(error.message)
+  const out: Record<string, AssetProfile> = {}
+  for (const r of (data ?? []) as { symbol: string; profile: Partial<AssetProfile>; as_of: string | null; updated_at: string }[]) {
+    out[r.symbol] = { confidence: 'estimated', ...r.profile, assetId: '', source: 'claude', locked: false, asOf: r.as_of ?? '', updatedAt: r.updated_at }
+  }
+  return out
+}

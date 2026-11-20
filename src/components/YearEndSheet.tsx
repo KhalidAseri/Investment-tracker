@@ -42,7 +42,7 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
   }
   const titles = { 1: L('1 من 3 — راجع الزكاة الفعلية', '1 of 3 — Review actual zakat'), 2: L('2 من 3 — دخل السنة والتحويلة', '2 of 3 — Year’s income and transfer'), 3: L('3 من 3 — الخطة مقابل الفعلي', '3 of 3 — Plan vs actual') }
   const row = (label: string, plan: React.ReactNode, actual: React.ReactNode) => (
-    <tr className="border-t border-line"><th scope="row" className="py-2.5 pe-2 text-start font-medium">{label}</th><td className="py-2.5 text-ink-soft">{plan}</td><td className="py-2.5 font-semibold">{actual}</td></tr>
+    <tr className="border-t border-line"><th scope="row" className="py-3 pe-2 text-start font-medium">{label}</th><td className="py-3 text-ink-soft">{plan}</td><td className="py-3 font-semibold">{actual}</td></tr>
   )
 
   return (
@@ -61,18 +61,18 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
             <ul className="divide-y divide-line rounded-2xl border border-line">
               {zakat.rows.map((r) => (
                 <li key={r.assetId}>
-                  <button className="flex min-h-[60px] w-full items-center justify-between gap-3 px-3.5 py-2 text-start hover:bg-surface" onClick={() => setEditing(r.assetId)}>
+                  <button className="flex min-h-[60px] w-full items-center justify-between gap-3 px-4 py-2 text-start hover:bg-surface" onClick={() => setEditing(r.assetId)}>
                     <span className="min-w-0"><span className="block truncate text-sm font-semibold">{r.name}</span><span className="text-xs text-ink-soft">{L(ZAKAT_LABEL[r.mode].ar, ZAKAT_LABEL[r.mode].en)} · <span className="num">{pct(r.effectivePct, 2)}</span></span></span>
-                    <Money value={r.due} className="shrink-0 text-sm font-bold" />
+                    <Money value={r.due} className="shrink-0 text-sm font-semibold" />
                   </button>
                 </li>
               ))}
-              {zakat.rows.length === 0 && <li className="px-3.5 py-3 text-sm text-ink-soft">{L('لا أصول مسجلة.', 'No assets recorded.')}</li>}
+              {zakat.rows.length === 0 && <li className="px-4 py-3 text-sm text-ink-soft">{L('لا أصول مسجلة.', 'No assets recorded.')}</li>}
             </ul>
             <dl className="divide-y divide-line rounded-2xl border border-line text-sm">
-              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L(`المخطط (${y.zakatPlannedPct}% من المحفظة)`, `Planned (${y.zakatPlannedPct}% of the portfolio)`)}</dt><dd><Money value={y.zakatPlanned} /></dd></div>
-              <div className="flex justify-between bg-surface px-3.5 py-2.5"><dt className="font-semibold">{L('الفعلي', 'Actual')} (<span className="num">{pct(y.zakatActualPct, 2)}</span>)</dt><dd className="font-bold"><Money value={zakat.due} /></dd></div>
-              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L('الفرق يذهب لدخلك', 'The difference goes to your income')}</dt><dd><Delta value={y.zakatPlanned - zakat.due} /></dd></div>
+              <div className="flex justify-between px-4 py-3"><dt className="text-ink-soft">{L(`المخطط (${y.zakatPlannedPct}% من المحفظة)`, `Planned (${y.zakatPlannedPct}% of the portfolio)`)}</dt><dd><Money value={y.zakatPlanned} /></dd></div>
+              <div className="flex justify-between bg-surface px-4 py-3"><dt className="font-semibold">{L('الفعلي', 'Actual')} (<span className="num">{pct(y.zakatActualPct, 2)}</span>)</dt><dd className="font-semibold"><Money value={zakat.due} /></dd></div>
+              <div className="flex justify-between px-4 py-3"><dt className="text-ink-soft">{L('الفرق يذهب لدخلك', 'The difference goes to your income')}</dt><dd><Delta value={y.zakatPlanned - zakat.due} /></dd></div>
             </dl>
             {zakat.aboveNisab === false && <Notice tone="info" title={L('الوعاء المسجل هنا دون النصاب', 'The base recorded here is below the nisab')}>{L('إن كان لك مال زكوي خارج التطبيق فاجمعه معه.', 'If you hold zakatable wealth outside the app, add it in.')}</Notice>}
           </div>
@@ -82,7 +82,7 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
           <div className="space-y-4">
             <div className="rounded-2xl bg-tint p-4">
               <p className="text-xs text-link">{L('راتبك الشهري للسنة القادمة', 'Your monthly salary for the coming year')}</p>
-              <p className="text-3xl font-bold text-tint-ink"><Money value={t.monthly} /></p>
+              <p className="text-3xl font-semibold text-tint-ink"><Money value={t.monthly} /></p>
               <p className="mt-1 text-xs text-link">{L('دخل السنة', 'Year’s income')} <Money value={t.income} /> = <span className="num">{pct(t.ratePct, 2)}</span> × {L('متوسط القيمة', 'average value')} <Money value={t.smoothed} /></p>
             </div>
             <p className="text-sm leading-relaxed text-ink-soft">
@@ -94,9 +94,9 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
             {t.rule === 'held' && <Notice tone="warn" title={L('ثُبّت على دخل السنة الماضية', 'Held at last year’s income')}>{L('لا زيادة في سنة خسرت فيها المحفظة.', 'No raise in a year the portfolio lost value.')}</Notice>}
             {t.ratePct <= 0 && <Notice tone="warn" title={L('لا يبقى دخل هذه السنة', 'Nothing is left for income this year')}>{L('العائد المتوقع لا يغطي الزكاة والتضخم والنمو المطلوب. خفّض النمو المطلوب من خطة الدخل.', 'The expected return does not cover zakat, inflation and the growth target. Lower the growth target in the income plan.')}</Notice>}
             <dl className="divide-y divide-line rounded-2xl border border-line text-sm">
-              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L('التحويلة = الدخل + الزكاة', 'Transfer = income + zakat')}</dt><dd className="font-semibold"><Money value={t.transfer} /></dd></div>
-              <div className="flex justify-between px-3.5 py-2.5"><dt className="text-ink-soft">{L('الموجود في حساب الدخل', 'Already in the income account')}</dt><dd><Money value={t.inAccount} /></dd></div>
-              <div className="flex justify-between bg-surface px-3.5 py-2.5"><dt className="font-semibold">{L('المطلوب تحويله الآن', 'To move now')}</dt><dd className="font-bold"><Money value={t.need} /></dd></div>
+              <div className="flex justify-between px-4 py-3"><dt className="text-ink-soft">{L('التحويلة = الدخل + الزكاة', 'Transfer = income + zakat')}</dt><dd className="font-semibold"><Money value={t.transfer} /></dd></div>
+              <div className="flex justify-between px-4 py-3"><dt className="text-ink-soft">{L('الموجود في حساب الدخل', 'Already in the income account')}</dt><dd><Money value={t.inAccount} /></dd></div>
+              <div className="flex justify-between bg-surface px-4 py-3"><dt className="font-semibold">{L('المطلوب تحويله الآن', 'To move now')}</dt><dd className="font-semibold"><Money value={t.need} /></dd></div>
             </dl>
             {t.need > 0 && (
               <div className="text-sm">
@@ -105,7 +105,7 @@ export default function YearEndSheet({ open, onClose }: { open: boolean; onClose
                 </p>
                 {t.sells.length > 0 && (
                   <ul className="divide-y divide-line rounded-xl border border-line">
-                    {t.sells.map((l) => <li key={l.assetClass} className="flex items-center justify-between gap-3 px-3 py-2"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CLASS_COLOR[l.assetClass] }} aria-hidden />{l.label}</span><Money value={l.amount} className="font-semibold" /></li>)}
+                    {t.sells.map((l) => <li key={l.assetClass} className="flex items-center justify-between gap-3 px-3 py-2"><span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm" style={{ background: CLASS_COLOR[l.assetClass] }} aria-hidden />{l.label}</span><Money value={l.amount} className="font-semibold" /></li>)}
                   </ul>
                 )}
               </div>

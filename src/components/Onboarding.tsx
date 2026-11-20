@@ -33,7 +33,7 @@ export default function Onboarding() {
   return (
     <section className="card space-y-4">
       <div>
-        <h2 className="text-lg font-bold">{L('أهلًا بك — لنضبط خطتك', 'Welcome — let’s set up your plan')}</h2>
+        <h2 className="text-lg font-semibold">{L('ثلاثة أرقام نبدأ بها خطتك', 'Three numbers to start your plan')}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-soft">{L('ثلاثة أرقام تكفي ليبدأ التطبيق بتوجيهك. تقدر تعدّلها لاحقًا من «الخطة».', 'Three numbers are enough for the app to start guiding you. You can change them later under Plan.')}</p>
       </div>
       <Field label={L('مصاريفك الشهرية تقريبًا', 'Your approximate monthly expenses')} hint={L('لتحديد حجم صندوق الطوارئ.', 'Sizes your emergency fund.')}>

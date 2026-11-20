@@ -100,7 +100,7 @@ export default function MorePage() {
   return (
     <>
       <Chips value={tab} onChange={setHash} options={TABS.map((t) => ({ value: t, label: labels[t] }))} />
-      {msg && <div role="status" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-surface">{msg}</div>}
+      {msg && <div role="status" className="rounded-xl bg-ink px-4 py-3 text-sm font-medium text-surface">{msg}</div>}
 
       {/* ---------- Account & sync ---------- */}
       {tab === 'account' && (
@@ -141,14 +141,14 @@ export default function MorePage() {
             <section className="card">
               <h2 className="section-title mb-3">{L('آخر تحديثات كلود للتوزيعات', 'Claude’s latest breakdown updates')}</h2>
               <ul className="divide-y divide-line">
-                {runs.map((r) => <li key={r.ran_at} className="py-2.5 text-sm"><p className="text-xs text-ink-soft">{dateLabel(r.ran_at, settings.locale)}</p><p className="mt-0.5 leading-relaxed">{r.summary}</p></li>)}
+                {runs.map((r) => <li key={r.ran_at} className="py-3 text-sm"><p className="text-xs text-ink-soft">{dateLabel(r.ran_at, settings.locale)}</p><p className="mt-0.5 leading-relaxed">{r.summary}</p></li>)}
               </ul>
             </section>
           )}
           {!isNative() && (
             <section className="card flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-tint text-link"><Smartphone className="h-5 w-5" /></span>
-              <div className="min-w-0 flex-1"><h2 className="text-sm font-bold">{L('تطبيق أندرويد', 'Android app')}</h2><p className="hint">{L('أسعار مباشرة أوثق، ويعمل بلا متصفح.', 'More reliable live prices, no browser needed.')}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">{L('تطبيق أندرويد', 'Android app')}</h2><p className="hint">{L('أسعار مباشرة أوثق، ويعمل بلا متصفح.', 'More reliable live prices, no browser needed.')}</p></div>
               <a className="btn-primary shrink-0" href={`${SITE}/download/istithmarati.apk`}><Download className="h-4 w-4" />{L('تحميل', 'Download')}</a>
             </section>
           )}
@@ -161,7 +161,7 @@ export default function MorePage() {
           <section className="card space-y-2">
             <h2 className="section-title">{L('توزيع كل أصل', 'Each asset’s breakdown')}</h2>
             <p className="hint">{L('كلود يبحث في المصادر الرسمية لكل أصل ويسجّل هنا توزيعه على الدول والقطاعات والفئات، ويحدّثه كل ربع سنة. التحليل يعتمد على هذه القائمة.', 'Claude researches each asset’s official sources and records here how it spreads across countries, sectors and classes, refreshing it every quarter. The analysis relies on this list.')}</p>
-            <p className="text-sm"><span className="num font-bold">{analysed}</span> {L('من', 'of')} <span className="num font-bold">{data.assets.length}</span> {L('أصل محلَّل', 'assets analysed')}</p>
+            <p className="text-sm"><span className="num font-semibold">{analysed}</span> {L('من', 'of')} <span className="num font-semibold">{data.assets.length}</span> {L('أصل محلَّل', 'assets analysed')}</p>
             {!cloudUser && <Notice tone="info" title={L('اربط حسابك ليصل كلود إلى أصولك', 'Connect your account so Claude can reach your assets')} action={<button className="btn-soft" onClick={() => setHash('account')}>{L('الحساب', 'Account')}</button>} />}
             {cloudUser && analysed < data.assets.length && <p className="hint">{L('لتحليل الأصول المنتظرة الآن: اطلب من كلود «حلّل أصولي الجديدة».', 'To analyse the pending assets now, ask Claude to “analyse my new assets”.')}</p>}
           </section>
@@ -216,7 +216,7 @@ export default function MorePage() {
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
             <button className="btn-danger w-full" onClick={() => setConfirmReset(true)}><Trash2 className="h-4 w-4" />{L('حذف كل البيانات من هذا الجهاز', 'Delete all data from this device')}</button>
           </section>
-          <Disclaimer>{L('الأسعار من Yahoo Finance: داخل تطبيق أندرويد تُجلب مباشرة، وفي المتصفح عبر وسطاء مجانيين قد يتعذرون فيُعرض آخر سعر محفوظ. التطبيق أداة تنظيم وتثقيف وليس مستشارًا ماليًا مرخصًا. الإصدار 4.1.1', 'Prices come from Yahoo Finance: fetched directly inside the Android app, and through free relays in the browser, which can fail — the last saved price is shown then. The app is an organising and educational tool, not a licensed financial adviser. Version 4.1.1')}</Disclaimer>
+          <Disclaimer>{L('الأسعار من Yahoo Finance: داخل تطبيق أندرويد تُجلب مباشرة، وفي المتصفح عبر وسطاء مجانيين قد يتعذرون فيُعرض آخر سعر محفوظ. التطبيق أداة تنظيم وتثقيف وليس مستشارًا ماليًا مرخصًا. الإصدار 5.0', 'Prices come from Yahoo Finance: fetched directly inside the Android app, and through free relays in the browser, which can fail — the last saved price is shown then. The app is an organising and educational tool, not a licensed financial adviser. Version 5.0')}</Disclaimer>
         </>
       )}
 
@@ -231,7 +231,7 @@ export default function MorePage() {
               return (
                 <div key={t.id}>
                   <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-3 text-start" aria-expanded={open} onClick={() => setOpenTip(open ? null : t.id)}>
-                    <span className="text-sm font-bold">{c.title}</span>
+                    <span className="text-sm font-semibold">{c.title}</span>
                     <ChevronDown className={cx('h-5 w-5 shrink-0 text-ink-faint transition-transform duration-300', open && 'rotate-180')} aria-hidden />
                   </button>
                   {open && <div className="space-y-2 px-4 pb-4 text-[13.5px] leading-relaxed text-ink-soft">{c.body.map((p, i) => <p key={i}>{p}</p>)}</div>}

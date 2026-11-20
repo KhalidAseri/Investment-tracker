@@ -31,7 +31,7 @@ export default function SharePage() {
     <div className="space-y-4">
       <header>
         <p className="text-xs text-ink-soft">{L('لقطة للقراءة فقط', 'Read-only snapshot')} · {dateLabel(payload.d, settings.locale)}</p>
-        <h1 className="mt-1 text-2xl font-bold">{payload.n || L('محفظة استثمارية', 'Investment portfolio')}</h1>
+        <h1 className="mt-1 text-2xl font-semibold">{payload.n || L('محفظة استثمارية', 'Investment portfolio')}</h1>
         {payload.t !== undefined && <p className="mt-1 text-lg font-semibold"><span className="num">{num(payload.t, 0)}</span> <span className="text-sm text-ink-soft">{L('ر.س', 'SAR')}</span></p>}
       </header>
 
@@ -41,7 +41,7 @@ export default function SharePage() {
         <ul className="mt-3 space-y-2">
           {classes.map((c) => (
             <li key={c.key} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: c.color }} aria-hidden />{c.label}</span>
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm" style={{ background: c.color }} aria-hidden />{c.label}</span>
               <span className="num font-semibold">{pct(c.pct)}</span>
             </li>
           ))}
@@ -57,7 +57,7 @@ export default function SharePage() {
       )}
       {payload.g !== undefined && (
         <section className="card">
-          <div className="mb-2 flex items-baseline justify-between"><h2 className="section-title">{L('التقدم نحو الهدف', 'Progress to goal')}</h2><span className="num text-sm font-bold">{pct(payload.g, 0)}</span></div>
+          <div className="mb-2 flex items-baseline justify-between"><h2 className="section-title">{L('التقدم نحو الهدف', 'Progress to goal')}</h2><span className="num text-sm font-semibold">{pct(payload.g, 0)}</span></div>
           <Meter value={payload.g} label={L('التقدم نحو الهدف', 'Progress to goal')} />
         </section>
       )}

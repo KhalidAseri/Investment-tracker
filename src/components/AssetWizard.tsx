@@ -14,7 +14,7 @@ import { emergencyStatus } from '@/lib/engine/plan'
 import { TROY_OUNCE_GRAMS, GOLD_SYMBOL } from '@/lib/engine/zakat'
 import { fetchHistory, fetchQuotes, loadQuoteCache, rangeFor, searchMarket, type MarketHit } from '@/lib/market-client'
 import { dateLabel, num, pct } from '@/lib/format'
-import { Chips, Delta, Field, Notice, NumberInput, Sheet, cx } from './ui'
+import { Chips, Delta, Field, Notice, NumberInput, Sheet, cx, haptic } from './ui'
 
 /** Assets with no market price: the user states their value. */
 const MANUAL: { id: AssetKindId; ar: string; en: string; icon: React.ElementType }[] = [
@@ -223,6 +223,7 @@ export default function AssetWizard({ open, onClose, onExisting }: { open: boole
     const kindOfAccount: AccountKind = kind.accountKind
     const created = addAsset(asset, existing && !draft.newAccount.trim() ? { id: existing.id, name: existing.name, kind: existing.kind } : { name: draft.newAccount.trim(), kind: kindOfAccount })
     if (asPurchase) addTransaction(created.id, { type: 'BUY', date: draft.buyDate, quantity: qty, price: unitCost, amount: qty * unitCost })
+    haptic()
     close()
   }
 
@@ -520,7 +521,7 @@ export default function AssetWizard({ open, onClose, onExisting }: { open: boole
 export function ClassFields({ value, onChange }: { value: { assetClass: AssetClass; region: Region; sector: string; isFund: boolean }; onChange: (p: { assetClass?: AssetClass; region?: Region; sector?: string; isFund?: boolean }) => void }) {
   const { L } = useStore()
   return (
-    <div className={cx('space-y-3 rounded-2xl bg-surface p-3.5')}>
+    <div className={cx('space-y-3 rounded-2xl bg-surface p-4')}>
       <Field label={L('فئة الأصل', 'Asset class')}>
         <select className="input" value={value.assetClass} onChange={(e) => onChange({ assetClass: e.target.value as AssetClass })}>
           {ASSET_CLASSES.map((c) => <option key={c} value={c}>{L(CLASS_LABEL[c].ar, CLASS_LABEL[c].en)}</option>)}

@@ -185,6 +185,8 @@ export interface Settings {
   lookThrough: { US: number; DEV: number; EM: number }
   shariahFirst: boolean
   roadmap: { debtFree: boolean; employerMatch: boolean; automated: boolean }
+  /** Stations already announced to the user; absent until the first check. */
+  milestones?: string[]
 }
 
 export interface AppData {

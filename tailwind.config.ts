@@ -24,7 +24,7 @@ const config: Config = {
         good: { tint: v('good-tint'), line: v('good-line') },
         warn: { 600: v('warn'), tint: v('warn-tint'), line: v('warn-line') },
       },
-      boxShadow: { card: '0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03)', float: '0 10px 30px rgb(0 0 0 / 0.18)' },
+      boxShadow: { card: 'var(--shadow-card)', float: 'var(--shadow-float)' },
     },
   },
   plugins: [require('@tailwindcss/forms')],

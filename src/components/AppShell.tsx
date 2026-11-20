@@ -9,6 +9,7 @@ import { useStore } from '@/lib/store'
 import type { TxType } from '@/lib/types'
 import AssetWizard from './AssetWizard'
 import AssetSheet from './AssetSheet'
+import QuickUpdate from './QuickUpdate'
 import { Money, Sheet, closeTopSheet, cx } from './ui'
 
 const TABS = [
@@ -22,8 +23,10 @@ interface Actions {
   openWizard: () => void
   /** Opens an asset, optionally straight into one of its actions. */
   openAsset: (id: string, mode?: TxType | 'LINK') => void
+  /** Walks through every hand-valued asset to bring its value up to date. */
+  openQuickUpdate: () => void
 }
-const ActionsCtx = createContext<Actions>({ openWizard: () => {}, openAsset: () => {} })
+const ActionsCtx = createContext<Actions>({ openWizard: () => {}, openAsset: () => {}, openQuickUpdate: () => {} })
 export const useActions = () => useContext(ActionsCtx)
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,8 +36,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [asset, setAsset] = useState<{ id: string; mode?: TxType | 'LINK' } | null>(null)
   const [quick, setQuick] = useState(false)
   const [pick, setPick] = useState<TxType | null>(null)
+  const [update, setUpdate] = useState(false)
 
-  const actions = useMemo<Actions>(() => ({ openWizard: () => setWizard(true), openAsset: (id, mode) => setAsset({ id, mode }) }), [])
+  const actions = useMemo<Actions>(() => ({ openWizard: () => setWizard(true), openAsset: (id, mode) => setAsset({ id, mode }), openQuickUpdate: () => setUpdate(true) }), [])
   const closeQuick = useCallback(() => { setQuick(false); setPick(null) }, [])
 
   // Android back button: close the top sheet first, then go back, then leave the app.
@@ -68,14 +72,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { type: 'ASSET', ar: 'أصل جديد', en: 'New asset', hintAr: 'سهم، صندوق، نقد، ذهب، عقار', hintEn: 'Stock, fund, cash, gold, property', icon: PackagePlus },
     { type: 'BUY', ar: 'شراء', en: 'Buy', hintAr: 'أضف كمية لأصل تملكه', hintEn: 'Add to a holding', icon: ShoppingCart },
     { type: 'DIVIDEND', ar: 'توزيعة أو عائد', en: 'Dividend or income', hintAr: 'سجّل ما استلمته', hintEn: 'Record what you received', icon: Coins },
-    { type: 'VALUE_UPDATE', ar: 'تحديث قيمة', en: 'Update a value', hintAr: 'للأصول اليدوية', hintEn: 'For manual assets', icon: Pencil },
+    { type: 'VALUE_UPDATE', ar: 'تحديث القيم', en: 'Update values', hintAr: 'مرّ على أصولك اليدوية واحدًا واحدًا', hintEn: 'Go through your hand-valued assets one by one', icon: Pencil },
   ]
   const candidates = view.rows.filter((r) => (pick === 'BUY' ? r.asset.pricing === 'live' : pick === 'VALUE_UPDATE' ? r.asset.pricing === 'manual' : true))
 
   const tab = (t: (typeof TABS)[number]) => {
     const active = current?.href === t.href
     return (
-      <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors', active ? 'text-link' : 'text-ink-soft')}>
+      <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-medium transition-colors', active ? 'text-link' : 'text-ink-soft')}>
         {active && <motion.span layoutId="nav-pill" className="absolute top-0 h-0.5 w-10 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
         <t.icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
         {L(t.ar, t.en)}
@@ -88,7 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
         <header className="sticky top-0 z-30 border-b border-line bg-surface/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
           <div className="flex h-14 items-center justify-between">
-            <h1 className="text-lg font-bold">{title}</h1>
+            <h1 className="text-lg font-semibold">{title}</h1>
             <div className="flex items-center">
               {hasLive && (
                 <button onClick={() => refreshQuotes(true)} disabled={quoteStatus === 'loading'} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-card" aria-label={L('تحديث الأسعار', 'Refresh prices')}>
@@ -99,7 +103,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {settings.hideAmounts ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
               <Link href="/more/" className={cx('relative flex h-11 w-11 items-center justify-center rounded-full hover:bg-card', path.startsWith('/more') ? 'text-link' : 'text-ink-soft')} aria-label={L('حسابي والإعدادات', 'Account and settings')}>
-                <CircleUserRound className="h-[22px] w-[22px]" />
+                <CircleUserRound className="h-6 w-6" />
                 {syncDot && <span className={cx('absolute end-2 top-2 h-2 w-2 rounded-full ring-2 ring-surface', syncDot)} aria-hidden />}
               </Link>
             </div>
@@ -137,9 +141,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Quick add: the four things people record most, two taps away from anywhere */}
       <Sheet open={quick} onClose={closeQuick} title={pick ? L('اختر الأصل', 'Choose the asset') : L('إضافة أو تسجيل', 'Add or record')}>
         {!pick ? (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-3">
             {QUICK.map((q) => (
-              <button key={q.type} onClick={() => { if (q.type === 'ASSET') { closeQuick(); setWizard(true) } else setPick(q.type) }} className="flex min-h-[104px] flex-col items-start gap-2 rounded-2xl border border-line bg-card p-3.5 text-start transition hover:border-accent active:scale-[0.98]">
+              <button key={q.type} onClick={() => { if (q.type === 'ASSET') { closeQuick(); setWizard(true) } else if (q.type === 'VALUE_UPDATE') { closeQuick(); setUpdate(true) } else setPick(q.type) }} className="flex min-h-[104px] flex-col items-start gap-2 rounded-2xl border border-line bg-card p-4 text-start transition hover:border-accent active:scale-[0.98]">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tint text-link"><q.icon className="h-5 w-5" /></span>
                 <span className="text-sm font-semibold leading-tight">{L(q.ar, q.en)}</span>
                 <span className="text-[11px] leading-snug text-ink-soft">{L(q.hintAr, q.hintEn)}</span>
@@ -152,7 +156,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
             {candidates.map((r) => (
               <li key={r.asset.id}>
-                <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-3.5 py-2 text-start hover:bg-surface" onClick={() => { const mode = pick; closeQuick(); setAsset({ id: r.asset.id, mode }) }}>
+                <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-2 text-start hover:bg-surface" onClick={() => { const mode = pick; closeQuick(); setAsset({ id: r.asset.id, mode }) }}>
                   <span className="min-w-0 truncate text-sm font-medium">{r.asset.name}</span>
                   <Money value={r.value} className="shrink-0 text-sm text-ink-soft" />
                 </button>
@@ -162,6 +166,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </Sheet>
       <AssetWizard open={wizard} onClose={() => setWizard(false)} onExisting={(id) => setAsset({ id, mode: 'BUY' })} />
+      <QuickUpdate open={update} onClose={() => setUpdate(false)} />
       <AssetSheet assetId={asset?.id ?? null} initialMode={asset?.mode} onClose={() => setAsset(null)} />
     </ActionsCtx.Provider>
   )

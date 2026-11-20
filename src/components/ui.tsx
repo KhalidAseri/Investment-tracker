@@ -75,11 +75,11 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
             drag="y" dragControls={drag} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
             onDragEnd={(_, info) => { if (info.offset.y > 110 || info.velocity.y > 700) onClose() }}
           >
-            <div className="flex cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)} aria-hidden>
+            <div className="flex cursor-grab touch-none justify-center pb-1 pt-3 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)} aria-hidden>
               <span className="h-1.5 w-10 rounded-full bg-line" />
             </div>
             <div className="flex items-center justify-between gap-3 border-b border-line px-5 pb-3 pt-1">
-              <h2 id={titleId} className="text-base font-bold">{title}</h2>
+              <h2 id={titleId} className="text-base font-semibold">{title}</h2>
               <button onClick={onClose} className="-me-2 flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface" aria-label={L('إغلاق', 'Close')}>
                 <X className="h-5 w-5" />
               </button>
@@ -210,12 +210,12 @@ export function Notice({ tone, title, children, action }: { tone: 'warn' | 'info
   const style = tone === 'warn' ? 'border-warn-line bg-warn-tint' : tone === 'good' ? 'border-good-line bg-good-tint' : 'border-line bg-card'
   const iconStyle = tone === 'warn' ? 'text-warn-600' : tone === 'good' ? 'text-gain' : 'text-link'
   return (
-    <div className={cx('flex gap-3 rounded-2xl border p-3.5', style)}>
+    <div className={cx('flex gap-3 rounded-2xl border p-4', style)}>
       <Icon className={cx('mt-0.5 h-5 w-5 shrink-0', iconStyle)} aria-hidden />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold leading-snug">{title}</p>
         {children && <div className="mt-1 text-[13px] leading-relaxed text-ink-soft">{children}</div>}
-        {action && <div className="mt-2.5">{action}</div>}
+        {action && <div className="mt-3">{action}</div>}
       </div>
     </div>
   )
@@ -225,7 +225,7 @@ export function Empty({ icon, title, body, action }: { icon: React.ReactNode; ti
   return (
     <div className="card flex flex-col items-center px-6 py-10 text-center">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-tint text-link">{icon}</div>
-      <h2 className="text-base font-bold">{title}</h2>
+      <h2 className="text-base font-semibold">{title}</h2>
       <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-ink-soft">{body}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
@@ -236,14 +236,14 @@ export function Stat({ label, children, sub }: { label: string; children: React.
   return (
     <div className="min-w-0">
       <p className="text-xs text-ink-soft">{label}</p>
-      <div className="mt-0.5 text-lg font-bold leading-tight">{children}</div>
+      <div className="mt-0.5 text-lg font-semibold leading-tight">{children}</div>
       {sub && <div className="mt-0.5 text-xs text-ink-soft">{sub}</div>}
     </div>
   )
 }
 
 export function Disclaimer({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-xl bg-surface px-3 py-2.5 text-xs leading-relaxed text-ink-soft">{children}</p>
+  return <p className="rounded-xl bg-surface px-3 py-3 text-xs leading-relaxed text-ink-soft">{children}</p>
 }
 
 /** A range control with its current value shown beside the label. */
@@ -253,10 +253,34 @@ export function Slider({ label, value, min, max, step, onChange, display, hint }
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <label htmlFor={id} className="text-sm font-medium">{label}</label>
-        <span className="num text-sm font-bold">{display ?? value}</span>
+        <span className="num text-sm font-semibold">{display ?? value}</span>
       </div>
-      <input id={id} type="range" className="mt-1 h-8 w-full cursor-pointer accent-brand-600" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input id={id} type="range" className="mt-1 h-8 w-full cursor-pointer" style={{ accentColor: 'rgb(var(--accent))' }} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
       {hint && <div className="hint">{hint}</div>}
     </div>
   )
+}
+
+/** A short tick on phones that support it, for a saved value or a reached station. */
+export function haptic(ms = 10): void {
+  try {
+    const nav = navigator as Navigator & { vibrate?: (p: number) => boolean; userActivation?: { hasBeenActive: boolean } }
+    // browsers refuse (and log) a vibration before the first tap
+    if (nav.userActivation && !nav.userActivation.hasBeenActive) return
+    nav.vibrate?.(ms)
+  } catch { /* not supported */ }
+}
+
+/** A brief tint behind a figure when it changes, green up and red down, so a refreshed price is noticed. */
+export function Flash({ value, children, className }: { value: number; children: React.ReactNode; className?: string }) {
+  const prev = useRef(value)
+  const [dir, setDir] = useState<'' | 'up' | 'down'>('')
+  useEffect(() => {
+    if (Math.abs(value - prev.current) < 0.005) return
+    setDir(value > prev.current ? 'up' : 'down')
+    prev.current = value
+    const t = setTimeout(() => setDir(''), 900)
+    return () => clearTimeout(t)
+  }, [value])
+  return <span className={cx('-mx-1 rounded-md px-1 transition-colors duration-500', dir === 'up' && 'bg-good-tint', dir === 'down' && 'bg-loss-tint', className)}>{children}</span>
 }

@@ -96,3 +96,30 @@ export function priceOn(points: Point[], day: string): { price: number; day: str
   for (const p of s) { if (p.day <= day) pick = p; else break }
   return { price: pick.close, day: pick.day, exact: Math.abs(t(pick.day) - t(day)) <= 7 * DAY }
 }
+
+export interface Holding { symbol: string | null; /** Units × price factor × FX to the base currency. */ unitsInBase: number; /** Value today in the base currency. */ value: number }
+
+/**
+ * What today's holdings were worth on each of `days`: priced holdings at that day's close (the last
+ * close on or before it), everything else at its value today. The last day is today's actual value.
+ * It answers «how did what I own now move», not «what did I own then».
+ */
+export function holdingsSeries(holdings: Holding[], histories: Record<string, Point[]>, days: string[]): Point[] {
+  const sorted: Record<string, Point[]> = {}
+  for (const [k, v] of Object.entries(histories)) sorted[k] = window(v)
+  return days.map((day, i) => {
+    let total = 0
+    for (const h of holdings) {
+      const series = h.symbol ? sorted[h.symbol] : undefined
+      if (i === days.length - 1 || !series || series.length < 2) { total += h.value; continue }
+      const p = priceOn(series, day)
+      total += p ? p.price * h.unitsInBase : h.value
+    }
+    return { day, close: total }
+  })
+}
+
+/** The last `n` calendar days ending today, oldest first. */
+export function lastDays(n: number, now = new Date()): string[] {
+  return Array.from({ length: n }, (_, i) => new Date(now.getTime() - (n - 1 - i) * DAY).toISOString().slice(0, 10))
+}

@@ -29,9 +29,9 @@ export function ZakatControl({ value, onChange, assetValue, quantity, currency, 
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-tint p-3.5">
+      <div className="rounded-2xl bg-tint p-4">
         <p className="text-xs text-link">{L('زكاة هذا الأصل في السنة', 'Zakat on this asset per year')}</p>
-        <p className="text-2xl font-bold text-tint-ink"><Money value={due} /></p>
+        <p className="text-2xl font-semibold text-tint-ink"><Money value={due} /></p>
         <p className="text-xs text-link">{assetValue > 0 ? <><span className="num">{pct((due / assetValue) * 100, 2)}</span> {L('من قيمته', 'of its value')}</> : L('أدخل القيمة ليظهر المبلغ', 'Enter the value to see the amount')}</p>
       </div>
 

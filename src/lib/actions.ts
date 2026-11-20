@@ -19,6 +19,8 @@ export interface NextAction {
   /** When set, the action opens this asset (in this mode) instead of following href. */
   assetId?: string
   assetMode?: 'LINK'
+  /** When set, the action opens the quick value update. */
+  quick?: boolean
 }
 
 /** The short, prioritised list on the home screen: what deserves attention right now. */
@@ -108,7 +110,7 @@ export function nextActions(data: AppData, view: PortfolioView, quotes: Quotes, 
 
   const stale = staleManualRows(view.rows, now.getTime())
   if (stale.length > 0) {
-    out.push({ id: 'stale', tone: 'info', title: L(`حدّث قيمة ${stale.length} أصل يدوي`, `Update ${stale.length} manual asset value(s)`), body: stale.slice(0, 3).map((r) => r.asset.name).join('، '), href: '/assets/', cta: L('الأصول', 'Assets') })
+    out.push({ id: 'stale', tone: 'info', title: L(`حدّث قيمة ${stale.length} أصل يدوي`, `Update ${stale.length} manual asset value(s)`), body: stale.slice(0, 3).map((r) => r.asset.name).join('، '), href: '/assets/', cta: L('حدّثها الآن', 'Update now'), quick: true })
   }
 
   if (s.targetsSet && investRows.length > 0) {

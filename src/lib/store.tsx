@@ -10,6 +10,7 @@ import { syncDecision } from './engine/sync'
 import * as remote from './cloud'
 import type { AssetProfile } from './types'
 
+const SYMBOL_PROFILES_KEY = 'investtrack_symprofiles_v1'
 const STORE_KEY = 'investtrack_v3'
 
 // ---------- persistence & migration ----------
@@ -231,7 +232,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const known = loadQuoteCache()
     const { quotes: merged, failed } = await fetchQuotes(symbols, known, force)
     setQuotes(merged)
-    setQuoteStatus(failed.length === 0 ? 'ok' : failed.length < symbols.length ? 'partial' : 'failed')
+    // A Saudi mutual fund without a price is waiting for its daily update, not a failed fetch.
+    const broken = failed.filter((x) => !x.startsWith('MF:'))
+    setQuoteStatus(broken.length === 0 ? 'ok' : broken.length < symbols.length ? 'partial' : 'failed')
     // A fund entered by its value before it had a price becomes units at the first price.
     const settled = settleAnchors(dataRef.current.assets, merged)
     if (settled.length > 0) commit((d) => { for (const { id, patch } of settled) { const i = d.assets.findIndex((a) => a.id === id); if (i >= 0) d.assets[i] = { ...d.assets[i], ...patch } } })
@@ -247,6 +250,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (ready) void refreshQuotes()
   }, [ready, refreshQuotes])
+
+  // Coming back to the app after a while: prices refresh without being asked.
+  const lastRefresh = useRef(0)
+  useEffect(() => {
+    if (!ready) return
+    lastRefresh.current = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastRefresh.current < 15 * 60 * 1000) return
+      lastRefresh.current = Date.now()
+      void refreshQuotes()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [ready, refreshQuotes])
+
+  // Breakdowns Claude researched per symbol: shared reference data, used for any asset holding that symbol.
+  const [symbolProfiles, setSymbolProfiles] = useState<Record<string, AssetProfile>>({})
+  useEffect(() => {
+    if (!ready) return
+    try { setSymbolProfiles(JSON.parse(localStorage.getItem(SYMBOL_PROFILES_KEY) ?? '{}')) } catch { /* no cache */ }
+    const symbols = Array.from(new Set(dataRef.current.assets.map((a) => (a.pricing === 'live' ? a.symbol : null)).filter((x): x is string => !!x)))
+    if (symbols.length === 0) return
+    let gone = false
+    remote.fetchSymbolProfiles(symbols).then((map) => {
+      if (gone) return
+      setSymbolProfiles(map)
+      try { localStorage.setItem(SYMBOL_PROFILES_KEY, JSON.stringify(map)) } catch { /* storage full */ }
+    }).catch(() => { /* offline: the cached copy stays */ })
+    return () => { gone = true }
+  }, [ready, symbolKey])
 
   // ---------- cloud sync ----------
   const device = typeof navigator === 'undefined' ? '' : /Android/i.test(navigator.userAgent) ? 'android' : 'web'
@@ -318,10 +351,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })
   }, [ready, quoteStatus, view.netWorth, view.cost, view.investable, data.assets.length, data.snapshots, commit])
 
+  // What screens read: the stored data, with the shared symbol breakdowns filled in where the user has not set their own.
+  const shown = useMemo(() => {
+    if (Object.keys(symbolProfiles).length === 0) return data
+    const profiles = { ...data.profiles }
+    for (const a of data.assets) {
+      const sp = a.pricing === 'live' && a.symbol ? symbolProfiles[a.symbol] : undefined
+      if (sp && !profiles[a.id]?.locked) profiles[a.id] = { ...sp, assetId: a.id }
+    }
+    return { ...data, profiles }
+  }, [data, symbolProfiles])
+
   const store = useMemo<Store>(() => {
     const now = () => new Date().toISOString()
     return {
-      ready, data, settings: data.settings, view, quotes, quoteStatus, L, dir,
+      ready, data: shown, settings: data.settings, view, quotes, quoteStatus, L, dir,
       updateSettings: (patch) => commit((d) => { d.settings = { ...d.settings, ...patch } }),
       addAccount: (name, kind) => {
         const acc: Account = { id: genId(), name: name.trim(), kind, createdAt: now(), updatedAt: now() }
@@ -413,7 +457,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       resetData: () => commit((d) => { Object.assign(d, emptyData(), { settings: { ...defaultSettings(), locale: d.settings.locale } }) }),
     }
-  }, [ready, data, view, quotes, quoteStatus, L, dir, commit, refreshQuotes, cloudUser, syncStatus, syncError, syncNow, adoptRemote, pushLocal, pullProfiles])
+  }, [ready, data, shown, view, quotes, quoteStatus, L, dir, commit, refreshQuotes, cloudUser, syncStatus, syncError, syncNow, adoptRemote, pushLocal, pullProfiles])
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
 }

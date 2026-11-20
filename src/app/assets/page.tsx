@@ -6,18 +6,20 @@ import { useStore } from '@/lib/store'
 import type { Account } from '@/lib/types'
 import { ASSET_CLASSES, CLASS_COLOR, CLASS_LABEL, KIND_LABEL } from '@/lib/labels'
 import { dividendStats, type AssetView } from '@/lib/engine/valuation'
-import { daysAgo, num, pct } from '@/lib/format'
+import { dateLabel, num, pct } from '@/lib/format'
 import { fetchHistory } from '@/lib/market-client'
+import { assetFreshness } from '@/lib/engine/freshness'
+import { isMutualFund } from '@/lib/catalog'
 import { performance, since } from '@/lib/engine/performance'
 import { useActions } from '@/components/AppShell'
 import { BarList } from '@/components/charts'
-import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat } from '@/components/ui'
+import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat, Flash } from '@/components/ui'
 
 type Sort = 'value' | 'gain' | 'day' | 'year' | 'name'
 type Group = 'account' | 'class'
 
 export default function AssetsPage() {
-  const { L, data, view, renameAccount, deleteAccount } = useStore()
+  const { L, data, view, quotes, settings, renameAccount, deleteAccount } = useStore()
   const { openWizard, openAsset } = useActions()
   const [tab, setTab] = useState<'assets' | 'income'>('assets')
   const [q, setQ] = useState('')
@@ -67,7 +69,7 @@ export default function AssetsPage() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-xs text-ink-soft">{L(`${data.assets.length} أصل في ${data.accounts.length} جهة`, `${data.assets.length} assets across ${data.accounts.length} providers`)}</p>
-          <p className="text-2xl font-bold"><Money value={view.netWorth} /></p>
+          <p className="text-2xl font-semibold"><Money value={view.netWorth} /></p>
         </div>
         <Chips wrap value={tab} onChange={setTab} options={[{ value: 'assets', label: L('الأصول', 'Assets') }, { value: 'income', label: L('التوزيعات', 'Dividends') }]} />
       </div>
@@ -93,7 +95,7 @@ export default function AssetsPage() {
             <section key={g.key} className="card p-0">
               <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold">{g.title}</h2>
+                  <h2 className="truncate text-sm font-semibold">{g.title}</h2>
                   <p className="text-xs text-ink-soft">{g.sub && `${g.sub} · `}<span className="num">{pct(view.netWorth > 0 ? (g.total / view.netWorth) * 100 : 0, 0)}</span></p>
                 </div>
                 <div className="flex items-center gap-1">
@@ -105,26 +107,32 @@ export default function AssetsPage() {
               <ul className="divide-y divide-line">
                 {g.rows.map((r) => {
                   const a = r.asset
-                  const age = daysAgo(a.valueUpdatedAt)
-                  const stale = a.pricing === 'manual' && age !== null && age > 30
+                  const f = assetFreshness(r, quotes)
+                  const stale = f.state === 'stale' || f.state === 'missing'
+                  const when = f.asOf ? dateLabel(f.asOf, settings.locale) : ''
+                  const status = f.state === 'live' ? L('مباشر', 'live')
+                    : f.state === 'published' ? L(`تقييم ${when}`, `valued ${when}`)
+                    : f.state === 'missing' ? L('بانتظار السعر', 'awaiting price')
+                    : f.state === 'stated' ? (a.pricing === 'manual' ? L('قيمة يدوية', 'manual value') : L('قيمة أدخلتها', 'value you entered'))
+                    : a.pricing === 'manual' || f.needsUser ? L(`لم تُحدَّث منذ ${f.ageDays} يوم`, `not updated for ${f.ageDays}d`) : L(`آخر سعر ${when}`, `last price ${when}`)
                   // Symbol and quantity are isolated so Latin tickers do not reorder inside Arabic text.
-                  const sub = a.pricing === 'live'
-                    ? <><span className="num">{a.symbol}</span> · <span className="num">{num(a.quantity, 'auto')}</span>{r.source === 'cost' ? ' · ' + L('بانتظار السعر', 'awaiting price') : r.source === 'cached' ? ' · ' + L('سعر محفوظ', 'saved price') : ''}</>
-                    : L('قيمة يدوية', 'Manual') + (stale ? ' · ' + L(`لم تُحدَّث منذ ${age} يوم`, `not updated for ${age}d`) : '')
+                  const sub = a.pricing === 'live' && !isMutualFund(a.symbol)
+                    ? <><span className="num">{a.symbol}</span> · <span className="num">{num(a.quantity, 'auto')}</span> · {status}</>
+                    : status
                   return (
                     <li key={a.id}>
-                      <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-surface">
+                      <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-start hover:bg-surface">
                         <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: CLASS_COLOR[a.assetClass] }} aria-hidden />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-semibold">{a.name}</span>
-                            {a.isEmergencyFund && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[10px] font-semibold text-link">{L('طوارئ', 'Emergency')}</span>}
-                            {a.isIncomeAccount && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[10px] font-semibold text-link">{L('دخل', 'Income')}</span>}
+                            <bdi className="truncate text-sm font-semibold">{a.name}</bdi>
+                            {a.isEmergencyFund && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-link">{L('طوارئ', 'Emergency')}</span>}
+                            {a.isIncomeAccount && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-link">{L('دخل', 'Income')}</span>}
                           </span>
                           <span className={`block truncate text-xs ${stale ? 'text-warn-600' : 'text-ink-soft'}`}>{sub}</span>
                         </span>
                         <span className="shrink-0 text-end">
-                          <Money value={r.value} className="block text-sm font-semibold" />
+                          <Flash value={r.value} className="block"><Money value={r.value} className="text-sm font-semibold" /></Flash>
                           {sort === 'year' ? (yearReturn[a.id] != null ? <span className="text-xs text-ink-soft">{L('سنة', '1Y')} <Delta percent={yearReturn[a.id]!} className="text-xs" /></span> : <span className="text-xs text-ink-faint">—</span>)
                             : sort === 'day' && r.dayChange !== 0 ? <Delta value={r.dayChange} className="text-xs" /> : r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
                         </span>
@@ -161,7 +169,7 @@ export default function AssetsPage() {
             {divs.byAsset.length === 0 ? <p className="hint">{L('لا توزيعات مسجلة بعد.', 'No dividends recorded yet.')}</p> : (
               <ul className="divide-y divide-line">
                 {divs.byAsset.map((d) => (
-                  <li key={d.assetId} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <li key={d.assetId} className="flex items-center justify-between gap-3 py-3 text-sm">
                     <span className="min-w-0"><span className="block truncate font-medium">{d.name}</span><span className="text-xs text-ink-soft">{L(`${d.count} توزيعة`, `${d.count} payments`)}</span></span>
                     <Money value={d.amount} className="font-semibold" />
                   </li>

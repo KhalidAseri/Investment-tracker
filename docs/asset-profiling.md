@@ -13,7 +13,8 @@ app; every other table belongs to a different app and must not be touched.
 | Table | Purpose |
 |---|---|
 | `invest_portfolios` | one row per user; `data` is the whole portfolio document. Assets are in `data->'assets'` |
-| `invest_asset_profiles` | one row per (user, asset): the profile Claude writes |
+| `invest_symbol_profiles` | one row per **symbol**: the profile of a priced fund or share. Public reference data, no user data. This is where profiles of anything with a symbol go |
+| `invest_asset_profiles` | one row per (user, asset): only for assets **without** a symbol (employer plans, private funds), and for the user's own hand edits |
 | `invest_profile_runs` | one row per run: what was done and what changed |
 
 ## Procedure
@@ -39,7 +40,18 @@ app; every other table belongs to a different app and must not be touched.
    - Cash, deposits, money-market funds: `classSplit` = `{"CASH":100}`, country of the bank or fund.
    - Gold and crypto: class only, no countries or sectors.
    - Never invent figures. If nothing reliable is found, write no profile and list the asset in the run summary.
-4. **Write** one row per asset (upsert), then one row in `invest_profile_runs`.
+4. **Write** (upsert), then one row in `invest_profile_runs`.
+   - Asset priced by a symbol (`pricing = 'live'`, including `MF:` funds): write to
+     `invest_symbol_profiles` keyed by the symbol. The app applies it to every asset holding that
+     symbol, signed in or not, and it survives the asset being deleted and re-added.
+     ```sql
+     insert into invest_symbol_profiles (symbol, name, profile, as_of, updated_at)
+     values ('<symbol>', '<name>', '<profile json>'::jsonb, '<YYYY-MM-DD>', now())
+     on conflict (symbol) do update set name = excluded.name, profile = excluded.profile, as_of = excluded.as_of, updated_at = now();
+     ```
+   - Asset valued by hand: write to `invest_asset_profiles` as before. If its name is a fund in
+     the catalogue, write the fund's symbol profile instead and tell the user to link the asset.
+   - A row in `invest_asset_profiles` with `locked = true` always wins over the symbol profile.
 5. **Report** to the user: how many analysed, which are estimated, which could not be found, and
    any locked asset whose manual figures look out of date.
 

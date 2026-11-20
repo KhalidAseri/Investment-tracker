@@ -62,9 +62,9 @@ export default function AssetPerformance({ asset, txs, gainPct }: { asset: Asset
       )}
 
       {perf && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-surface p-3.5 text-sm">
-          <div><dt className="text-xs text-ink-soft">{L(`عائد ${labels[range]}`, `${labels[range]} return`)}</dt><dd><Delta percent={perf.returnPct} className="text-base font-bold" /></dd></div>
-          <div><dt className="text-xs text-ink-soft">{L('العائد السنوي المركّب', 'Annualised')}</dt><dd className="num font-bold">{perf.cagrPct === null ? '—' : pct(perf.cagrPct, 1, true)}</dd></div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-surface p-4 text-sm">
+          <div><dt className="text-xs text-ink-soft">{L(`عائد ${labels[range]}`, `${labels[range]} return`)}</dt><dd><Delta percent={perf.returnPct} className="text-base font-semibold" /></dd></div>
+          <div><dt className="text-xs text-ink-soft">{L('العائد السنوي المركّب', 'Annualised')}</dt><dd className="num font-semibold">{perf.cagrPct === null ? '—' : pct(perf.cagrPct, 1, true)}</dd></div>
           {live && <>
             <div><dt className="text-xs text-ink-soft">{L('أعلى سعر', 'High')}</dt><dd className="num font-semibold">{num(perf.high.close, 2)} <span className="text-xs font-normal text-ink-soft">{dateLabel(perf.high.day, settings.locale)}</span></dd></div>
             <div><dt className="text-xs text-ink-soft">{L('أدنى سعر', 'Low')}</dt><dd className="num font-semibold">{num(perf.low.close, 2)} <span className="text-xs font-normal text-ink-soft">{dateLabel(perf.low.day, settings.locale)}</span></dd></div>

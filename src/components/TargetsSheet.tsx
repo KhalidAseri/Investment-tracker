@@ -29,7 +29,7 @@ export default function TargetsSheet({ open, onClose }: { open: boolean; onClose
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-ink-soft">{L('اختر قالبًا ثم عدّل النسب كما تريد. التوزيع يخص محفظتك الاستثمارية؛ صندوق الطوارئ خارج الحساب.', 'Pick a template, then adjust. This applies to your investable portfolio; the emergency fund is outside it.')}</p>
         <Chips wrap value={profile} onChange={pick} options={(Object.keys(PROFILE_LABEL) as RiskProfile[]).map((p) => ({ value: p, label: L(PROFILE_LABEL[p].ar, PROFILE_LABEL[p].en) }))} />
-        <ul className="space-y-2.5">
+        <ul className="space-y-3">
           {ASSET_CLASSES.map((c) => (
             <li key={c} className="flex items-center gap-3">
               <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: CLASS_COLOR[c] }} aria-hidden />

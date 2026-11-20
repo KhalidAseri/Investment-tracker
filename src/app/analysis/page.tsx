@@ -90,7 +90,7 @@ export default function AnalysisPage() {
         <AnimatePresence initial={false}>
           {picked && picked.parts.length > 0 && (
             <motion.div key={picked.key} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
-              <div className="rounded-2xl bg-surface p-3.5">
+              <div className="rounded-2xl bg-surface p-4">
                 <p className="mb-2 text-sm font-semibold">{L(`ما الذي يكوّن «${picked.label}»؟`, `What makes up “${picked.label}”?`)}</p>
                 <ul className="space-y-1.5">
                   {picked.parts.map((p) => (
@@ -124,7 +124,7 @@ export default function AnalysisPage() {
       </section>
 
       {/* Risk findings */}
-      <section className="space-y-2.5">
+      <section className="space-y-3">
         <h2 className="section-title">{L('المخاطر والتركّزات', 'Risks & concentrations')}</h2>
         {risks.map((r) => <Notice key={r.id} tone={r.severity} title={r.title}>{r.body}</Notice>)}
       </section>
@@ -163,10 +163,10 @@ export default function AnalysisPage() {
         {plan.length > 0 ? (
           <ul className="divide-y divide-line rounded-2xl border border-line">
             {[...plan].sort((a, b) => b.amount - a.amount).map((l) => (
-              <li key={l.assetClass} className="px-3.5 py-3">
+              <li key={l.assetClass} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm font-semibold"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CLASS_COLOR[l.assetClass] }} aria-hidden />{l.label}</span>
-                  <Money value={l.amount} className="text-sm font-bold" />
+                  <span className="flex items-center gap-2 text-sm font-semibold"><span className="h-3 w-3 rounded-sm" style={{ background: CLASS_COLOR[l.assetClass] }} aria-hidden />{l.label}</span>
+                  <Money value={l.amount} className="text-sm font-semibold" />
                 </div>
                 <p className="mt-1 text-xs text-ink-soft">
                   {L('تصبح حصتها', 'Share becomes')} <span className="num font-medium text-ink">{pct(l.afterPct, 0)}</span> {L('من مستهدف', 'of target')} <span className="num">{pct(l.targetPct, 0)}</span>

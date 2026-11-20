@@ -134,14 +134,14 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
           <div className="space-y-5">
             <div>
               <p className="text-xs text-ink-soft">{L('القيمة الحالية', 'Current value')}</p>
-              <p className="text-3xl font-bold"><Money value={row.value} /></p>
+              <p className="text-3xl font-semibold"><Money value={row.value} /></p>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 <Delta value={row.gain} percent={row.gainPct} />
                 {row.dayChange !== 0 && <span className="text-xs text-ink-soft">{quote?.origin === 'claude' ? L('آخر تقييم', 'Last valuation') : L('اليوم', 'Today')} <Delta value={row.dayChange} className="text-xs" /></span>}
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 rounded-2xl bg-surface p-3.5">
+            <div className="grid grid-cols-3 gap-3 rounded-2xl bg-surface p-4">
               <Stat label={L('المستثمَر', 'Invested')}><span className="text-sm"><Money value={row.cost} /></span></Stat>
               <Stat label={L('الوزن', 'Weight')}><span className="num text-sm">{pct(weight)}</span></Stat>
               {live
@@ -206,12 +206,12 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
                 ...(a.isEmergencyFund ? [[L('الدور', 'Role'), L('صندوق الطوارئ', 'Emergency fund')]] : []),
                 ...(a.isIncomeAccount ? [[L('الدور', 'Role'), L('حساب الدخل', 'Income account')]] : []),
               ].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-3 px-3.5 py-2.5"><dt className="text-ink-soft">{k}</dt><dd className="text-end font-medium">{v}</dd></div>
+                <div key={k} className="flex justify-between gap-3 px-4 py-3"><dt className="text-ink-soft">{k}</dt><dd className="text-end font-medium">{v}</dd></div>
               ))}
             </dl>
-            <button className="flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl border border-line px-3.5 py-2 text-start hover:bg-surface" onClick={() => setZakatOpen(true)}>
+            <button className="flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl border border-line px-4 py-2 text-start hover:bg-surface" onClick={() => setZakatOpen(true)}>
               <span><span className="block text-xs text-ink-soft">{L('الزكاة', 'Zakat')}</span><span className="text-sm font-semibold">{L(ZAKAT_LABEL[a.zakatMode].ar, ZAKAT_LABEL[a.zakatMode].en)}{a.zakatMode === 'PERCENT' ? ` (${a.zakatPercent}%)` : ''}</span></span>
-              <span className="text-end"><Money value={zakatNow} className="block text-sm font-bold" /><span className="text-xs font-semibold text-link">{L('تغيير', 'Change')}</span></span>
+              <span className="text-end"><Money value={zakatNow} className="block text-sm font-semibold" /><span className="text-xs font-semibold text-link">{L('تغيير', 'Change')}</span></span>
             </button>
             <button className="btn-soft w-full" onClick={() => open('EDIT')}>{L('تعديل الأصل والتصنيف', 'Edit asset & classification')}</button>
 
@@ -220,7 +220,7 @@ export default function AssetSheet({ assetId, initialMode, onClose }: { assetId:
               {txs.length === 0 ? <p className="hint">{L('لا عمليات مسجلة بعد.', 'No transactions yet.')}</p> : (
                 <ul className="divide-y divide-line rounded-2xl border border-line">
                   {txs.map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-2 px-3.5 py-2">
+                    <li key={t.id} className="flex items-center justify-between gap-2 px-4 py-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{TX_LABEL[t.type]}</p>
                         <p className="text-xs text-ink-soft">{dateLabel(t.date, settings.locale)}{t.quantity > 0 && <span className="num"> · {num(t.quantity, 'auto')} × {num(t.price, 2)}</span>}</p>

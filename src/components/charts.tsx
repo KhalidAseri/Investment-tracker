@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useMemo, useRef, useState } from 'react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import { useStore } from '@/lib/store'
 import { compact, num, pct } from '@/lib/format'
 import { treemap } from '@/lib/treemap'
@@ -122,7 +122,7 @@ export function Donut({ slices, selected, onSelect, centerLabel, total }: { slic
       </svg>
       <button className="absolute inset-[26%] flex flex-col items-center justify-center rounded-full text-center" onClick={() => onSelect(null)} aria-label={sel ? centerLabel : undefined} tabIndex={sel ? 0 : -1}>
         <span className="max-w-full truncate text-xs text-ink-soft">{sel ? sel.label : centerLabel}</span>
-        <span className="num text-xl font-bold leading-tight">{sel ? pct(sel.pct) : <Money value={total} />}</span>
+        <span className="num text-xl font-semibold leading-tight">{sel ? pct(sel.pct) : <Money value={total} />}</span>
         {sel && <Money value={sel.value} className="text-xs text-ink-soft" />}
       </button>
     </div>
@@ -251,5 +251,23 @@ export function LineChart({ points, target, targetLabel, height = 170, label }: 
         </div>
       )}
     </div>
+  )
+}
+
+/** A bare trend line for a headline figure: no axes, takes the surrounding text colour. */
+export function Sparkline({ values, label, height = 56 }: { values: number[]; label: string; height?: number }) {
+  const reduce = useReducedMotion()
+  if (values.length < 2) return null
+  const W = 320, H = 60, pad = 4
+  const min = Math.min(...values), max = Math.max(...values)
+  const span = max - min || 1
+  const xy = values.map((v, i) => [(i / (values.length - 1)) * W, pad + (1 - (v - min) / span) * (H - pad * 2)] as const)
+  const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block w-full" style={{ height }} role="img" aria-label={label}>
+      <path d={`${line} L${W},${H} L0,${H} Z`} fill="currentColor" opacity={0.1} />
+      <motion.path d={line} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+        initial={{ pathLength: reduce ? 1 : 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
+    </svg>
   )
 }

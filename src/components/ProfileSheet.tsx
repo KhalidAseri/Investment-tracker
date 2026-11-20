@@ -99,7 +99,7 @@ export default function ProfileSheet({ assetId, onClose }: { assetId: string | n
           {Object.keys(profile.industries ?? {}).length > 0 && <section><h3 className="mb-2 text-sm font-semibold">{L('الصناعات', 'Industries')}</h3><BarList showAmounts={false} items={toItems(profile.industries, (k) => k)} /></section>}
           {(profile.topHoldings?.length ?? 0) > 0 && (
             <section><h3 className="mb-2 text-sm font-semibold">{L('أكبر المكونات', 'Top holdings')}</h3>
-              <ul className="divide-y divide-line rounded-2xl border border-line">{profile.topHoldings!.map((h) => <li key={h.name} className="flex justify-between gap-3 px-3.5 py-2 text-sm"><span className="min-w-0 truncate">{h.name}</span><span className="num font-medium">{pct(h.weight)}</span></li>)}</ul>
+              <ul className="divide-y divide-line rounded-2xl border border-line">{profile.topHoldings!.map((h) => <li key={h.name} className="flex justify-between gap-3 px-4 py-2 text-sm"><span className="min-w-0 truncate">{h.name}</span><span className="num font-medium">{pct(h.weight)}</span></li>)}</ul>
             </section>
           )}
           {(profile.sources?.length ?? 0) > 0 && (

@@ -598,3 +598,51 @@ test('a fund entered by its value follows the unit price, and can be re-stated a
   assert.equal(other.quantity, 500); assert.equal(other.valueAnchor, undefined)
   assert.equal(settleAnchors([other], q(10.4)).length, 0)
 })
+
+test('freshness: each kind of figure has its own age limit, and says who must act', async () => {
+  const { assetFreshness, portfolioFreshness } = await import('./freshness.ts')
+  const { valueAsset } = await import('./valuation.ts')
+  const now = Date.UTC(2026, 10, 20, 12)
+  const iso = (daysAgo: number) => new Date(now - daysAgo * 86400000).toISOString()
+  const quote = (symbol: string, daysAgo: number, origin: 'provider' | 'claude') => ({ symbol, price: 10, change: 0, changePercent: 0, currency: 'SAR', name: '', updatedAt: iso(0), asOf: iso(daysAgo).slice(0, 10), origin })
+  const row = (over: Partial<Asset>, quotes = {}) => ({ ...valueAsset(asset(over), quotes, {}, now), account: null })
+  const quotes = { S: quote('S', 3, 'provider'), OLD: quote('OLD', 9, 'provider'), F: quote('F', 3, 'claude'), FOLD: quote('FOLD', 14, 'claude') }
+  const f = (over: Partial<Asset>) => assetFreshness(row(over, quotes), quotes, now)
+  assert.equal(f({ pricing: 'live', symbol: 'S', quantity: 10 }).state, 'live')                               // over a weekend
+  assert.deepEqual([f({ pricing: 'live', symbol: 'OLD', quantity: 10 }).state, f({ pricing: 'live', symbol: 'OLD', quantity: 10 }).needsUser], ['stale', false])
+  assert.equal(f({ pricing: 'live', symbol: 'F', quantity: 10 }).state, 'published')
+  assert.equal(f({ pricing: 'live', symbol: 'FOLD', quantity: 10 }).state, 'stale')
+  assert.equal(f({ pricing: 'live', symbol: 'NONE', quantity: 10 }).state, 'missing')
+  assert.equal(f({ pricing: 'manual', symbol: null, manualValue: 500, valueUpdatedAt: iso(12) }).state, 'stated')
+  assert.deepEqual([f({ pricing: 'manual', symbol: null, manualValue: 500, valueUpdatedAt: iso(45) }).state, f({ pricing: 'manual', symbol: null, manualValue: 500, valueUpdatedAt: iso(45) }).needsUser], ['stale', true])
+  const rows = [row({ id: 'a', pricing: 'live', symbol: 'S', quantity: 60 }, quotes), row({ id: 'b', pricing: 'manual', symbol: null, manualValue: 300, valueUpdatedAt: iso(45) }), row({ id: 'c', pricing: 'manual', symbol: null, manualValue: 100, valueUpdatedAt: iso(90) })]
+  const p = portfolioFreshness(rows, quotes, now)
+  assert.equal(p.pct, 60)
+  assert.deepEqual(p.needsUser.map((r) => r.asset.id), ['b', 'c'])
+})
+
+test('journey: emergency fund first, then the goal in quarters; milestones fire once', async () => {
+  const { journey, newMilestones } = await import('./journey.ts')
+  const building = journey({ target: 72000, pct: 50, ready: false }, { target: 2e6, pct: 40 })
+  assert.equal(building.position, 10)                                   // half of the first fifth; the goal waits
+  assert.deepEqual(building.stations.map((s) => s.reached), [false, false, false, false, false])
+  assert.equal(building.next?.id, 'ef')
+  const onTheWay = journey({ target: 72000, pct: 100, ready: true }, { target: 2e6, pct: 55 })
+  assert.equal(onTheWay.position, 20 + 80 * 0.55)
+  assert.deepEqual(onTheWay.stations.filter((s) => s.reached).map((s) => s.id), ['ef', 'g25', 'g50'])
+  assert.equal(onTheWay.next?.id, 'g75')
+  const noEf = journey({ target: 0, pct: 0, ready: false }, { target: 1e6, pct: 100 })
+  assert.deepEqual([noEf.stations.length, noEf.position, noEf.next], [4, 100, null])
+  assert.deepEqual(newMilestones(['ef', 'g25'], undefined), [])          // first run after an update: nothing to announce
+  assert.deepEqual(newMilestones(['ef', 'g25', 'g50'], ['ef', 'g25']), ['g50'])
+})
+
+test('holdings series: priced assets follow their closes, the rest stay flat, today is exact', async () => {
+  const { holdingsSeries, lastDays } = await import('./performance.ts')
+  const days = ['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']
+  const series = holdingsSeries(
+    [{ symbol: 'A', unitsInBase: 10, value: 1300 }, { symbol: null, unitsInBase: 0, value: 5000 }, { symbol: 'NOHIST', unitsInBase: 3, value: 90 }],
+    { A: [{ day: '2026-11-16', close: 100 }, { day: '2026-11-18', close: 110 }, { day: '2026-11-19', close: 120 }] }, days)
+  assert.deepEqual(series.map((p) => p.close), [1000 + 5090, 1100 + 5090, 1200 + 5090, 1300 + 5090])
+  assert.deepEqual(lastDays(3, new Date('2026-11-20T10:00:00Z')), ['2026-11-18', '2026-11-19', '2026-11-20'])
+})
