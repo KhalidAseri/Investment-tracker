@@ -39,6 +39,22 @@ app; every other table belongs to a different app and must not be touched.
      and mark `confidence: "estimated"`, naming the benchmark in `note`.
    - Cash, deposits, money-market funds: `classSplit` = `{"CASH":100}`, country of the bank or fund.
    - Gold and crypto: class only, no countries or sectors.
+   - Every axis is filled as far as the sources allow: **countries** (ISO codes, never regions),
+     **sectors**, the **class split**, and the **top holdings**. A profile with only a class split
+     is not finished unless the asset really has no countries or sectors (gold, crypto).
+   - Cash, money-market and sukuk funds: `sectors` = `{"NA":100}`, so the sector view counts them as
+     analysed rather than as waiting.
+   - A fund of funds (its holdings are sector or index ETFs): sectors are the sum of its sector
+     ETFs, with a broad index ETF spread by that index's published sector weights; countries come
+     from the index's published geographic breakdown. Say so in `note`, `confidence: "estimated"`.
+   - A factsheet that prints the split only as a chart: render the page (`pdftoppm -r 110 -png`) and
+     read the figures from the image; `pdftotext` returns the tables but not the chart labels.
+   - Holdings named only in a top-10 list: countries are counted from those and the rest goes under
+     `OTHER`. Do not spread the unknown part by guesswork.
+   - Sources that work from here: SNB Capital fund pages (`https://snbcapital.com/w/<slug>`, the
+     documents they link open in a headless browser); MSCI index factsheets and breakdowns
+     (msci.com/documents/…, through the web-fetch agent, then `pdftotext`); Al Rajhi Capital
+     factsheets through the web-fetch agent.
    - Never invent figures. If nothing reliable is found, write no profile and list the asset in the run summary.
 4. **Write** (upsert), then one row in `invest_profile_runs`.
    - Asset priced by a symbol (`pricing = 'live'`, including `MF:` funds): write to

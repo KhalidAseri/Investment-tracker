@@ -50,7 +50,6 @@ export default function AnalysisPage() {
   const VIEWS: { value: View; label: string }[] = [
     { value: 'class', label: L('فئة الأصل', 'Asset class') },
     { value: 'country', label: L('الدول', 'Countries') },
-    { value: 'region', label: L('المناطق', 'Regions') },
     { value: 'sector', label: L('القطاعات', 'Sectors') },
     { value: 'positions', label: L('المراكز', 'Positions') },
     { value: 'currency', label: L('العملة', 'Currency') },

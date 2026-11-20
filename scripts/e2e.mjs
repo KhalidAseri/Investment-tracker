@@ -259,7 +259,7 @@ await step('insights: ring drill-down, world map, treemap, bars', async () => {
   const paths = await page.locator('svg[aria-label*="خريطة"] path').count(); if (paths < 150) throw new Error('map paths: ' + paths)
   await page.getByRole('tab', { name: 'القطاعات', exact: true }).click(); await page.getByRole('list').first().waitFor()
   await page.getByRole('tab', { name: 'المراكز', exact: true }).click(); await page.waitForTimeout(500); await shot('04-insights-positions')
-  for (const t of ['المناطق', 'العملة', 'الجهة', 'السيولة']) { await page.getByRole('tab', { name: t, exact: true }).click(); await page.waitForTimeout(200) }
+  for (const t of ['العملة', 'الجهة', 'السيولة']) { await page.getByRole('tab', { name: t, exact: true }).click(); await page.waitForTimeout(200) }
 })
 await step('a profile written by Claude changes the country analysis and shows in the list', async () => {
   await page.evaluate(() => {
