@@ -44,9 +44,27 @@ app; every other table belongs to a different app and must not be touched.
      is not finished unless the asset really has no countries or sectors (gold, crypto).
    - Cash, money-market and sukuk funds: `sectors` = `{"NA":100}`, so the sector view counts them as
      analysed rather than as waiting.
-   - A fund of funds (its holdings are sector or index ETFs): sectors are the sum of its sector
-     ETFs, with a broad index ETF spread by that index's published sector weights; countries come
-     from the index's published geographic breakdown. Say so in `note`, `confidence: "estimated"`.
+   - **A fund of funds: look inside every fund it holds, for countries and for sectors alike.**
+     Do not stop at the underlying funds' names, and do not substitute a benchmark's breakdown
+     when the underlying holdings can be read.
+     1. From the fund's latest factsheet take each underlying fund and its weight (e.g. the SNB
+        Capital Global Equity Fund lists ten iShares ETFs). Write them as `{"TICKER": weight}`.
+     2. Get each underlying fund's full holdings. iShares US funds:
+        `node scripts/ishares-holdings.mjs <dir> IXN ACWI …` saves one CSV per fund (every stock
+        with its sector, country and weight). Other issuers: the fund's holdings file or factsheet
+        from its own site.
+     3. `python3 -I scripts/lookthrough.py <weights.json> <dir>` weights every stock's country and
+        sector by its share of its fund and that fund's weight, and prints the fund's countries
+        (ISO codes), sectors (the app's keys) and largest underlying stocks, each as a percent of
+        the whole fund, plus `covered`: the share of the fund the listed underlying funds add up to.
+     4. Write those as `countries`, `sectors` and `topHoldings`. What is not covered (underlying
+        funds the factsheet does not name, cash) goes under `OTHER`; countries the app's map does
+        not carry (the script lists any it cannot map) are folded into `OTHER` too.
+     5. `confidence: "reported"`; `note` says it is a look-through, the share covered, and the two
+        dates (the fund's weights, the underlying holdings).
+     Only if an underlying fund's holdings cannot be read at all: use that fund's own published
+     country and sector breakdown, and failing that its index's; say which in `note` and set
+     `confidence: "estimated"`.
    - A factsheet that prints the split only as a chart: render the page (`pdftoppm -r 110 -png`) and
      read the figures from the image; `pdftotext` returns the tables but not the chart labels.
    - Holdings named only in a top-10 list: countries are counted from those and the rest goes under
@@ -54,7 +72,7 @@ app; every other table belongs to a different app and must not be touched.
    - Sources that work from here: SNB Capital fund pages (`https://snbcapital.com/w/<slug>`, the
      documents they link open in a headless browser); MSCI index factsheets and breakdowns
      (msci.com/documents/…, through the web-fetch agent, then `pdftotext`); Al Rajhi Capital
-     factsheets through the web-fetch agent.
+     factsheets through the web-fetch agent; iShares holdings through `scripts/ishares-holdings.mjs`.
    - Never invent figures. If nothing reliable is found, write no profile and list the asset in the run summary.
 4. **Write** (upsert), then one row in `invest_profile_runs`.
    - Asset priced by a symbol (`pricing = 'live'`, including `MF:` funds): write to
