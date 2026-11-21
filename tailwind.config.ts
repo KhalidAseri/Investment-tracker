@@ -15,6 +15,8 @@ const config: Config = {
         ink: { DEFAULT: v('ink'), soft: v('ink-soft'), faint: v('ink-faint') },
         line: v('line'),
         track: v('track'),
+        fill: v('fill'),
+        sheet: v('sheet'),
         hero: { DEFAULT: v('hero'), ink: v('hero-ink') },
         accent: { DEFAULT: v('accent'), strong: v('accent-strong') },
         tint: { DEFAULT: v('tint'), 2: v('tint-2'), ink: v('tint-ink') },

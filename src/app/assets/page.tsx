@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Layers, Pencil, Plus, Search } from 'lucide-react'
+import { Layers, Pencil, Plus, Search, ArrowUpDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Account } from '@/lib/types'
-import { ASSET_CLASSES, CLASS_COLOR, CLASS_LABEL, KIND_LABEL } from '@/lib/labels'
+import { ASSET_CLASSES, CLASS_LABEL, KIND_LABEL } from '@/lib/labels'
 import { dividendStats, type AssetView } from '@/lib/engine/valuation'
 import { dateLabel, num, pct } from '@/lib/format'
 import { fetchHistory } from '@/lib/market-client'
@@ -13,7 +13,7 @@ import { isMutualFund } from '@/lib/catalog'
 import { performance, since } from '@/lib/engine/performance'
 import { useActions } from '@/components/AppShell'
 import { BarList } from '@/components/charts'
-import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat, Flash } from '@/components/ui'
+import { Chips, Confirm, Delta, Empty, Field, Money, Sheet, Stat, Flash, ClassIcon } from '@/components/ui'
 
 type Sort = 'value' | 'gain' | 'day' | 'year' | 'name'
 type Group = 'account' | 'class'
@@ -66,37 +66,40 @@ export default function AssetsPage() {
 
   return (
     <>
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-xs text-ink-soft">{L(`${data.assets.length} أصل في ${data.accounts.length} جهة`, `${data.assets.length} assets across ${data.accounts.length} providers`)}</p>
-          <p className="text-2xl font-semibold"><Money value={view.netWorth} /></p>
-        </div>
-        <Chips wrap value={tab} onChange={setTab} options={[{ value: 'assets', label: L('الأصول', 'Assets') }, { value: 'income', label: L('التوزيعات', 'Dividends') }]} />
+      <div>
+        <p className="text-[34px] font-semibold leading-none"><Money value={view.netWorth} /></p>
+        <p className="mt-2 text-[13px] text-ink-soft">{L(`${data.assets.length} أصل في ${data.accounts.length} جهة`, `${data.assets.length} assets across ${data.accounts.length} providers`)}</p>
       </div>
+      <Chips value={tab} onChange={setTab} options={[{ value: 'assets', label: L('الأصول', 'Assets') }, { value: 'income', label: L('التوزيعات', 'Dividends') }]} />
 
       {tab === 'assets' && (
         <>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-              <input className="input ps-9" placeholder={L('ابحث في أصولك', 'Search your assets')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={L('بحث', 'Search')} />
-            </div>
-            <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={L('الترتيب', 'Sort')}>
-              <option value="value">{L('الأعلى قيمة', 'Value')}</option>
-              <option value="gain">{L('الأعلى ربحًا', 'Gain')}</option>
-              <option value="day">{L('تغيّر اليوم', 'Today')}</option>
-              <option value="year">{L('أداء السنة', '1-year return')}</option>
-              <option value="name">{L('الاسم', 'Name')}</option>
-            </select>
+          <div className="relative">
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ink-faint" aria-hidden />
+            <input className="input ps-10" type="search" enterKeyHint="search" placeholder={L('ابحث في أصولك', 'Search your assets')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={L('بحث في أصولك', 'Search your assets')} />
           </div>
-          <Chips value={group} onChange={setGroup} options={[{ value: 'account', label: L('حسب الجهة', 'By provider') }, { value: 'class', label: L('حسب الفئة', 'By class') }]} />
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1"><Chips value={group} onChange={setGroup} options={[{ value: 'account', label: L('حسب الجهة', 'By provider') }, { value: 'class', label: L('حسب الفئة', 'By class') }]} /></div>
+            {/* a menu button: the native picker opens from it */}
+            <div className="relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-link" style={{ backgroundColor: 'rgb(var(--fill) / 0.12)' }}>
+              <ArrowUpDown className="h-4 w-4" aria-hidden />
+              <span>{{ value: L('القيمة', 'Value'), gain: L('الربح', 'Gain'), day: L('اليوم', 'Today'), year: L('السنة', '1 year'), name: L('الاسم', 'Name') }[sort]}</span>
+              <select className="absolute inset-0 h-full w-full cursor-pointer opacity-0" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={L('الترتيب', 'Sort')}>
+                <option value="value">{L('الأعلى قيمة', 'Value')}</option>
+                <option value="gain">{L('الأعلى ربحًا', 'Gain')}</option>
+                <option value="day">{L('تغيّر اليوم', 'Today')}</option>
+                <option value="year">{L('أداء السنة', '1-year return')}</option>
+                <option value="name">{L('الاسم', 'Name')}</option>
+              </select>
+            </div>
+          </div>
 
           {groups.map((g) => (
-            <section key={g.key} className="card p-0">
-              <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <section key={g.key}>
+              <div className="mb-2 flex items-end justify-between gap-2 px-1">
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-semibold">{g.title}</h2>
-                  <p className="text-xs text-ink-soft">{g.sub && `${g.sub} · `}<span className="num">{pct(view.netWorth > 0 ? (g.total / view.netWorth) * 100 : 0, 0)}</span></p>
+                  <h2 className="truncate text-[15px] font-semibold">{g.title}</h2>
+                  <p className="text-[13px] text-ink-soft">{g.sub && `${g.sub} · `}<span className="num">{pct(view.netWorth > 0 ? (g.total / view.netWorth) * 100 : 0, 0)}</span></p>
                 </div>
                 <div className="flex items-center gap-1">
                   <Money value={g.total} className="text-sm font-semibold" />
@@ -105,8 +108,8 @@ export default function AssetsPage() {
                     : g.account && <button onClick={() => { setEditAccount(g.account); setName(g.account!.name) }} className="flex h-11 w-9 items-center justify-center text-ink-faint hover:text-ink" aria-label={L('تعديل الجهة', 'Edit provider')}><Pencil className="h-4 w-4" /></button>}
                 </div>
               </div>
-              {g.rows.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">{L('لا أصول في هذه الجهة.', 'No assets here.')}</p>}
-              <ul className="divide-y divide-line">
+              {g.rows.length === 0 && <p className="card text-sm text-ink-soft">{L('لا أصول في هذه الجهة.', 'No assets here.')}</p>}
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card">
                 {g.rows.map((r) => {
                   const a = r.asset
                   const f = assetFreshness(r, quotes)
@@ -123,18 +126,18 @@ export default function AssetsPage() {
                     : a.basketWeight != null ? <>{L('النسبة', 'weight')} <span className="num">{pct(a.basketWeight, a.basketWeight % 1 === 0 ? 0 : 1)}</span> · {status}</> : status
                   return (
                     <li key={a.id}>
-                      <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-start hover:bg-surface">
-                        <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: CLASS_COLOR[a.assetClass] }} aria-hidden />
+                      <button onClick={() => openAsset(a.id)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-start">
+                        <ClassIcon assetClass={a.assetClass} />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
-                            <bdi className="truncate text-sm font-semibold">{a.name}</bdi>
+                            <bdi className="truncate text-[15px] font-medium">{a.name}</bdi>
                             {a.isEmergencyFund && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-link">{L('طوارئ', 'Emergency')}</span>}
                             {a.isIncomeAccount && <span className="shrink-0 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-link">{L('دخل', 'Income')}</span>}
                           </span>
-                          <span className={`block truncate text-xs ${stale ? 'text-warn-600' : 'text-ink-soft'}`}>{sub}</span>
+                          <span className={`block truncate text-[13px] ${stale ? 'text-warn-600' : 'text-ink-soft'}`}>{sub}</span>
                         </span>
                         <span className="shrink-0 text-end">
-                          <Flash value={r.value} className="block"><Money value={r.value} className="text-sm font-semibold" /></Flash>
+                          <Flash value={r.value} className="block"><Money value={r.value} className="text-[15px] font-semibold" /></Flash>
                           {sort === 'year' ? (yearReturn[a.id] != null ? <span className="text-xs text-ink-soft">{L('سنة', '1Y')} <Delta percent={yearReturn[a.id]!} className="text-xs" /></span> : <span className="text-xs text-ink-faint">—</span>)
                             : sort === 'day' && r.dayChange !== 0 ? <Delta value={r.dayChange} className="text-xs" /> : r.cost > 0 && <Delta percent={r.gainPct} className="text-xs" />}
                         </span>

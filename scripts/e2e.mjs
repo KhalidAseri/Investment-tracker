@@ -13,7 +13,7 @@ const nav = async (name) => { await page.getByRole('navigation').getByRole('link
 const store = () => page.evaluate(() => JSON.parse(localStorage.getItem('investtrack_v3')))
 const fab = () => page.getByRole('button', { name: 'إضافة أو تسجيل' })
 const openAdd = async () => { await fab().click(); await page.getByRole('button', { name: /أصل جديد/ }).click() }
-const find = async (q, nameRe) => { await page.getByRole('searchbox', { name: 'بحث' }).fill(q); await page.getByRole('dialog').last().getByRole('button', { name: nameRe }).first().click() }
+const find = async (q, nameRe) => { await page.getByRole('searchbox', { name: 'بحث', exact: true }).fill(q); await page.getByRole('dialog').last().getByRole('button', { name: nameRe }).first().click() }
 const save = async () => { await page.getByRole('button', { name: 'حفظ الأصل' }).click(); await page.waitForTimeout(500) }
 const manual = async (kindRe, fn) => { await openAdd(); await page.getByRole('button', { name: kindRe }).click(); await fn(); await save() }
 
@@ -45,7 +45,7 @@ await step('funds: shelves with prices, listed fund, mutual fund by units, unlis
   await openAdd(); await find('الراجحي سيولة ريال', /صندوق الراجحي للادخار والسيولة بالريال السعودي/)
   await page.getByText('آخر تقييم منشور').waitFor({ timeout: 20000 }); await page.getByText('196.5496').first().waitFor()
   await page.getByRole('tab', { name: 'بعدد الوحدات' }).click(); await fill('عدد الوحدات', 50); await fill('متوسط سعر شراء الوحدة', 185); await shot('04c-wizard-mutual'); await save()
-  await openAdd(); await page.getByRole('searchbox', { name: 'بحث' }).fill('صندوق جدوى للأسهم السعودية')
+  await openAdd(); await page.getByRole('searchbox', { name: 'بحث', exact: true }).fill('صندوق جدوى للأسهم السعودية')
   await page.getByRole('button', { name: /كصندوق سعودي غير مدرج/ }).click(); await fill('قيمته عندي الآن', 7000); await page.getByText(/لا سعر منشور لهذا الصندوق بعد/).waitFor(); await save()
   const d = await store(); const syms = d.assets.map((a) => a.symbol)
   if (!syms.includes('9405.SR') || !syms.includes('MF:RAJHI-SAR-LIQ') || !syms.some((x) => /^MF:X-/.test(x ?? ''))) throw new Error('fund symbols ' + syms)
@@ -77,7 +77,7 @@ await step('a fund entered by its value follows the unit price; the value can be
   await page.keyboard.press('Escape')
 })
 await step('market search: a share outside the list, bought by amount and date', async () => {
-  await openAdd(); await page.getByRole('searchbox', { name: 'بحث' }).fill('palantir')
+  await openAdd(); await page.getByRole('searchbox', { name: 'بحث', exact: true }).fill('palantir')
   await page.getByText('من السوق مباشرة').waitFor({ timeout: 25000 }); await page.getByRole('button', { name: /PLTR/ }).first().click()
   await page.getByText('السعر الآن').waitFor({ timeout: 20000 })
   await page.getByRole('tab', { name: 'بالمبلغ والتاريخ' }).click(); await fill('المبلغ الذي دفعته', 1000); await page.getByLabel('تاريخ الشراء').fill('2026-06-01')
@@ -90,7 +90,7 @@ await step('entry guards: an owned symbol offers a purchase; a typed fund name o
   await page.getByRole('button', { name: 'سجّل شراءً عليه' }).click(); await page.getByText(/شراء — أرامكو السعودية/).waitFor(); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.waitForTimeout(500)
   await openAdd(); await page.getByRole('button', { name: /نقد أو وديعة/ }).click(); await fill('الاسم', 'صندوق الأهلي للمتاجرة بالريال السعودي'); await fill('القيمة الحالية', 5000)
   await page.getByText('هذا الصندوق موجود بسعر يتحدث يوميًا').waitFor(); await page.getByRole('button', { name: 'استخدم الصندوق المسعَّر' }).click()
-  if ((await page.getByLabel('قيمته عندي الآن').inputValue()) !== '5000') throw new Error('value not carried over')
+  if ((await page.getByLabel('قيمته عندي الآن').inputValue()) !== '5,000') throw new Error('value not carried over')
   await page.keyboard.press('Escape'); await page.waitForTimeout(400)
 })
 const fabOffset = async () => { const b = await fab().boundingBox(); return Math.abs(b.x + b.width / 2 - 195) }
@@ -126,7 +126,7 @@ await step('performance: price history, periods and metrics for a listed asset; 
   await page.getByLabel('الترتيب').selectOption('year'); await page.getByText(/^سنة/).first().waitFor({ timeout: 25000 }); await shot('02b-sort-year')
 })
 await step('quick add: record a dividend in two taps from home', async () => {
-  await fab().click(); await page.getByRole('button', { name: /توزيعة أو عائد/ }).click()
+  await fab().click(); await page.waitForTimeout(700); await shot('00b-quick-actions'); await page.getByRole('button', { name: /توزيعة أو عائد/ }).click()
   await page.getByRole('dialog').getByRole('button', { name: /أرامكو السعودية/ }).click()
   await fill('المبلغ', 760); await page.getByRole('button', { name: 'تسجيل', exact: true }).click()
   const d = await store(); if (!d.transactions.some((t) => t.type === 'DIVIDEND' && t.amount === 760)) throw new Error('dividend not recorded')
@@ -181,7 +181,7 @@ await step('catalogue from the database: SNB Capital funds are listed with their
   await page.goto(B + '/dashboard/'); await page.waitForFunction(() => (JSON.parse(localStorage.getItem('investtrack_catalog_v1') || '[]')).length > 30, null, { timeout: 30000 })
   const dialog = () => page.getByRole('dialog').last()
   const expect = async (q, nameRe, priceRe) => {
-    await page.getByRole('searchbox', { name: 'بحث' }).fill(q)
+    await page.getByRole('searchbox', { name: 'بحث', exact: true }).fill(q)
     const row = dialog().getByRole('button', { name: nameRe }).first(); await row.waitFor({ timeout: 20000 })
     await dialog().locator('li button', { hasText: priceRe }).first().waitFor({ timeout: 25000 })
   }
@@ -189,7 +189,7 @@ await step('catalogue from the database: SNB Capital funds are listed with their
   await expect('الأهلي للمتاجرة بالأسهم السعودية', /^صندوق الأهلي للمتاجرة بالأسهم السعودية/, /14\.\d{4}\s*SAR/)
   await expect('الأهلي للمتاجرة بالريال السعودي', /^صندوق الأهلي للمتاجرة بالريال السعودي/, /2\.37\d{2}\s*SAR/)
   await expect('الأهلي للمتاجرة بالأسهم العالمية', /^صندوق الأهلي للأسهم العالمية/, /\d{2}\.\d{4}\s*USD/)        // found by the name it is asked for
-  await page.getByRole('searchbox', { name: 'بحث' }).fill('الأهلي للصكوك')
+  await page.getByRole('searchbox', { name: 'بحث', exact: true }).fill('الأهلي للصكوك')
   for (const n of [/صندوق الأهلي للصكوك العالمية/, /صندوق الأهلي للصكوك السيادية/, /صندوق الأهلي لصكوك الشركات \(الفئة أ\)/]) await dialog().getByRole('button', { name: n }).first().waitFor({ timeout: 20000 })
   await shot('20-snb-sukuk-search')
   await page.keyboard.press('Escape'); await page.waitForTimeout(400)
@@ -204,7 +204,7 @@ await step('weighted portfolio: components and weights, my share, re-stated as g
   })
   const near = (x, y, tol) => Math.abs(x - y) <= tol
   const part = async (q, nameRe) => { await page.getByRole('searchbox', { name: 'أضف مكوّنًا' }).fill(q); await page.getByRole('dialog').last().getByRole('button', { name: nameRe }).first().click() }
-  await openAdd(); await page.getByRole('button', { name: /محفظة بنِسب/ }).click()
+  await fab().click(); await page.getByRole('button', { name: /محفظة بنِسب/ }).click()
   await fill('اسم المحفظة', 'محفظتي المُدارة'); await fill('قيمة حصتي الآن', 100000); await fill('المبلغ المستثمَر', 90000)
   await part('VOO', /Vanguard S&P 500/); await page.getByLabel('نسبة Vanguard S&P 500').fill('50')
   await part('سابك', /سابك/); await page.getByLabel('نسبة سابك').fill('30')
@@ -246,9 +246,9 @@ await step('keyboard: a sheet and its field stay visible when the keyboard takes
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.waitForTimeout(400)
 })
 await step('portfolio: search, sort, group by class, dividends tab', async () => {
-  await nav('المحفظة'); await page.getByLabel('بحث').fill('راجحي'); await page.waitForTimeout(250)
+  await nav('المحفظة'); await page.getByLabel('بحث في أصولك').fill('راجحي'); await page.waitForTimeout(250)
   const rows = await page.locator('main ul li button').count(); if (rows !== 4) throw new Error('search rows: ' + rows)   // the bank share and the Al Rajhi fund
-  await page.getByLabel('بحث').fill(''); await page.getByRole('tab', { name: 'حسب الفئة' }).click(); await page.getByRole('heading', { name: 'أسهم', exact: true }).waitFor()
+  await page.getByLabel('بحث في أصولك').fill(''); await page.getByRole('tab', { name: 'حسب الفئة' }).click(); await page.getByRole('heading', { name: 'أسهم', exact: true }).waitFor()
   await page.getByLabel('الترتيب').selectOption('gain'); await shot('02-portfolio', true)
   await page.getByRole('tab', { name: 'التوزيعات' }).click(); await page.getByText('760').first().waitFor()
 })
@@ -295,9 +295,9 @@ await step('plan: hub of stations, income wizard, zakat day', async () => {
   await page.getByText('سجل السنوات').waitFor(); const d = await store(); if (d.settings.zakat.history.length !== 1 || !(d.settings.income.annualIncome > 0)) throw new Error('year not recorded')
 })
 await step('dark theme switches every surface', async () => {
-  await page.goto(B + '/more/#settings'); await page.getByRole('tab', { name: 'داكن', exact: true }).click(); await page.waitForTimeout(300)
+  await page.goto(B + '/more/#settings'); await page.waitForTimeout(600); await shot('23-settings-light', true); await page.getByRole('tab', { name: 'داكن', exact: true }).click(); await page.waitForTimeout(300)
   const bg = await page.evaluate(() => [document.documentElement.getAttribute('data-theme'), getComputedStyle(document.body).backgroundColor])
-  if (bg[0] !== 'dark' || bg[1] !== 'rgb(9, 9, 11)') throw new Error('theme ' + bg)
+  if (bg[0] !== 'dark' || bg[1] !== 'rgb(0, 0, 0)') throw new Error('theme ' + bg)
   await page.goto(B + '/dashboard/'); await page.waitForTimeout(1200); await shot('10-home-dark', true)
   await page.goto(B + '/analysis/'); await page.getByRole('tab', { name: 'الدول', exact: true }).click(); await page.waitForTimeout(800); await shot('11-map-dark')
   await page.goto(B + '/plan/'); await page.waitForTimeout(700); await shot('12-plan-dark')

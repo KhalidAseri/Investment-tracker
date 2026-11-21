@@ -2,7 +2,9 @@
 
 import { Children, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, animate, motion, useDragControls, useReducedMotion } from 'motion/react'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CircleCheck, Info, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bitcoin, Building2, CircleCheck, Gem, Info, Landmark, Package, ScrollText, TrendingUp, X } from 'lucide-react'
+import type { AssetClass } from '@/lib/types'
+import { CLASS_COLOR } from '@/lib/labels'
 import { useStore } from '@/lib/store'
 import { num, parseNumber, pct, unit } from '@/lib/format'
 
@@ -96,24 +98,24 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
     <AnimatePresence>
       {open && (
         <div className="fixed inset-x-0 top-0 z-50 flex items-end justify-center sm:items-center" style={{ bottom: 'var(--kb, 0px)' }} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-          <motion.button className="absolute inset-0 cursor-default bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} aria-label={L('إغلاق', 'Close')} tabIndex={-1} />
+          <motion.button className="absolute inset-0 cursor-default bg-black/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} aria-label={L('إغلاق', 'Close')} tabIndex={-1} />
           <motion.div
-            className="relative flex max-h-[92%] w-full max-w-xl flex-col rounded-t-3xl bg-card shadow-float sm:rounded-3xl"
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 34, stiffness: 360 }}
+            className="sheet relative flex max-h-[92%] w-full max-w-xl flex-col rounded-t-[28px] shadow-float sm:rounded-[28px]"
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 36, stiffness: 380 }}
             drag="y" dragControls={drag} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
             onDragEnd={(_, info) => { if (info.offset.y > 110 || info.velocity.y > 700) onClose() }}
           >
-            <div className="flex cursor-grab touch-none justify-center pb-1 pt-3 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)} aria-hidden>
-              <span className="h-1.5 w-10 rounded-full bg-line" />
+            <div className="flex cursor-grab touch-none justify-center pb-1 pt-2 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)} aria-hidden>
+              <span className="h-[5px] w-9 rounded-full bg-fill/30" />
             </div>
-            <div className="flex items-center justify-between gap-3 border-b border-line px-5 pb-3 pt-1">
-              <h2 id={titleId} className="text-base font-semibold">{title}</h2>
-              <button onClick={onClose} className="-me-2 flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface" aria-label={L('إغلاق', 'Close')}>
-                <X className="h-5 w-5" />
+            <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-1" onPointerDown={(e) => { if (!(e.target as HTMLElement).closest('button')) drag.start(e) }}>
+              <h2 id={titleId} className="text-[17px] font-semibold leading-snug">{title}</h2>
+              <button onClick={onClose} className="-me-2 flex h-11 w-11 shrink-0 items-center justify-center" aria-label={L('إغلاق', 'Close')}>
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-fill/20 text-ink-soft"><X className="h-4 w-4" strokeWidth={2.5} /></span>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4" onFocus={revealField}>{children}</div>
-            {footer && <div className="border-t border-line px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-2" onFocus={revealField}>{children}</div>
+            {footer && <div className="border-t border-line/70 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
           </motion.div>
         </div>
       )}
@@ -159,15 +161,38 @@ export function Field({ label, hint, group = false, children }: { label: string;
   )
 }
 
-/** Numeric text input: decimal keypad on phones, accepts Arabic digits, never fights the caret. */
+/** Digits and one decimal point, with thousands separators: "15511.5" -> "15,511.5". Accepts Arabic digits. */
+export function groupDigits(raw: string): string {
+  const latin = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/٫/g, '.').replace(/[^\d.]/g, '')
+  const dot = latin.indexOf('.')
+  const int = (dot >= 0 ? latin.slice(0, dot) : latin).replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return dot >= 0 ? `${int || '0'}.${latin.slice(dot + 1).replace(/\./g, '')}` : int
+}
+
+/** Numeric field: decimal keypad on phones, separators as you type, the caret stays where it was. */
 export function NumberInput({ value, onChange, suffix, placeholder, autoFocus, ariaLabel }: { value: number; onChange: (n: number) => void; suffix?: string; placeholder?: string; autoFocus?: boolean; /** For a field with no visible label of its own (a cell in a list). */ ariaLabel?: string }) {
-  const [text, setText] = useState(value ? String(value) : '')
+  const [text, setText] = useState(value ? groupDigits(String(value)) : '')
+  const ref = useRef<HTMLInputElement>(null)
+  const caret = useRef<number | null>(null)
   useEffect(() => {
-    setText((t) => (parseNumber(t) === value ? t : value ? String(value) : ''))
+    setText((t) => (parseNumber(t) === value ? t : value ? groupDigits(String(value)) : ''))
   }, [value])
+  // put the caret back after the same number of digits it had before the separators moved
+  useEffect(() => {
+    const el = ref.current
+    if (el === null || caret.current === null || document.activeElement !== el) return
+    let seen = 0, pos = 0
+    while (pos < text.length && seen < caret.current) { if (/[\d.]/.test(text[pos])) seen++; pos++ }
+    try { el.setSelectionRange(pos, pos) } catch { /* not a text selection */ }
+    caret.current = null
+  }, [text])
   return (
     <div className="relative">
       <input
+        ref={ref}
         className={cx('input text-start tabular-nums', suffix && 'pe-14')}
         inputMode="decimal"
         aria-label={ariaLabel}
@@ -177,26 +202,49 @@ export function NumberInput({ value, onChange, suffix, placeholder, autoFocus, a
         placeholder={placeholder ?? '0'}
         value={text}
         onChange={(e) => {
-          setText(e.target.value)
-          onChange(parseNumber(e.target.value))
+          const raw = e.target.value
+          caret.current = (raw.slice(0, e.target.selectionStart ?? raw.length).match(/[\d.٠-٩۰-۹٫]/g) ?? []).length
+          const next = groupDigits(raw)
+          setText(next)
+          onChange(parseNumber(next))
         }}
       />
-      {suffix && <span aria-hidden className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs text-ink-faint">{suffix}</span>}
+      {suffix && <span aria-hidden className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-[13px] text-ink-faint">{suffix}</span>}
     </div>
   )
 }
 
-/** Choice chips. The active pill slides between options instead of jumping. */
+/**
+ * One choice among a few. Up to three options are a segmented control (a track with a sliding
+ * thumb); more are pills, in a row that scrolls unless `wrap` is set.
+ */
 export function Chips<T extends string | number>({ value, options, onChange, wrap = false }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; wrap?: boolean }) {
-  const id = useId()
+  const { settings } = useStore()
+  if (options.length <= 3) {
+    // The thumb is moved by a transform inside its own track, so it never reacts to the page reflowing around it.
+    const index = Math.max(0, options.findIndex((o) => o.value === value))
+    const step = settings.locale === 'ar' ? -100 : 100
+    return (
+      <div className="segmented relative" role="tablist">
+        <span className="segment-thumb" style={{ insetInlineStart: 2, top: 2, bottom: 2, insetInlineEnd: 'auto', width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${index * step}%)`, transition: 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)' }} aria-hidden />
+        {options.map((o) => {
+          const on = o.value === value
+          return (
+            <button key={String(o.value)} role="tab" aria-selected={on} onClick={() => onChange(o.value)} className={cx('segment', on && 'font-semibold')}>
+              <span className="relative">{o.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
   return (
     <div className={cx('flex gap-2', wrap ? 'flex-wrap' : 'no-scrollbar -mx-4 overflow-x-auto px-4')} role="tablist">
       {options.map((o) => {
         const on = o.value === value
         return (
-          <button key={String(o.value)} role="tab" aria-selected={on} onClick={() => onChange(o.value)} className={cx('chip relative', on && 'border-transparent text-white')}>
-            {on && <motion.span layoutId={`chip-${id}`} className="absolute inset-0 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 400 }} />}
-            <span className="relative">{o.label}</span>
+          <button key={String(o.value)} role="tab" aria-selected={on} onClick={() => onChange(o.value)} className={cx('chip', on && 'chip-on')}>
+            {o.label}
           </button>
         )
       })}
@@ -238,13 +286,12 @@ export function Stagger({ children, className }: { children: React.ReactNode; cl
 
 export function Notice({ tone, title, children, action }: { tone: 'warn' | 'info' | 'good'; title: string; children?: React.ReactNode; action?: React.ReactNode }) {
   const Icon = tone === 'warn' ? AlertTriangle : tone === 'good' ? CircleCheck : Info
-  const style = tone === 'warn' ? 'border-warn-line bg-warn-tint' : tone === 'good' ? 'border-good-line bg-good-tint' : 'border-line bg-card'
-  const iconStyle = tone === 'warn' ? 'text-warn-600' : tone === 'good' ? 'text-gain' : 'text-link'
+  const badge = tone === 'warn' ? 'bg-warn-tint text-warn-600' : tone === 'good' ? 'bg-good-tint text-gain' : 'bg-tint text-link'
   return (
-    <div className={cx('flex gap-3 rounded-2xl border p-4', style)}>
-      <Icon className={cx('mt-0.5 h-5 w-5 shrink-0', iconStyle)} aria-hidden />
+    <div className="flex gap-3 rounded-2xl bg-card p-4">
+      <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', badge)}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-snug">{title}</p>
+        <p className="text-[15px] font-semibold leading-snug">{title}</p>
         {children && <div className="mt-1 text-[13px] leading-relaxed text-ink-soft">{children}</div>}
         {action && <div className="mt-3">{action}</div>}
       </div>
@@ -314,4 +361,17 @@ export function Flash({ value, children, className }: { value: number; children:
     return () => clearTimeout(t)
   }, [value])
   return <span className={cx('-mx-1 rounded-md px-1 transition-colors duration-500', dir === 'up' && 'bg-good-tint', dir === 'down' && 'bg-loss-tint', className)}>{children}</span>
+}
+
+const CLASS_GLYPH: Record<AssetClass, React.ElementType> = { EQUITY: TrendingUp, FIXED_INCOME: ScrollText, CASH: Landmark, GOLD: Gem, REAL_ESTATE: Building2, CRYPTO: Bitcoin, OTHER: Package }
+
+/** A rounded tile in the asset class's colour: what kind of thing a row is, before its name is read. */
+export function ClassIcon({ assetClass, size = 36 }: { assetClass: AssetClass; size?: number }) {
+  const Glyph = CLASS_GLYPH[assetClass]
+  const color = CLASS_COLOR[assetClass]
+  return (
+    <span className="flex shrink-0 items-center justify-center rounded-[10px]" style={{ width: size, height: size, color, background: `color-mix(in srgb, ${color} 16%, transparent)` }} aria-hidden>
+      <Glyph style={{ width: size * 0.55, height: size * 0.55 }} strokeWidth={2} />
+    </span>
+  )
 }

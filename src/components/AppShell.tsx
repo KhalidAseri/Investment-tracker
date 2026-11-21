@@ -2,16 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ChartPie, CircleUserRound, Coins, Eye, EyeOff, Layers, LayoutDashboard, PackagePlus, Pencil, Plus, RefreshCw, Route, ShoppingCart } from 'lucide-react'
+import { ChartPie, ChevronLeft, ChevronRight, CircleUserRound, Coins, Eye, EyeOff, Layers, LayoutDashboard, PackagePlus, Pencil, PieChart, Plus, RefreshCw, Route, ShoppingCart } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { TxType } from '@/lib/types'
 import AssetWizard from './AssetWizard'
 import AssetSheet from './AssetSheet'
 import QuickUpdate from './QuickUpdate'
 import BasketSheet from './BasketSheet'
-import { Money, Sheet, closeTopSheet, cx } from './ui'
+import { Money, Sheet, closeTopSheet, cx, haptic } from './ui'
 
 const TABS = [
   { href: '/dashboard/', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
@@ -60,6 +60,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => remove?.()
   }, [])
 
+  // The large title scrolls away and a small one takes its place in the bar, as on a phone's own screens.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 40)
+    on()
+    window.addEventListener('scroll', on, { passive: true })
+    return () => window.removeEventListener('scroll', on)
+  }, [path])
+
+  // Pull down at the top of a page to refresh prices.
+  const [pull, setPull] = useState(0)
+  const pullRef = useRef(0)
+  const refreshRef = useRef(refreshQuotes)
+  refreshRef.current = refreshQuotes
+  useEffect(() => {
+    let startY = 0
+    let active = false
+    const set = (v: number) => { pullRef.current = v; setPull(v) }
+    const onStart = (e: TouchEvent) => { active = window.scrollY <= 0 && document.body.style.overflow !== 'hidden'; startY = e.touches[0].clientY }
+    const onMove = (e: TouchEvent) => { if (!active) return; const d = e.touches[0].clientY - startY; set(d > 0 && window.scrollY <= 0 ? Math.min(84, d * 0.45) : 0) }
+    const onEnd = () => { if (active && pullRef.current >= 56) { haptic(); void refreshRef.current(true) } set(0); active = false }
+    window.addEventListener('touchstart', onStart, { passive: true })
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('touchend', onEnd)
+    window.addEventListener('touchcancel', onEnd)
+    return () => { window.removeEventListener('touchstart', onStart); window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onEnd); window.removeEventListener('touchcancel', onEnd) }
+  }, [])
+
   if (path.startsWith('/share')) return <main className="mx-auto min-h-dvh max-w-xl px-4 py-6">{children}</main>
 
   const current = TABS.find((t) => path.startsWith(t.href.slice(0, -1)))
@@ -72,20 +100,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     : ''
   const syncDot = syncStatus === 'synced' ? 'bg-gain' : syncStatus === 'conflict' || syncStatus === 'error' ? 'bg-loss' : syncStatus === 'syncing' ? 'bg-accent animate-pulse' : ''
 
-  const QUICK: { type: TxType | 'ASSET'; ar: string; en: string; hintAr: string; hintEn: string; icon: React.ElementType }[] = [
+  const QUICK: { type: TxType | 'ASSET' | 'BASKET'; ar: string; en: string; hintAr: string; hintEn: string; icon: React.ElementType }[] = [
     { type: 'ASSET', ar: 'أصل جديد', en: 'New asset', hintAr: 'سهم، صندوق، نقد، ذهب، عقار', hintEn: 'Stock, fund, cash, gold, property', icon: PackagePlus },
     { type: 'BUY', ar: 'شراء', en: 'Buy', hintAr: 'أضف كمية لأصل تملكه', hintEn: 'Add to a holding', icon: ShoppingCart },
     { type: 'DIVIDEND', ar: 'توزيعة أو عائد', en: 'Dividend or income', hintAr: 'سجّل ما استلمته', hintEn: 'Record what you received', icon: Coins },
+    { type: 'BASKET', ar: 'محفظة بنِسب', en: 'Weighted portfolio', hintAr: 'مكوّنات بنِسبها وقيمة حصتك', hintEn: 'Components by weight and your share', icon: PieChart },
     { type: 'VALUE_UPDATE', ar: 'تحديث القيم', en: 'Update values', hintAr: 'مرّ على أصولك اليدوية واحدًا واحدًا', hintEn: 'Go through your hand-valued assets one by one', icon: Pencil },
   ]
   const candidates = view.rows.filter((r) => (pick === 'BUY' ? r.asset.pricing === 'live' : pick === 'VALUE_UPDATE' ? r.asset.pricing === 'manual' : true))
 
+  const Chevron = settings.locale === 'ar' ? ChevronLeft : ChevronRight
   const tab = (t: (typeof TABS)[number]) => {
     const active = current?.href === t.href
     return (
-      <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-medium transition-colors', active ? 'text-link' : 'text-ink-soft')}>
-        {active && <motion.span layoutId="nav-pill" className="absolute top-0 h-0.5 w-10 rounded-full bg-accent" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
-        <t.icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
+      <Link key={t.href} href={t.href} aria-current={active ? 'page' : undefined} className={cx('flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors', active ? 'text-link' : 'text-ink-faint')}>
+        <t.icon className="h-6 w-6" strokeWidth={active ? 2.3 : 1.8} aria-hidden />
         {L(t.ar, t.en)}
       </Link>
     )
@@ -94,28 +123,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ActionsCtx.Provider value={actions}>
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
-        <header className="sticky top-0 z-30 border-b border-line bg-surface/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-          <div className="flex h-14 items-center justify-between">
-            <h1 className="text-lg font-semibold">{title}</h1>
+        <header className={cx('sticky top-0 z-30 px-2 pt-[env(safe-area-inset-top)] transition-[background-color,border-color] duration-200', scrolled ? 'border-b border-line bg-surface/80 backdrop-blur-xl' : 'border-b border-transparent bg-surface')}>
+          <div className="flex h-11 items-center justify-between">
+            <span aria-hidden className={cx('ps-2 text-[17px] font-semibold transition-opacity duration-200', scrolled ? 'opacity-100' : 'opacity-0')}>{title}</span>
             <div className="flex items-center">
               {hasLive && (
-                <button onClick={() => refreshQuotes(true)} disabled={quoteStatus === 'loading'} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-card" aria-label={L('تحديث الأسعار', 'Refresh prices')}>
-                  <RefreshCw className={cx('h-5 w-5', quoteStatus === 'loading' && 'animate-spin')} />
+                <button onClick={() => refreshQuotes(true)} disabled={quoteStatus === 'loading'} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft" aria-label={L('تحديث الأسعار', 'Refresh prices')}>
+                  <RefreshCw className={cx('h-[22px] w-[22px]', quoteStatus === 'loading' && 'animate-spin')} />
                 </button>
               )}
-              <button onClick={() => updateSettings({ hideAmounts: !settings.hideAmounts })} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-card" aria-label={settings.hideAmounts ? L('إظهار المبالغ', 'Show amounts') : L('إخفاء المبالغ', 'Hide amounts')} aria-pressed={settings.hideAmounts}>
-                {settings.hideAmounts ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              <button onClick={() => updateSettings({ hideAmounts: !settings.hideAmounts })} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft" aria-label={settings.hideAmounts ? L('إظهار المبالغ', 'Show amounts') : L('إخفاء المبالغ', 'Hide amounts')} aria-pressed={settings.hideAmounts}>
+                {settings.hideAmounts ? <EyeOff className="h-[22px] w-[22px]" /> : <Eye className="h-[22px] w-[22px]" />}
               </button>
-              <Link href="/more/" className={cx('relative flex h-11 w-11 items-center justify-center rounded-full hover:bg-card', path.startsWith('/more') ? 'text-link' : 'text-ink-soft')} aria-label={L('حسابي والإعدادات', 'Account and settings')}>
+              <Link href="/more/" className={cx('relative flex h-11 w-11 items-center justify-center rounded-full', path.startsWith('/more') ? 'text-link' : 'text-ink-soft')} aria-label={L('حسابي والإعدادات', 'Account and settings')}>
                 <CircleUserRound className="h-6 w-6" />
                 {syncDot && <span className={cx('absolute end-2 top-2 h-2 w-2 rounded-full ring-2 ring-surface', syncDot)} aria-hidden />}
               </Link>
             </div>
           </div>
-          {statusText && <p className="pb-2 text-xs text-ink-soft" role="status">{statusText}</p>}
         </header>
 
-        <main className="flex-1 px-4 pb-32 pt-4">
+        <main className="flex-1 px-4 pb-32">
+          {/* pull-to-refresh: the arrow turns as the page is pulled, and lets go into a refresh */}
+          <div className="flex items-end justify-center overflow-hidden text-ink-faint" style={{ height: pull }} aria-hidden>
+            <RefreshCw className="mb-2 h-5 w-5" style={{ transform: `rotate(${pull * 4}deg)`, opacity: Math.min(1, pull / 56) }} />
+          </div>
+          <h1 className="large-title pt-1">{title}</h1>
+          <p className="min-h-[20px] pb-2 text-[13px] text-ink-soft" role="status">{statusText}</p>
           {ready ? (
             // Enter-only transition. An exit animation here would hold the old wrapper while the router
             // already renders the new page inside it, leaving the new page stuck invisible.
@@ -127,7 +161,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label={L('التنقل الرئيسي', 'Main navigation')}>
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl" aria-label={L('التنقل الرئيسي', 'Main navigation')}>
           {/* Five equal slots; the add button sits in the middle one. It is placed with a margin, not a
               transform: the motion library owns the element's transform and would overwrite a CSS translate. */}
           <div className="mx-auto grid max-w-xl grid-cols-5">
@@ -145,22 +179,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Quick add: the four things people record most, two taps away from anywhere */}
       <Sheet open={quick} onClose={closeQuick} title={pick ? L('اختر الأصل', 'Choose the asset') : L('إضافة أو تسجيل', 'Add or record')}>
         {!pick ? (
-          <div className="grid grid-cols-2 gap-3">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card">
             {QUICK.map((q) => (
-              <button key={q.type} onClick={() => { if (q.type === 'ASSET') { closeQuick(); setWizard(true) } else if (q.type === 'VALUE_UPDATE') { closeQuick(); setUpdate(true) } else setPick(q.type) }} className="flex min-h-[104px] flex-col items-start gap-2 rounded-2xl border border-line bg-card p-4 text-start transition hover:border-accent active:scale-[0.98]">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tint text-link"><q.icon className="h-5 w-5" /></span>
-                <span className="text-sm font-semibold leading-tight">{L(q.ar, q.en)}</span>
-                <span className="text-[11px] leading-snug text-ink-soft">{L(q.hintAr, q.hintEn)}</span>
-              </button>
+              <li key={q.type}>
+                <button onClick={() => { if (q.type === 'ASSET') { closeQuick(); setWizard(true) } else if (q.type === 'BASKET') { closeQuick(); setBasket({ accountId: null }) } else if (q.type === 'VALUE_UPDATE') { closeQuick(); setUpdate(true) } else setPick(q.type) }} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2 text-start">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-tint text-link"><q.icon className="h-5 w-5" aria-hidden /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-medium leading-snug">{L(q.ar, q.en)}</span>
+                    <span className="block text-[13px] leading-snug text-ink-soft">{L(q.hintAr, q.hintEn)}</span>
+                  </span>
+                  <Chevron className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : candidates.length === 0 ? (
           <p className="text-sm text-ink-soft">{L('لا يوجد أصل مناسب بعد. أضف أصلًا أولاً.', 'No suitable asset yet. Add one first.')}</p>
         ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card">
             {candidates.map((r) => (
               <li key={r.asset.id}>
-                <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-2 text-start hover:bg-surface" onClick={() => { const mode = pick; closeQuick(); setAsset({ id: r.asset.id, mode }) }}>
+                <button className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-2 text-start" onClick={() => { const mode = pick; closeQuick(); setAsset({ id: r.asset.id, mode }) }}>
                   <span className="min-w-0 truncate text-sm font-medium">{r.asset.name}</span>
                   <Money value={r.value} className="shrink-0 text-sm text-ink-soft" />
                 </button>
