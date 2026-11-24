@@ -5,7 +5,7 @@
 
 import type { Quote, Quotes } from './types.ts'
 
-export const PRICE_SERVICE = 'https://ivicgwjratcfcbmyrnld.supabase.co/functions/v1/invest-quotes'
+export const PRICE_SERVICE = 'https://vbiqjfgaymwbumhufysw.supabase.co/functions/v1/invest-quotes'
 const CACHE_KEY = 'investtrack_quotes_v3'
 const FRESH_MS = 15 * 60 * 1000
 const TIMEOUT_MS = 9000

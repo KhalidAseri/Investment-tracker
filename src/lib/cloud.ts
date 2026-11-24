@@ -7,12 +7,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { RemoteItem } from './catalog'
 import type { AppData, AssetProfile } from './types'
 
-const URL = 'https://ivicgwjratcfcbmyrnld.supabase.co'
-const KEY = 'sb_publishable_Ikf9bS82eaFOe4QA-H0zEQ_34cBGjZS'
+const URL = 'https://vbiqjfgaymwbumhufysw.supabase.co'
+const KEY = 'sb_publishable_2hrO5wJhx2RlX-dSPCq9tQ_Ad4Luemt'
 
 let client: SupabaseClient | null = null
 export function cloud(): SupabaseClient {
-  if (!client) client = createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'investtrack_auth' } })
+  if (!client) client = createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'investtrack_auth_rasd' } })
   return client
 }
 

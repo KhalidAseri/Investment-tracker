@@ -7,7 +7,7 @@ on-demand requests ("analyse my new assets") and the quarterly refresh.
 
 ## Where things are
 
-Supabase project `mahfazati` (id `ivicgwjratcfcbmyrnld`). Only the `invest_` tables belong to this
+Supabase project `rasd` (id `vbiqjfgaymwbumhufysw`; moved from `mahfazati` on 2026-11-24). Only the `invest_` tables belong to this
 app; every other table belongs to a different app and must not be touched.
 
 | Table | Purpose |

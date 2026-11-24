@@ -10,7 +10,7 @@ Schedule: Sunday–Thursday evening, Riyadh time.
 
 ## Store
 
-Supabase project `mahfazati` (`ivicgwjratcfcbmyrnld`). Only these tables belong to this app; never
+Supabase project `rasd` (`vbiqjfgaymwbumhufysw`; moved from `mahfazati` on 2026-11-24). Only these tables belong to this app; never
 touch any other table in the project.
 
 | Table | Use in this run |
